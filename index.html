@@ -1419,25 +1419,25 @@ async function connectToSupabase() {
         }
 
         async function reconnectToSession() {
-            try {
-                const { data: session, error } = await supabase
-                    .from('sessions')
-                    .select('*')
-                    .eq('session_id', appState.sessionId)
-                    .single();
-                
-                if (error || !session) return false;
-                
-                if (appState.isHost) {
-                    return session.host_id === appState.userId;
-                } else {
-                    const approvedGuests = session.approved_guests || [];
-                    return approvedGuests.includes(appState.userId);
-                }
-            } catch {
-                return false;
-            }
+    try {
+        const { data: session, error } = await supabase
+            .from('sessions')
+            .select('*')
+            .eq('session_id', appState.sessionId)
+            .eq('is_active', true)
+            .single();
+        
+        if (error || !session) return false;
+        
+        if (appState.isHost) {
+            return session.host_id === appState.userId;
+        } else {
+            return session.guest_id === appState.userId;
         }
+    } catch {
+        return false;
+    }
+}
 
         function handleTyping() {
             // Typing indicator logic
