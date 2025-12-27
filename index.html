@@ -613,7 +613,26 @@ select.form-input {
     overflow-y: auto;
     margin: 20px 0;
 }
+/* Historical mode styling */
+.historical-message {
+    opacity: 0.8;
+    border-left: 3px solid var(--warning-yellow) !important;
+}
 
+.readonly-input {
+    background-color: #444 !important;
+    cursor: not-allowed !important;
+}
+
+.historical-badge {
+    background-color: var(--warning-yellow);
+    color: #000;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    margin-left: 10px;
+}
     </style>
 </head>
 <body>
@@ -771,20 +790,26 @@ select.form-input {
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
         // App State
-        const appState = {
-            isHost: false,
-            isConnected: false,
-            userName: "Guest",
-            otherUserName: "Host",
-            userId: null,
-            sessionId: null,
-            messages: [],
-            currentImage: null,
-            typingTimeout: null,
-            connectionTime: null,
-            adminVisible: false,
-            realtimeSubscription: null
-        };
+// App State
+const appState = {
+    isHost: false,
+    isConnected: false,
+    userName: "Guest",
+    otherUserName: "Host",
+    userId: null,
+    sessionId: null,
+    messages: [],
+    currentImage: null,
+    typingTimeout: null,
+    connectionTime: null,
+    adminVisible: false,
+    realtimeSubscription: null,
+    
+    // ADD THESE 3 LINES (copy and paste exactly):
+    isHistoricalView: false,
+    viewingSessionId: null,
+    viewingSessionName: ''
+};
 
         // DOM Elements
         const connectionModal = document.getElementById('connectionModal');
@@ -817,6 +842,132 @@ select.form-input {
         
         const typingIndicator = document.getElementById('typingIndicator');
         const typingUser = document.getElementById('typingUser');
+
+// Load a historical session into the main chat window
+async function loadSessionIntoMainChat(sessionId, sessionName) {
+    try {
+        // Update app state
+        appState.isHistoricalView = true;
+        appState.viewingSessionId = sessionId;
+        appState.viewingSessionName = sessionName;
+        
+        // Update UI to show historical mode
+        document.querySelector('.section-header h2').innerHTML = 
+            `<i class="fas fa-history"></i> Historical Chat: ${sessionName}`;
+        
+        // Disable real-time features
+        messageInput.disabled = true;
+        sendMessageBtn.disabled = true;
+        messageInput.placeholder = "Historical chat - Read only";
+        
+        // Disable image sharing
+        uploadImageBtn.disabled = true;
+        imageUrlInput.disabled = true;
+        clearImageBtn.disabled = true;
+        
+        // Change status indicator
+        statusIndicator.style.backgroundColor = 'var(--warning-yellow)';
+        userRoleDisplay.innerHTML = `<i class="fas fa-history"></i> Viewing History`;
+        
+        // Add a "Back to Live Chat" button
+        if (!document.getElementById('backToLiveBtn')) {
+            const backBtn = document.createElement('button');
+            backBtn.id = 'backToLiveBtn';
+            backBtn.className = 'btn';
+            backBtn.innerHTML = '<i class="fas fa-arrow-left"></i> Back to Live Chat';
+            backBtn.style.marginLeft = '10px';
+            backBtn.onclick = returnToLiveChat;
+            
+            document.querySelector('.section-header').appendChild(backBtn);
+        }
+        
+        // Load historical messages
+        const { data: messages, error } = await supabaseClient
+            .from('messages')
+            .select('*')
+            .eq('session_id', sessionId)
+            .order('created_at', { ascending: true });
+        
+        if (error) throw error;
+        
+        // Clear current chat
+        chatMessages.innerHTML = '';
+        
+        // Display historical messages
+        messages.forEach(msg => {
+            // For historical view, show all messages (no clearance filtering)
+            const messageType = msg.sender_name === 'Host' ? 'sent' : 'received';
+            displayMessage({
+                id: msg.id,
+                sender: msg.sender_name,
+                text: msg.message,
+                time: new Date(msg.created_at).toLocaleString([], { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    day: 'numeric',
+                    month: 'short'
+                }),
+                type: messageType
+            });
+        });
+        
+        // Add info message at top
+        const infoMsg = document.createElement('div');
+        infoMsg.className = 'message received';
+        infoMsg.innerHTML = `
+            <div class="message-sender">System</div>
+            <div><i class="fas fa-info-circle"></i> Viewing historical chat session. No new messages can be sent.</div>
+            <div class="message-time">Just now</div>
+        `;
+        chatMessages.prepend(infoMsg);
+        
+    } catch (error) {
+        console.error("Error loading historical chat:", error);
+        alert("Error loading historical chat.");
+        returnToLiveChat(); // Return to live on error
+    }
+}
+
+// Return to live chat
+async function returnToLiveChat() {
+    // Reset app state
+    appState.isHistoricalView = false;
+    appState.viewingSessionId = null;
+    appState.viewingSessionName = '';
+    
+    // Restore original UI
+    document.querySelector('.section-header h2').innerHTML = 
+        `<i class="fas fa-comments"></i> Secure Chat`;
+    
+    // Remove back button
+    const backBtn = document.getElementById('backToLiveBtn');
+    if (backBtn) backBtn.remove();
+    
+    // Restore real-time features if connected
+    if (appState.isConnected) {
+        messageInput.disabled = false;
+        sendMessageBtn.disabled = false;
+        messageInput.placeholder = "Type your message here...";
+        messageInput.focus();
+        
+        uploadImageBtn.disabled = false;
+        imageUrlInput.disabled = false;
+        clearImageBtn.disabled = !appState.currentImage;
+        
+        // Restore status
+        statusIndicator.style.backgroundColor = 'var(--success-green)';
+        userRoleDisplay.textContent = `${appState.userName} (Connected)`;
+        
+        // Reload current chat
+        loadChatHistory();
+    } else {
+        // Not connected - show empty chat
+        chatMessages.innerHTML = '<div class="message received"><div class="message-sender">System</div><div>Welcome to WriteToMe! This is a secure chat room for two people only.</div><div class="message-time">Just now</div></div>';
+        
+        statusIndicator.classList.add('offline');
+        userRoleDisplay.textContent = "Disconnected";
+    }
+}
 
         // Initialize the app
         async function initApp() {
@@ -1472,8 +1623,11 @@ async function loadChatHistory() {
 
         // Send a chat message
         async function sendMessage() {
-            const messageText = messageInput.value.trim();
-            if (!messageText) return;
+    // Block sending in historical view
+    if (appState.isHistoricalView) {
+        alert("Cannot send messages in historical view. Return to live chat first.");
+        return;
+    }
             
             // Create message object
             const message = {
@@ -1540,7 +1694,8 @@ async function loadChatHistory() {
         }
 
 
-// Clear chat history
+
+// Clear chat history - UPDATED WITH CORRECT SQL
 async function clearChat() {
     if (confirm("Are you sure you want to clear all chat messages?")) {
         try {
@@ -1559,37 +1714,46 @@ async function clearChat() {
                 addSystemMessage("Chat history has been cleared for everyone.");
                 
             } else {
-                // Guest clears - mark ALL existing messages as "cleared by this user"
-                // SIMPLER APPROACH: Use a direct SQL query
+                // Guest clears - CORRECTED SQL for array update
                 
-                // First method: Run raw SQL
-                const { error } = await supabaseClient.rpc('mark_messages_as_cleared', {
-                    p_session_id: appState.sessionId,
-                    p_user_id: appState.userId
-                });
+                // Method 1: Use Supabase's RPC (Recommended)
+                // First, create this function in SQL Editor:
                 
-                if (error) {
-                    // If RPC fails, try alternative method
-                    console.log("RPC failed, trying alternative:", error);
+                /*
+                CREATE OR REPLACE FUNCTION mark_messages_cleared(session_id_param TEXT, user_id_param TEXT)
+                RETURNS void AS $$
+                BEGIN
+                    UPDATE messages 
+                    SET cleared_by = array_append(COALESCE(cleared_by, '{}'::text[]), user_id_param)
+                    WHERE session_id = session_id_param;
+                END;
+                $$ LANGUAGE plpgsql;
+                */
+                
+                // Then call it:
+                const { error: rpcError } = await supabaseClient
+                    .rpc('mark_messages_cleared', {
+                        session_id_param: appState.sessionId,
+                        user_id_param: appState.userId
+                    });
+                
+                if (rpcError) {
+                    console.error("RPC error, trying direct update:", rpcError);
                     
-                    // Alternative: Update each message individually (slower but works)
-                    const { data: messages, error: fetchError } = await supabaseClient
+                    // Fallback: Direct update (might not work for arrays)
+                    const { data: messages } = await supabaseClient
                         .from('messages')
                         .select('id, cleared_by')
                         .eq('session_id', appState.sessionId);
                     
-                    if (fetchError) throw fetchError;
-                    
-                    for (const msg of messages) {
-                        // Create new array with current user ID added
+                    // Update each message individually
+                    for (const msg of messages || []) {
                         const currentCleared = msg.cleared_by || [];
                         if (!currentCleared.includes(appState.userId)) {
-                            const newCleared = [...currentCleared, appState.userId];
-                            
                             await supabaseClient
                                 .from('messages')
                                 .update({ 
-                                    cleared_by: newCleared 
+                                    cleared_by: [...currentCleared, appState.userId]
                                 })
                                 .eq('id', msg.id);
                         }
@@ -1599,11 +1763,22 @@ async function clearChat() {
                 // IMMEDIATELY clear local chat
                 chatMessages.innerHTML = '';
                 appState.messages = [];
-                addSystemMessage("Chat history has been cleared from your view.");
+                
+                // Add fresh system message
+                const systemMsg = document.createElement('div');
+                systemMsg.className = 'message received';
+                systemMsg.innerHTML = `
+                    <div class="message-sender">System</div>
+                    <div>Chat history has been cleared from your view.</div>
+                    <div class="message-time">Just now</div>
+                `;
+                chatMessages.appendChild(systemMsg);
+                
+                console.log("✅ Guest chat cleared successfully");
             }
         } catch (error) {
             console.error("Error clearing chat:", error);
-            alert("Error clearing chat. Please try again. Error: " + error.message);
+            alert("Error clearing chat. Please try again.");
         }
     }
 }
@@ -1817,9 +1992,9 @@ async function refreshAdminInfo() {
                     <p><strong>Status:</strong> ${isActive ? 'Active' : 'Ended'}</p>
                     <p><strong>Duration:</strong> ${minutes}m ${seconds}s</p>
                     <p><strong>Messages:</strong> ${messageCount || 0}</p>
-                    <button class="btn btn-small" onclick="viewSessionHistory('${session.session_id}')">
-                        <i class="fas fa-history"></i> View Chat History
-                    </button>
+<button class="btn btn-small" onclick="loadSessionIntoMainChat('${session.session_id}', 'Session from ${new Date(session.created_at).toLocaleDateString()}')">
+    <i class="fas fa-history"></i> View in Chat
+</button>
                     ${isCurrent ? '<button class="btn btn-small btn-danger" onclick="endCurrentSession()"><i class="fas fa-stop"></i> End Session</button>' : ''}
                 </div>
             `;
