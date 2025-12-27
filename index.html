@@ -170,12 +170,12 @@
             border-bottom-right-radius: 5px;
         }
 
-        .message.received {
-            align-self: flex-start;
-            background-color: var(--border-color);
-            color: var(--text-primary);
-            border-bottom-left-radius: 5px;
-        }
+.message.received {
+    align-self: flex-start;
+    background-color: #555555;  /* Medium grey (was #333) */
+    color: var(--text-primary);
+    border-bottom-left-radius: 5px;
+}
 
         .message-sender {
             font-size: 12px;
@@ -264,11 +264,11 @@
             padding: 20px;
         }
 
-        .image-placeholder {
-            width: 100%;
-            height: 100%;
-            background-color: var(--darker-bg);
-            border: 2px dashed var(--border-color);
+.image-placeholder {
+    width: 100%;
+    height: 100%;
+    background-color: #3a3a3a;  /* Medium grey (was #0a0a0a) */
+    border: 2px dashed #666666; /* Light grey border */
             border-radius: 8px;
             display: flex;
             flex-direction: column;
@@ -340,14 +340,14 @@
             box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
         }
 
-        .admin-header {
-            background-color: var(--danger-red);
-            padding: 15px 20px;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+.admin-header {
+    background-color: #555555;  /* Darker grey (was #f44336 red) */
+    padding: 15px 20px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
 
         .admin-content {
             padding: 20px;
@@ -712,8 +712,8 @@ select.form-input {
 
     <script>
         // Supabase Configuration - REPLACE WITH YOUR OWN CREDENTIALS
-        const SUPABASE_URL = 'https://plqvqenoroacvzwtgoxq.supabase.co'; // Supabase URL
-        const SUPABASE_ANON_KEY = 'sb_publishable_91IHQ5--y4tDIo8L9X2ZJQ_YeThfdu_'; //  Supabase anon key
+        const SUPABASE_URL = 'https://iipwepzadorscbnelvsc.supabase.co'; // Supabase URL
+        const SUPABASE_ANON_KEY = 'sb_publishable_M3QVKHdt_hMdDQS7m4xWRA_8CC3wUah'; //  Supabase anon key
         
         // Initialize Supabase client
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
