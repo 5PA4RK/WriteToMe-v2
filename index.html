@@ -1236,6 +1236,27 @@ async function handleConnect() {
             return 'session_' + Date.now().toString(36);
         }
 
+
+                // Auto-cleanup stale sessions
+                async function cleanupStaleSessions() {
+            try {
+                // Find sessions that are "active" but haven't been updated in 5 minutes
+                const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+                
+                const { error } = await supabaseClient
+                    .from('sessions')
+                    .update({ 
+                        is_active: false,
+                        ended_at: new Date().toISOString()
+                    })
+                    .or(`created_at.lt.${fiveMinutesAgo},and(guest_id.not.is.null,guest_connected_at.lt.${fiveMinutesAgo})`);
+                
+                if (error) console.error("Cleanup error (non-critical):", error);
+                console.log("✅ Performed session cleanup");
+            } catch (error) {
+                console.error("Session cleanup failed:", error);
+            }
+        }
         // Get real IP using multiple free APIs
         async function getRealIP() {
     try {
