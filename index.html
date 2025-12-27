@@ -541,6 +541,11 @@
                     <button id="connectBtn" class="btn">
                         <i class="fas fa-plug"></i> Connect
                     </button>
+                    
+                    <!-- ADDED CLEANUP BUTTON -->
+                    <button id="cleanupBtn" class="btn btn-secondary" style="margin-top: 10px;">
+                        <i class="fas fa-broom"></i> Cleanup Old Sessions
+                    </button>
                 </div>
             </div>
         </div>
@@ -656,18 +661,20 @@
             userName: '',
             userId: null,
             sessionId: null,
-            userStatus: 'disconnected', // disconnected, pending, connected
+            userStatus: 'disconnected',
             messages: [],
             users: [],
             pendingUsers: [],
             typingTimeout: null,
             realtimeSubscription: null,
-            userSubscription: null
+            userSubscription: null,
+            lastActivity: null
         };
 
         // DOM Elements
         const connectionModal = document.getElementById('connectionModal');
         const connectBtn = document.getElementById('connectBtn');
+        const cleanupBtn = document.getElementById('cleanupBtn'); // Added
         const passwordError = document.getElementById('passwordError');
         const logoutBtn = document.getElementById('logoutBtn');
         const statusIndicator = document.getElementById('statusIndicator');
@@ -690,19 +697,29 @@
 
         // Initialize the app
         async function initApp() {
+            // First, cleanup old sessions
+            await cleanupOldSessions();
+            
             // Check for saved session
             const savedSession = localStorage.getItem('writeToMe_session');
             if (savedSession) {
-                const sessionData = JSON.parse(savedSession);
-                Object.assign(state, sessionData);
-                
-                if (await reconnectToSession()) {
-                    connectionModal.style.display = 'none';
-                    updateUIAfterConnection();
-                    loadChatHistory();
-                    loadUsers();
-                    setupRealtimeSubscriptions();
-                } else {
+                try {
+                    const sessionData = JSON.parse(savedSession);
+                    Object.assign(state, sessionData);
+                    
+                    if (await reconnectToSession()) {
+                        connectionModal.style.display = 'none';
+                        updateUIAfterConnection();
+                        loadChatHistory();
+                        loadUsers();
+                        setupRealtimeSubscriptions();
+                        showNotification('Reconnected successfully!');
+                    } else {
+                        localStorage.removeItem('writeToMe_session');
+                        connectionModal.style.display = 'flex';
+                        showNotification('Session expired. Please connect again.', 'error');
+                    }
+                } catch (e) {
                     localStorage.removeItem('writeToMe_session');
                     connectionModal.style.display = 'flex';
                 }
@@ -721,6 +738,7 @@
                 if (e.key === 'Enter') handleConnect();
             });
             connectBtn.addEventListener('click', handleConnect);
+            cleanupBtn.addEventListener('click', cleanupAllOldSessions); // Added
             logoutBtn.addEventListener('click', handleLogout);
 
             // Chat
@@ -737,7 +755,6 @@
         }
 
         function updatePasswordHint() {
-            const role = document.getElementById('userSelect').value;
             passwordError.style.display = 'none';
         }
 
@@ -765,13 +782,21 @@
             // Generate IDs
             state.userId = generateUserId();
             state.sessionId = generateSessionId();
+            state.lastActivity = new Date().toISOString();
             
             if (await connectToSupabase()) {
                 state.isConnected = true;
                 state.userStatus = state.isHost ? 'connected' : 'pending';
                 
                 // Save session
-                localStorage.setItem('writeToMe_session', JSON.stringify(state));
+                localStorage.setItem('writeToMe_session', JSON.stringify({
+                    isHost: state.isHost,
+                    userName: state.userName,
+                    userId: state.userId,
+                    sessionId: state.sessionId,
+                    userStatus: state.userStatus,
+                    lastActivity: state.lastActivity
+                }));
                 
                 connectionModal.style.display = 'none';
                 updateUIAfterConnection();
@@ -808,31 +833,61 @@
         async function connectToSupabase() {
             try {
                 if (state.isHost) {
-                    // Host creates session
-                    const { error } = await supabase
+                    // Check if there's already an active host session
+                    const { data: existingSessions } = await supabase
                         .from('sessions')
-                        .insert([{
-                            session_id: state.sessionId,
-                            host_id: state.userId,
-                            host_name: state.userName,
-                            is_active: true,
-                            created_at: new Date().toISOString()
-                        }]);
+                        .select('*')
+                        .eq('is_active', true)
+                        .eq('host_id', state.userId);
                     
-                    if (error) throw error;
+                    if (existingSessions && existingSessions.length > 0) {
+                        state.sessionId = existingSessions[0].session_id;
+                    } else {
+                        // Host creates new session
+                        const { error } = await supabase
+                            .from('sessions')
+                            .insert([{
+                                session_id: state.sessionId,
+                                host_id: state.userId,
+                                host_name: state.userName,
+                                is_active: true,
+                                created_at: new Date().toISOString(),
+                                last_activity: new Date().toISOString()
+                            }]);
+                        
+                        if (error) throw error;
+                    }
                     
-                    // Add host to users
+                    // Add/update host in users table
                     await supabase
                         .from('users')
-                        .insert([{
+                        .upsert([{
                             session_id: state.sessionId,
                             user_id: state.userId,
                             user_name: state.userName,
                             is_host: true,
                             status: 'connected',
-                            joined_at: new Date().toISOString()
-                        }]);
+                            joined_at: new Date().toISOString(),
+                            last_seen: new Date().toISOString()
+                        }], {
+                            onConflict: 'session_id,user_id'
+                        });
                 } else {
+                    // Guest - find active session
+                    const { data: activeSessions } = await supabase
+                        .from('sessions')
+                        .select('*')
+                        .eq('is_active', true)
+                        .order('created_at', { ascending: false })
+                        .limit(1);
+                    
+                    if (!activeSessions || activeSessions.length === 0) {
+                        showNotification('No active chat room found!', 'error');
+                        return false;
+                    }
+                    
+                    state.sessionId = activeSessions[0].session_id;
+                    
                     // Guest requests to join
                     await supabase
                         .from('users')
@@ -842,7 +897,8 @@
                             user_name: state.userName,
                             is_host: false,
                             status: 'pending',
-                            requested_at: new Date().toISOString()
+                            requested_at: new Date().toISOString(),
+                            last_seen: new Date().toISOString()
                         }]);
                 }
                 return true;
@@ -854,7 +910,7 @@
 
         async function reconnectToSession() {
             try {
-                // Check if session exists
+                // Check if session exists and is active
                 const { data: session } = await supabase
                     .from('sessions')
                     .select('*')
@@ -875,8 +931,23 @@
                 if (!user) return false;
                 
                 state.userStatus = user.status;
+                
+                // Update last seen
+                await supabase
+                    .from('users')
+                    .update({ last_seen: new Date().toISOString() })
+                    .eq('session_id', state.sessionId)
+                    .eq('user_id', state.userId);
+                
+                // Update session activity
+                await supabase
+                    .from('sessions')
+                    .update({ last_activity: new Date().toISOString() })
+                    .eq('session_id', state.sessionId);
+                
                 return true;
             } catch (error) {
+                console.error('Reconnect error:', error);
                 return false;
             }
         }
@@ -889,6 +960,7 @@
             if (state.userStatus === 'connected') {
                 messageInput.disabled = false;
                 sendMessageBtn.disabled = false;
+                messageInput.placeholder = 'Type your message here...';
                 messageInput.focus();
             } else {
                 messageInput.disabled = true;
@@ -902,19 +974,41 @@
 
         async function handleLogout() {
             if (confirm('Are you sure you want to logout?')) {
-                // Remove from users table
-                await supabase
-                    .from('users')
-                    .delete()
-                    .eq('session_id', state.sessionId)
-                    .eq('user_id', state.userId);
-                
-                // If host, end session
-                if (state.isHost) {
+                try {
+                    // Remove user from users table
                     await supabase
-                        .from('sessions')
-                        .update({ is_active: false, ended_at: new Date().toISOString() })
-                        .eq('session_id', state.sessionId);
+                        .from('users')
+                        .delete()
+                        .eq('session_id', state.sessionId)
+                        .eq('user_id', state.userId);
+                    
+                    // Add logout message
+                    if (state.userStatus === 'connected') {
+                        await saveMessage('System', `${state.userName} has left the chat.`);
+                    }
+                    
+                    // If host and no other users, end session
+                    if (state.isHost) {
+                        const { data: remainingUsers } = await supabase
+                            .from('users')
+                            .select('*')
+                            .eq('session_id', state.sessionId)
+                            .neq('user_id', state.userId);
+                        
+                        if (!remainingUsers || remainingUsers.length === 0) {
+                            await supabase
+                                .from('sessions')
+                                .update({ 
+                                    is_active: false, 
+                                    ended_at: new Date().toISOString() 
+                                })
+                                .eq('session_id', state.sessionId);
+                        }
+                    }
+                    
+                    showNotification('Logged out successfully!');
+                } catch (error) {
+                    console.error('Logout error:', error);
                 }
                 
                 // Remove subscriptions
@@ -926,15 +1020,16 @@
                 }
                 
                 // Reset state
-                Object.keys(state).forEach(key => {
-                    if (typeof state[key] === 'boolean') state[key] = false;
-                    else if (Array.isArray(state[key])) state[key] = [];
-                    else if (state[key] !== 'userId' && state[key] !== 'userName') state[key] = null;
-                });
-                
+                state.isHost = false;
+                state.isConnected = false;
                 state.userName = '';
                 state.userId = null;
+                state.sessionId = null;
                 state.userStatus = 'disconnected';
+                state.messages = [];
+                state.users = [];
+                state.pendingUsers = [];
+                state.lastActivity = null;
                 
                 // Clear localStorage
                 localStorage.removeItem('writeToMe_session');
@@ -958,6 +1053,64 @@
             }
         }
 
+        async function cleanupOldSessions() {
+            try {
+                // Clean up sessions older than 1 hour
+                const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+                
+                // Mark old sessions as inactive
+                await supabase
+                    .from('sessions')
+                    .update({ 
+                        is_active: false, 
+                        ended_at: new Date().toISOString() 
+                    })
+                    .lt('last_activity', oneHourAgo)
+                    .eq('is_active', true);
+                
+                // Remove users from old sessions
+                await supabase
+                    .from('users')
+                    .delete()
+                    .lt('last_seen', oneHourAgo);
+                
+                console.log('Cleanup completed');
+            } catch (error) {
+                console.error('Cleanup error:', error);
+            }
+        }
+
+        async function cleanupAllOldSessions() {
+            if (confirm('This will remove all old sessions and users. Continue?')) {
+                try {
+                    // Mark ALL sessions as inactive
+                    await supabase
+                        .from('sessions')
+                        .update({ 
+                            is_active: false, 
+                            ended_at: new Date().toISOString() 
+                        })
+                        .eq('is_active', true);
+                    
+                    // Remove ALL users
+                    await supabase
+                        .from('users')
+                        .delete()
+                        .neq('user_id', 'dummy'); // Delete all users
+                    
+                    showNotification('All sessions cleaned up!');
+                    
+                    // Refresh page
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } catch (error) {
+                    console.error('Cleanup error:', error);
+                    showNotification('Cleanup failed!', 'error');
+                }
+            }
+        }
+
         async function sendMessage() {
             const text = messageInput.value.trim();
             if (!text || state.userStatus !== 'connected') return;
@@ -975,6 +1128,14 @@
             
             // Save to database
             await saveMessage(state.userName, text);
+            
+            // Update activity
+            state.lastActivity = new Date().toISOString();
+            await supabase
+                .from('users')
+                .update({ last_seen: state.lastActivity })
+                .eq('session_id', state.sessionId)
+                .eq('user_id', state.userId);
         }
 
         function displayMessage(message) {
@@ -1018,7 +1179,8 @@
                 
                 if (messages) {
                     messages.forEach(msg => {
-                        const type = msg.sender_id === state.userId ? 'sent' : 'received';
+                        const type = msg.sender_id === state.userId ? 'sent' : 
+                                    msg.sender_name === 'System' ? 'system' : 'received';
                         displayMessage({
                             id: msg.id,
                             sender: msg.sender_name,
@@ -1050,11 +1212,8 @@
         }
 
         function handleTyping() {
-            // Typing indicator logic
             if (state.typingTimeout) clearTimeout(state.typingTimeout);
-            state.typingTimeout = setTimeout(() => {
-                // Clear typing indicator
-            }, 1000);
+            state.typingTimeout = setTimeout(() => {}, 1000);
         }
 
         async function loadUsers() {
@@ -1127,7 +1286,11 @@
             try {
                 await supabase
                     .from('users')
-                    .update({ status: 'connected', joined_at: new Date().toISOString() })
+                    .update({ 
+                        status: 'connected', 
+                        joined_at: new Date().toISOString(),
+                        last_seen: new Date().toISOString()
+                    })
                     .eq('session_id', state.sessionId)
                     .eq('user_id', userId);
                 
@@ -1257,6 +1420,7 @@
                         <p><strong>Connected Users:</strong> ${userCount || 0}</p>
                         <p><strong>Total Messages:</strong> ${messageCount || 0}</p>
                         <p><strong>Status:</strong> ${session.is_active ? 'Active' : 'Ended'}</p>
+                        <p><strong>Last Activity:</strong> ${new Date(session.last_activity).toLocaleString()}</p>
                     </div>
                 `;
             } catch (error) {
