@@ -1628,6 +1628,7 @@ async function loadChatHistory() {
         alert("Cannot send messages in historical view. Return to live chat first.");
         return;
     }
+    const messageText = messageInput.value.trim();  // Add this!
             
             // Create message object
             const message = {
