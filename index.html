@@ -885,98 +885,74 @@
         }
 
         // Connect to Supabase (NEW: Host must approve guests)
-        async function connectToSupabase() {
-            try {
-                if (appState.isHost) {
-                    // Host creates session
-                    const { data: newSession, error } = await supabase
-                        .from('sessions')
-                        .insert([{
+// SIMPLIFIED VERSION - Use this temporarily
+async function connectToSupabase() {
+    try {
+        // Check if session exists
+        const { data: existingSessions, error: checkError } = await supabase
+            .from('sessions')
+            .select('*')
+            .eq('is_active', true)
+            .limit(1);
+        
+        if (checkError) throw checkError;
+        
+        // If no active session, create one (Host only)
+        if (existingSessions.length === 0) {
+            if (appState.isHost) {
+                // Host creates a new session
+                const { data: newSession, error: sessionError } = await supabase
+                    .from('sessions')
+                    .insert([
+                        {
                             session_id: appState.sessionId,
                             host_id: appState.userId,
                             host_name: appState.userName,
                             is_active: true,
-                            created_at: new Date().toISOString(),
-                            requires_approval: true // NEW: Host must approve guests
-                        }])
-                        .select()
-                        .single();
-                    
-                    if (error) throw error;
-                    return true;
-                } else {
-                    // Guest requests to join
-                    const { data: sessions, error } = await supabase
-                        .from('sessions')
-                        .select('*')
-                        .eq('is_active', true)
-                        .limit(1);
-                    
-                    if (error) throw error;
-                    
-                    if (sessions.length === 0) {
-                        alert("No active session found.");
-                        return false;
-                    }
-                    
-                    const session = sessions[0];
-                    
-                    // Check if guest is already approved
-                    const approvedGuests = session.approved_guests || [];
-                    if (approvedGuests.includes(appState.userId)) {
-                        // Already approved, join immediately
-                        await supabase
-                            .from('sessions')
-                            .update({
-                                guest_id: appState.userId,
-                                guest_name: appState.userName,
-                                guest_connected_at: new Date().toISOString()
-                            })
-                            .eq('session_id', session.session_id);
-                        
-                        appState.sessionId = session.session_id;
-                        return true;
-                    }
-                    
-                    // Add to pending guests
-                    const pending = session.pending_guests || [];
-                    if (!pending.includes(appState.userId)) {
-                        pending.push({
-                            id: appState.userId,
-                            name: appState.userName,
-                            timestamp: new Date().toISOString()
-                        });
-                        
-                        await supabase
-                            .from('sessions')
-                            .update({ pending_guests: pending })
-                            .eq('session_id', session.session_id);
-                        
-                        appState.sessionId = session.session_id;
-                        
-                        // Show waiting message
-                        connectionModal.style.display = 'none';
-                        document.body.innerHTML = `
-                            <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
-                                <div style="text-align: center;">
-                                    <h2><i class="fas fa-user-clock"></i> Waiting for Host Approval</h2>
-                                    <p>Your request has been sent to the host.</p>
-                                    <p>You will be connected once approved.</p>
-                                    <button onclick="location.reload()" class="btn">Cancel</button>
-                                </div>
-                            </div>
-                        `;
-                        
-                        return false; // Not connected yet
-                    }
-                    
-                    return false;
-                }
-            } catch (error) {
-                console.error("Connection error:", error);
+                            created_at: new Date().toISOString()
+                        }
+                    ])
+                    .select()
+                    .single();
+                
+                if (sessionError) throw sessionError;
+                return true;
+            } else {
+                alert("No active session found. Please ask the Host to create a session first.");
                 return false;
             }
+        } else {
+            // Join existing session
+            const session = existingSessions[0];
+            
+            // Check if session already has a guest
+            if (session.guest_id && session.guest_id !== appState.userId) {
+                alert("Session is full. Only 2 users can connect at a time.");
+                return false;
+            }
+            
+            // Update session with guest info
+            if (!appState.isHost) {
+                const { error: updateError } = await supabase
+                    .from('sessions')
+                    .update({
+                        guest_id: appState.userId,
+                        guest_name: appState.userName,
+                        guest_connected_at: new Date().toISOString()
+                    })
+                    .eq('session_id', session.session_id);
+                
+                if (updateError) throw updateError;
+            }
+            
+            appState.sessionId = session.session_id;
+            return true;
         }
+    } catch (error) {
+        console.error("Error connecting to Supabase:", error);
+        return false;
+    }
+}
 
         // Update UI after connection
         function updateUIAfterConnection() {
