@@ -1309,33 +1309,40 @@ function setupRealtimeSubscription() {
     appState.realtimeSubscription = supabaseClient
         .channel('messages-channel-' + appState.sessionId)
         .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages',
-                filter: 'session_id=eq.' + appState.sessionId
-            },
-            (payload) => {
-                console.log('📨 REAL-TIME EVENT RECEIVED:', payload);
-                console.log('New message from:', payload.new.sender_name);
-                console.log('Current user is:', appState.userName);
-                
-                // Don't show the user's own messages
-                if (payload.new.sender_id !== appState.userId) {
-                    console.log('✅ Displaying message from other user');
-                    displayMessage({
-                        id: payload.new.id,
-                        sender: payload.new.sender_name,
-                        text: payload.new.message,
-                        time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                        type: 'received'
-                    });
-                } else {
-                    console.log('⏩ Skipping own message');
-                }
+    'postgres_changes',
+    {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: 'session_id=eq.' + appState.sessionId
+    },
+    (payload) => {
+        console.log('📨 REAL-TIME EVENT RECEIVED:', payload);
+        console.log('New message from:', payload.new.sender_name);
+        console.log('Current user is:', appState.userName);
+        
+        // Don't show the user's own messages
+        if (payload.new.sender_id !== appState.userId) {
+            // Check if this message has been cleared by current user
+            const clearedBy = payload.new.cleared_by || [];
+            if (clearedBy.includes(appState.userId)) {
+                console.log('⏩ Message was cleared by user, skipping');
+                return; // Don't show cleared messages
             }
-        )
+            
+            console.log('✅ Displaying message from other user');
+            displayMessage({
+                id: payload.new.id,
+                sender: payload.new.sender_name,
+                text: payload.new.message,
+                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'received'
+            });
+        } else {
+            console.log('⏩ Skipping own message');
+        }
+    }
+)
         .on('system', { event: 'channel_joined' }, () => {
             console.log('✅ Successfully joined real-time channel');
         })
@@ -1378,20 +1385,14 @@ function setupImageSubscription() {
 }
 
         // Load chat history from database
+// Load chat history from database
 async function loadChatHistory() {
     try {
-        let query = supabaseClient
+        const { data: messages, error } = await supabaseClient
             .from('messages')
             .select('*')
             .eq('session_id', appState.sessionId)
             .order('created_at', { ascending: true });
-        
-        // If user is guest, filter out messages they cleared
-        if (!appState.isHost) {
-            query = query.not('cleared_by', 'cs', `{${appState.userId}}`);
-        }
-        
-        const { data: messages, error } = await query;
         
         if (error) throw error;
         
@@ -1399,8 +1400,16 @@ async function loadChatHistory() {
         chatMessages.innerHTML = '';
         appState.messages = [];
         
-        // Display each message
+        // Display each message (filter out cleared ones for guests)
         messages.forEach(msg => {
+            // For guests, check if they cleared this message
+            if (!appState.isHost) {
+                const clearedBy = msg.cleared_by || [];
+                if (clearedBy.includes(appState.userId)) {
+                    return; // Skip this message for guest
+                }
+            }
+            
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
             displayMessage({
                 id: msg.id,
@@ -1532,7 +1541,6 @@ async function loadChatHistory() {
 
 
 // Clear chat history
-// Clear chat history
 async function clearChat() {
     if (confirm("Are you sure you want to clear all chat messages?")) {
         try {
@@ -1549,22 +1557,35 @@ async function clearChat() {
                 chatMessages.innerHTML = '';
                 appState.messages = [];
                 addSystemMessage("Chat history has been cleared for everyone.");
+                
+                // Also clear any real-time messages that might come in
+                chatMessages.innerHTML = '<div class="message received"><div class="message-sender">System</div><div>Chat history cleared.</div><div class="message-time">Just now</div></div>';
+                
             } else {
-                // Guest clears - mark messages as "cleared by this user" using array append
-                const { error } = await supabaseClient
+                // Guest clears - mark ALL existing messages as "cleared by this user"
+                
+                // First, get all message IDs in this session
+                const { data: messages, error: fetchError } = await supabaseClient
                     .from('messages')
-                    .update({ 
-                        cleared_by: supabaseClient.sql`array_append(cleared_by, ${appState.userId})`
-                    })
-                    .eq('session_id', appState.sessionId)
-                    .neq('sender_id', appState.userId); // Don't mark their own messages
+                    .select('id')
+                    .eq('session_id', appState.sessionId);
                 
-                if (error) throw error;
+                if (fetchError) throw fetchError;
                 
-                // Clear local chat only
+                // Update each message to add user to cleared_by array
+                for (const msg of messages) {
+                    await supabaseClient
+                        .from('messages')
+                        .update({ 
+                            cleared_by: supabaseClient.sql`array_append(cleared_by, ${appState.userId})`
+                        })
+                        .eq('id', msg.id);
+                }
+                
+                // IMMEDIATELY clear local chat (no refresh needed)
                 chatMessages.innerHTML = '';
                 appState.messages = [];
-                addSystemMessage("Chat history has been cleared from your view (Host can still see all).");
+                addSystemMessage("Chat history has been cleared from your view.");
             }
         } catch (error) {
             console.error("Error clearing chat:", error);
