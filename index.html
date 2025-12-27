@@ -1558,38 +1558,52 @@ async function clearChat() {
                 appState.messages = [];
                 addSystemMessage("Chat history has been cleared for everyone.");
                 
-                // Also clear any real-time messages that might come in
-                chatMessages.innerHTML = '<div class="message received"><div class="message-sender">System</div><div>Chat history cleared.</div><div class="message-time">Just now</div></div>';
-                
             } else {
                 // Guest clears - mark ALL existing messages as "cleared by this user"
+                // SIMPLER APPROACH: Use a direct SQL query
                 
-                // First, get all message IDs in this session
-                const { data: messages, error: fetchError } = await supabaseClient
-                    .from('messages')
-                    .select('id')
-                    .eq('session_id', appState.sessionId);
+                // First method: Run raw SQL
+                const { error } = await supabaseClient.rpc('mark_messages_as_cleared', {
+                    p_session_id: appState.sessionId,
+                    p_user_id: appState.userId
+                });
                 
-                if (fetchError) throw fetchError;
-                
-                // Update each message to add user to cleared_by array
-                for (const msg of messages) {
-                    await supabaseClient
+                if (error) {
+                    // If RPC fails, try alternative method
+                    console.log("RPC failed, trying alternative:", error);
+                    
+                    // Alternative: Update each message individually (slower but works)
+                    const { data: messages, error: fetchError } = await supabaseClient
                         .from('messages')
-                        .update({ 
-                            cleared_by: supabaseClient.sql`array_append(cleared_by, ${appState.userId})`
-                        })
-                        .eq('id', msg.id);
+                        .select('id, cleared_by')
+                        .eq('session_id', appState.sessionId);
+                    
+                    if (fetchError) throw fetchError;
+                    
+                    for (const msg of messages) {
+                        // Create new array with current user ID added
+                        const currentCleared = msg.cleared_by || [];
+                        if (!currentCleared.includes(appState.userId)) {
+                            const newCleared = [...currentCleared, appState.userId];
+                            
+                            await supabaseClient
+                                .from('messages')
+                                .update({ 
+                                    cleared_by: newCleared 
+                                })
+                                .eq('id', msg.id);
+                        }
+                    }
                 }
                 
-                // IMMEDIATELY clear local chat (no refresh needed)
+                // IMMEDIATELY clear local chat
                 chatMessages.innerHTML = '';
                 appState.messages = [];
                 addSystemMessage("Chat history has been cleared from your view.");
             }
         } catch (error) {
             console.error("Error clearing chat:", error);
-            alert("Error clearing chat. Please try again.");
+            alert("Error clearing chat. Please try again. Error: " + error.message);
         }
     }
 }
