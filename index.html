@@ -633,6 +633,77 @@ select.form-input {
     font-weight: bold;
     margin-left: 10px;
 }
+css
+.chat-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+.chat-input-with-upload {
+    flex: 1;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.image-upload-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.image-upload-buttons .btn {
+    padding: 14px;
+    width: 50px;
+}
+
+/* Image message styling */
+.message-image {
+    max-width: 300px;
+    max-height: 300px;
+    border-radius: 8px;
+    margin-top: 5px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.message-image:hover {
+    transform: scale(1.02);
+}
+
+.image-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    cursor: pointer;
+}
+
+.image-modal img {
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 8px;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+}
+
+.image-message-container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.image-caption {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 5px;
+    font-style: italic;
+}
+
     </style>
 </head>
 <body>
@@ -698,9 +769,14 @@ select.form-input {
             <section class="chat-section">
                 <div class="section-header">
                     <h2><i class="fas fa-comments"></i> Secure Chat</h2>
-                    <button id="clearChatBtn" class="btn btn-danger">
-                        <i class="fas fa-trash-alt"></i> Clear Chat
-                    </button>
+                    <div class="chat-controls">
+                        <button id="refreshChatBtn" class="btn btn-secondary" style="margin-right: 10px;">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                        <button id="clearChatBtn" class="btn btn-danger">
+                            <i class="fas fa-trash-alt"></i> Clear Chat
+                        </button>
+                    </div>
                 </div>
                 <div class="chat-messages" id="chatMessages">
                     <!-- Messages will appear here -->
@@ -714,46 +790,20 @@ select.form-input {
                     <i class="fas fa-pencil-alt"></i> <span id="typingUser">User</span> is typing...
                 </div>
                 <div class="chat-input-area">
-                    <input type="text" id="messageInput" class="chat-input" placeholder="Type your message here..." disabled>
+                    <div class="chat-input-with-upload">
+                        <input type="text" id="messageInput" class="chat-input" placeholder="Type your message here..." disabled>
+                        <div class="image-upload-buttons">
+                            <button id="uploadImageBtn" class="btn btn-secondary" title="Upload Image">
+                                <i class="fas fa-image"></i>
+                            </button>
+                            <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                        </div>
+                    </div>
                     <button id="sendMessageBtn" class="btn" disabled>
                         <i class="fas fa-paper-plane"></i> Send
                     </button>
                 </div>
             </section>
-
-            <!-- Image Sharing Section -->
-            <section class="image-section">
-                <div class="section-header">
-                    <h2><i class="fas fa-image"></i> Image Tray</h2>
-                    <div class="user-info">
-                        <span id="currentUser">Guest</span>
-                    </div>
-                </div>
-                <div class="image-container">
-                    <div id="imagePlaceholder" class="image-placeholder">
-                        <i class="fas fa-cloud-upload-alt"></i>
-                        <p>Drag & drop an image here</p>
-                        <p>or click to browse</p>
-                        <p style="font-size: 12px; margin-top: 10px;">Supports JPG, PNG, GIF (Max 5MB)</p>
-                    </div>
-                    <img id="imagePreview" class="image-preview" style="display: none;" alt="Shared image">
-                </div>
-                <div class="image-controls">
-                    <input type="text" id="imageUrlInput" class="image-url-input" placeholder="Or paste image URL here">
-                    <div class="control-buttons">
-                        <button id="uploadImageBtn" class="btn">
-                            <i class="fas fa-upload"></i> Upload
-                        </button>
-                        <button id="downloadImageBtn" class="btn" disabled>
-                            <i class="fas fa-download"></i> Download
-                        </button>
-                        <button id="clearImageBtn" class="btn btn-danger">
-                            <i class="fas fa-times"></i> Clear
-                        </button>
-                    </div>
-                </div>
-            </section>
-        </div>
 
         <!-- Admin Panel (Hidden by default, only visible to Host) -->
         <div class="admin-panel" id="adminPanel" style="display: none;">
@@ -1047,25 +1097,37 @@ function setupEventListeners() {
     sendMessageBtn.addEventListener('click', sendMessage);
     clearChatBtn.addEventListener('click', clearChat);
 
-    // Image functionality
-    imagePlaceholder.addEventListener('click', () => fileInput.click());
-            imagePlaceholder.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                imagePlaceholder.style.borderColor = 'var(--accent-orange)';
-                imagePlaceholder.style.backgroundColor = 'rgba(255, 152, 0, 0.1)';
-            });
-            imagePlaceholder.addEventListener('dragleave', () => {
-                imagePlaceholder.style.borderColor = 'var(--border-color)';
-                imagePlaceholder.style.backgroundColor = '';
-            });
-            imagePlaceholder.addEventListener('drop', handleImageDrop);
-            fileInput.addEventListener('change', handleFileSelect);
-            uploadImageBtn.addEventListener('click', uploadImageFromUrl);
-            downloadImageBtn.addEventListener('click', downloadImage);
-            clearImageBtn.addEventListener('click', clearImage);
-            imageUrlInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') uploadImageFromUrl();
-            });
+    // ADD THIS LINE HERE:
+    if (document.getElementById('refreshChatBtn')) {
+        document.getElementById('refreshChatBtn').addEventListener('click', refreshMessages);
+    }
+
+// Image functionality (integrated into chat)
+document.getElementById('uploadImageBtn').addEventListener('click', () => {
+    document.getElementById('fileInput').click();
+});
+
+document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+
+// Allow drag & drop images onto chat area
+chatMessages.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    chatMessages.style.backgroundColor = 'rgba(255, 152, 0, 0.1)';
+});
+
+chatMessages.addEventListener('dragleave', () => {
+    chatMessages.style.backgroundColor = '';
+});
+
+chatMessages.addEventListener('drop', handleImageDrop);
+
+// Keyboard shortcut for image upload (Ctrl+I or Cmd+I)
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+        e.preventDefault();
+        document.getElementById('fileInput').click();
+    }
+});
 
             // Admin panel
             adminToggle.addEventListener('click', toggleAdminPanel);
@@ -1504,35 +1566,13 @@ function setupRealtimeSubscription() {
             console.log('📡 Subscription status:', status);
         });
 }
-
-        // Setup real-time subscription for images
-function setupImageSubscription() {
-    console.log('🖼️ Setting up image subscription');
-    
-    supabaseClient
-        .channel('images-channel-' + appState.sessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'sessions',
-                filter: 'session_id=eq.' + appState.sessionId
-            },
-            (payload) => {
-                console.log('🖼️ Image update received:', payload);
-                const updatedSession = payload.new;
-                
-                if (updatedSession.current_image && updatedSession.current_image !== appState.currentImage) {
-                    console.log('✅ New image detected');
-                    appState.currentImage = updatedSession.current_image;
-                    displayImage(updatedSession.current_image);
-                    downloadImageBtn.disabled = false;
-                    addSystemMessage(`${appState.otherUserName} shared an image.`);
-                }
-            }
-        )
-        .subscribe();
+// Open image in modal
+function openImageModal(imageSrc) {
+    const modal = document.createElement('div');
+    modal.className = 'image-modal';
+    modal.innerHTML = `<img src="${imageSrc}" alt="Full size image">`;
+    modal.onclick = () => modal.remove();
+    document.body.appendChild(modal);
 }
 
         // Load chat history from database
@@ -1788,148 +1828,93 @@ async function clearChat() {
     }
 }
 
-        // Handle image drop
-        function handleImageDrop(e) {
-            e.preventDefault();
-            imagePlaceholder.style.borderColor = 'var(--border-color)';
-            imagePlaceholder.style.backgroundColor = '';
-            
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                const file = files[0];
-                if (file.type.startsWith('image/')) {
-                    loadImageFile(file);
-                } else {
-                    alert("Please drop an image file only.");
-                }
-            }
+// Handle image drop on chat area
+function handleImageDrop(e) {
+    e.preventDefault();
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        const file = files[0];
+        if (file.type.startsWith('image/')) {
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            document.getElementById('fileInput').files = dataTransfer.files;
+            handleFileSelect({ target: document.getElementById('fileInput') });
         }
+    }
+}
 
-        // Handle file selection
-        function handleFileSelect(e) {
-            const file = e.target.files[0];
-            if (file && file.type.startsWith('image/')) {
-                loadImageFile(file);
-            }
-        }
+// Handle image file selection
+async function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file || !file.type.startsWith('image/')) {
+        alert("Please select an image file.");
+        return;
+    }
+    
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        alert("Image size should be less than 5MB.");
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        // Ask for optional caption
+        const caption = prompt("Add a caption (optional):", "");
+        
+        // Send image in chat
+        await sendImageInChat(e.target.result, caption);
+        
+        // Clear file input
+        document.getElementById('fileInput').value = '';
+    };
+    reader.readAsDataURL(file);
+}
 
-        // Load image file
-        function loadImageFile(file) {
-            // Check file size (max 5MB)
-            if (file.size > 5 * 1024 * 1024) {
-                alert("Image size should be less than 5MB.");
-                return;
-            }
-            
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                appState.currentImage = e.target.result;
-                displayImage(appState.currentImage);
-                
-                // Enable download button
-                downloadImageBtn.disabled = false;
-                
-                // Save image to database
-                await saveImageToDB(appState.currentImage);
-                
-                // Add system message
-                addSystemMessage(`${appState.userName} shared an image.`);
-            };
-            reader.readAsDataURL(file);
-        }
+// Send image in chat
+async function sendImageInChat(imageData, caption = "") {
+    // Generate a unique ID for this image message
+    const imageId = 'img_' + Date.now();
+    
+    // Create image message HTML
+    const imageMessage = `
+        <div class="image-message-container">
+            <img src="${imageData}" class="message-image" 
+                 onclick="openImageModal('${imageData}')" 
+                 alt="Shared image">
+            ${caption ? `<div class="image-caption">${caption}</div>` : ''}
+        </div>
+    `;
+    
+    // Save as regular message to database
+    await saveMessageToDB(appState.userName, imageMessage);
+    
+    // Display immediately in chat
+    displayMessage({
+        id: imageId,
+        sender: appState.userName,
+        text: imageMessage,
+        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        type: 'sent'
+    });
+}
 
-        // Upload image from URL
-        async function uploadImageFromUrl() {
-            const url = imageUrlInput.value.trim();
-            if (!url) return;
-            
-            // Simple URL validation
-            if (!url.match(/\.(jpeg|jpg|gif|png|webp)$/)) {
-                alert("Please enter a valid image URL (jpg, png, gif, webp).");
-                return;
-            }
-            
-            // Set image preview
-            appState.currentImage = url;
-            displayImage(url);
-            
-            // Enable download button
-            downloadImageBtn.disabled = false;
-            
-            // Save image to database
-            await saveImageToDB(url);
-            
-            // Add system message
-            addSystemMessage(`${appState.userName} shared an image from URL.`);
-            
-            // Clear URL input
-            imageUrlInput.value = '';
-        }
+// Handle image URL sharing
+async function shareImageFromUrl() {
+    const url = prompt("Enter image URL:", "");
+    if (!url) return;
+    
+    // Validate URL
+    if (!url.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/)) {
+        alert("Please enter a valid image URL (jpg, png, gif, webp, bmp).");
+        return;
+    }
+    
+    const caption = prompt("Add a caption (optional):", "");
+    await sendImageInChat(url, caption);
+}
 
-        // Save image to database
-        async function saveImageToDB(imageData) {
-            try {
-                const { error } = await supabaseClient
-                    .from('sessions')
-                    .update({ current_image: imageData })
-                    .eq('session_id', appState.sessionId);
-                
-                if (error) throw error;
-                return true;
-            } catch (error) {
-                console.error("Error saving image to database:", error);
-                alert("Error saving image. Please try again.");
-                return false;
-            }
-        }
 
-        // Display image in preview
-        function displayImage(src) {
-            imagePreview.src = src;
-            imagePreview.style.display = 'block';
-            imagePlaceholder.style.display = 'none';
-        }
-
-        // Download image
-        function downloadImage() {
-            if (!appState.currentImage) return;
-            
-            const link = document.createElement('a');
-            link.href = appState.currentImage;
-            link.download = `WriteToMe_Image_${new Date().getTime()}.jpg`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            addSystemMessage(`${appState.userName} downloaded the image.`);
-        }
-
-        // Clear image
-        async function clearImage() {
-            if (confirm("Are you sure you want to clear the image?")) {
-                try {
-                    // Clear image in database
-                    const { error } = await supabaseClient
-                        .from('sessions')
-                        .update({ current_image: null })
-                        .eq('session_id', appState.sessionId);
-                    
-                    if (error) throw error;
-                    
-                    // Clear local state
-                    appState.currentImage = null;
-                    imagePreview.style.display = 'none';
-                    imagePlaceholder.style.display = 'flex';
-                    downloadImageBtn.disabled = true;
-                    
-                    // Add system message
-                    addSystemMessage(`${appState.userName} cleared the image.`);
-                } catch (error) {
-                    console.error("Error clearing image:", error);
-                    alert("Error clearing image. Please try again.");
-                }
-            }
-        }
 
         // Toggle admin panel visibility
         function toggleAdminPanel() {
@@ -1944,8 +1929,6 @@ async function clearChat() {
             }
         }
 
-        // Refresh admin information
-// Refresh admin information
 // Refresh admin information - Show ALL sessions
 async function refreshAdminInfo() {
     if (!appState.isHost) return;
