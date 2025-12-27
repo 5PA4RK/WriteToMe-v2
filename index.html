@@ -1622,35 +1622,39 @@ async function loadChatHistory() {
         }
 
         // Send a chat message
-        async function sendMessage() {
+async function sendMessage() {
     // Block sending in historical view
     if (appState.isHistoricalView) {
         alert("Cannot send messages in historical view. Return to live chat first.");
         return;
     }
-    const messageText = messageInput.value.trim();  // Add this!
-            
-            // Create message object
-            const message = {
-                id: Date.now(),
-                sender: appState.userName,
-                text: messageText,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent'
-            };
-            
-            // Add to messages array
-            appState.messages.push(message);
-            
-            // Display message immediately
-            displayMessage(message);
-            
-            // Clear input
-            messageInput.value = '';
-            
-            // Save to database
-            await saveMessageToDB(appState.userName, messageText);
-        }
+    
+    // ✅ ADDED THIS LINE:
+    const messageText = messageInput.value.trim();
+    
+    if (!messageText) return;
+    
+    // Create message object
+    const message = {
+        id: Date.now(),
+        sender: appState.userName,
+        text: messageText,
+        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        type: 'sent'
+    };
+    
+    // Add to messages array
+    appState.messages.push(message);
+    
+    // Display message immediately
+    displayMessage(message);
+    
+    // Clear input
+    messageInput.value = '';
+    
+    // Save to database
+    await saveMessageToDB(appState.userName, messageText);
+}
 
         // Display a message in the chat
         function displayMessage(message) {
