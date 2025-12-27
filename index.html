@@ -633,7 +633,7 @@ select.form-input {
     font-weight: bold;
     margin-left: 10px;
 }
-css
+
 .chat-controls {
     display: flex;
     gap: 10px;
@@ -1099,8 +1099,11 @@ function setupEventListeners() {
 
     // ADD THIS LINE HERE:
     if (document.getElementById('refreshChatBtn')) {
-        document.getElementById('refreshChatBtn').addEventListener('click', refreshMessages);
-    }
+    document.getElementById('refreshChatBtn').addEventListener('click', refreshMessages);
+    console.log("✅ Refresh button listener added");
+} else {
+    console.error("❌ Refresh button not found!");
+}
 
 // Image functionality (integrated into chat)
 document.getElementById('uploadImageBtn').addEventListener('click', () => {
@@ -1404,24 +1407,27 @@ function getIPFromWebRTC() {
             }
         }
 
-        // Update UI after connection
-        function updateUIAfterConnection() {
-            statusIndicator.classList.remove('offline');
-            userRoleDisplay.textContent = `${appState.userName} (Connected)`;
-            currentUserSpan.textContent = appState.userName;
-            
-            // Show logout button
-            logoutBtn.style.display = 'flex';
-            
-            // Enable chat controls
-            messageInput.disabled = false;
-            sendMessageBtn.disabled = false;
-            messageInput.focus();
-            
-            // Enable image controls
-            uploadImageBtn.disabled = false;
-            imageUrlInput.disabled = false;
-        }
+
+// Update UI after connection
+function updateUIAfterConnection() {
+    statusIndicator.classList.remove('offline');
+    userRoleDisplay.textContent = `${appState.userName} (Connected)`;
+    currentUserSpan.textContent = appState.userName;
+    
+    // Show logout button
+    logoutBtn.style.display = 'flex';
+    
+    // Enable chat controls - MAKE SURE THESE ARE ENABLED
+    messageInput.disabled = false;
+    sendMessageBtn.disabled = false;
+    messageInput.placeholder = "Type your message here...";
+    messageInput.focus();
+    
+    // Enable image upload button
+    uploadImageBtn.disabled = false;
+    
+    console.log("✅ Chat input should be enabled now");
+}
 
 // Handle logout
 async function handleLogout() {
@@ -1615,6 +1621,49 @@ async function loadChatHistory() {
     }
 }
 
+
+// Refresh messages manually
+async function refreshMessages() {
+    if (appState.isHistoricalView) {
+        // If in historical view, reload that session
+        await loadSessionIntoMainChat(appState.viewingSessionId, appState.viewingSessionName);
+        return;
+    }
+    
+    if (!appState.isConnected) {
+        alert("You are not connected to a chat.");
+        return;
+    }
+    
+    console.log("🔄 Manually refreshing messages...");
+    
+    // Show loading indicator
+    const loadingMsg = document.createElement('div');
+    loadingMsg.className = 'message received';
+    loadingMsg.innerHTML = `
+        <div class="message-sender">System</div>
+        <div><i class="fas fa-sync-alt fa-spin"></i> Refreshing messages...</div>
+        <div class="message-time">Just now</div>
+    `;
+    chatMessages.appendChild(loadingMsg);
+    
+    try {
+        // Reload chat history
+        await loadChatHistory();
+        
+        // Remove loading message
+        loadingMsg.remove();
+        
+        // Add success message
+        addSystemMessage("Messages refreshed successfully.");
+        
+        console.log("✅ Messages refreshed");
+    } catch (error) {
+        console.error("Error refreshing messages:", error);
+        loadingMsg.remove();
+        addSystemMessage("Error refreshing messages. Please try again.");
+    }
+}
         // Load current image from database
         async function loadCurrentImage() {
             try {
@@ -2067,6 +2116,25 @@ async function endCurrentSession() {
 
         // Initialize the app when page loads
         document.addEventListener('DOMContentLoaded', initApp);
+
+        // Test function to check chat input
+function testChatInput() {
+    console.log("=== CHAT INPUT TEST ===");
+    console.log("1. Input element exists:", !!messageInput);
+    console.log("2. Input disabled:", messageInput.disabled);
+    console.log("3. Input placeholder:", messageInput.placeholder);
+    console.log("4. App connected:", appState.isConnected);
+    console.log("5. Is historical view:", appState.isHistoricalView);
+    
+    // Try to enable it
+    messageInput.disabled = false;
+    messageInput.focus();
+    console.log("6. Input forced enabled");
+}
+
+// Run test after 2 seconds
+setTimeout(testChatInput, 2000);
+
     </script>
 </body>
 </html>
