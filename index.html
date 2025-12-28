@@ -769,8 +769,6 @@
             font-size: 30px;
             cursor: pointer;
         }
-
-        
     </style>
 </head>
 <body>
@@ -1084,45 +1082,45 @@
 
         // Handle connection
         async function handleConnect() {
-    const selectedRole = userSelect.value;
-    const username = usernameInput.value.trim();
-    const password = passwordInput.value;
-    
-    if (!username) {
-        alert("Please enter a username");
-        return;
-    }
-    
-    // Validate passwords
-    let isValid = false;
-    if (selectedRole === 'host') {
-        isValid = password === 'Mira4994Mira';
-        appState.isHost = true;
-    } else {
-        isValid = password === 'LovingStrangers';
-        appState.isHost = false;
-    }
-    
-    if (!isValid) {
-        passwordError.classList.add('show');
-        return;
-    }
-    
-    passwordError.classList.remove('show');
-    appState.userName = username;
-    appState.userId = generateUserId();
-    
-    // Get user IP
-    const userIP = await getRealIP();
-    
-    if (appState.isHost) {
-        // Host creates a new session
-        await createHostSession(userIP);
-    } else {
-        // Guest requests to join
-        await requestToJoinSession(userIP);
-    }
-}
+            const selectedRole = userSelect.value;
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
+            
+            if (!username) {
+                alert("Please enter a username");
+                return;
+            }
+            
+            // Validate passwords
+            let isValid = false;
+            if (selectedRole === 'host') {
+                isValid = password === 'Mira4994Mira';
+                appState.isHost = true;
+            } else {
+                isValid = password === 'LovingStrangers';
+                appState.isHost = false;
+            }
+            
+            if (!isValid) {
+                passwordError.classList.add('show');
+                return;
+            }
+            
+            passwordError.classList.remove('show');
+            appState.userName = username;
+            appState.userId = generateUserId();
+            
+            // Get user IP
+            const userIP = await getRealIP();
+            
+            if (appState.isHost) {
+                // Host creates a new session
+                await createHostSession(userIP);
+            } else {
+                // Guest requests to join
+                await requestToJoinSession(userIP);
+            }
+        }
 
         // Generate user ID
         function generateUserId() {
@@ -1141,90 +1139,46 @@
             }
         }
 
-// Update the createHostSession function to include pending guests array
-async function createHostSession(userIP) {
-    try {
-        const sessionId = 'session_' + Date.now().toString(36);
-        const { data, error } = await supabaseClient
-            .from('sessions')
-            .insert([{
-                session_id: sessionId,
-                host_id: appState.userId,
-                host_name: appState.userName,
-                host_ip: userIP,
-                is_active: true,
-                created_at: new Date().toISOString(),
-                requires_approval: true,
-                pending_guests: [],
-                approved_guests: []
-            }])
-            .select()
-            .single();
-        
-        if (error) throw error;
-        
-        appState.sessionId = sessionId;
-        appState.currentSessionId = sessionId;
-        appState.isConnected = true;
-        appState.connectionTime = new Date();
-        
-        saveSessionToLocalStorage();
-        updateUIAfterConnection();
-        setupRealtimeSubscriptions();
-        loadChatHistory();
-        
-        connectionModal.classList.remove('show');
-        showRequestsBtn.style.display = 'flex';
-        
-        displaySystemMessage("Host session created. Waiting for guest requests...");
-        
-    } catch (error) {
-        console.error("Error creating session:", error);
-        alert("Failed to create session. Please try again.");
-    }
-}
-
-// Add a notification system for guests when they're approved
-function showGuestApprovedNotification() {
-    const notification = document.createElement('div');
-    notification.className = 'notification success';
-    notification.innerHTML = `
-        <div class="notification-icon">
-            <i class="fas fa-check-circle"></i>
-        </div>
-        <div class="notification-content">
-            <div class="notification-title">Approved!</div>
-            <div class="notification-message">Your join request has been approved. You can now participate in the chat.</div>
-        </div>
-        <button class="notification-close" onclick="this.parentElement.remove()">
-            <i class="fas fa-times"></i>
-        </button>
-    `;
-    
-    // Add to notification container
-    let container = document.querySelector('.notification-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.className = 'notification-container';
-        document.body.appendChild(container);
-    }
-    
-    container.appendChild(notification);
-    
-    // Auto-remove after 8 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.style.animation = 'slideOutRight 0.3s ease-out forwards';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
-                }
-            }, 300);
+        // Create host session
+        async function createHostSession(userIP) {
+            try {
+                const sessionId = 'session_' + Date.now().toString(36);
+                const { data, error } = await supabaseClient
+                    .from('sessions')
+                    .insert([{
+                        session_id: sessionId,
+                        host_id: appState.userId,
+                        host_name: appState.userName,
+                        host_ip: userIP,
+                        is_active: true,
+                        created_at: new Date().toISOString(),
+                        requires_approval: true
+                    }])
+                    .select()
+                    .single();
+                
+                if (error) throw error;
+                
+                appState.sessionId = sessionId;
+                appState.currentSessionId = sessionId;
+                appState.isConnected = true;
+                appState.connectionTime = new Date();
+                
+                saveSessionToLocalStorage();
+                updateUIAfterConnection();
+                setupRealtimeSubscriptions();
+                loadChatHistory();
+                
+                connectionModal.classList.remove('show');
+                showRequestsBtn.style.display = 'flex';
+            } catch (error) {
+                console.error("Error creating session:", error);
+                alert("Failed to create session. Please try again.");
+            }
         }
-    }, 8000);
-}
 
-// Update requestToJoinSession function
+
+// Request to join session - FIXED: Guest waits for proper approval
 async function requestToJoinSession(userIP) {
     try {
         // Get active sessions
@@ -1263,21 +1217,12 @@ async function requestToJoinSession(userIP) {
         
         if (updateError) throw updateError;
         
-        // Store session info
+        // Store session info (but don't connect yet)
         appState.sessionId = session.session_id;
         appState.currentSessionId = session.session_id;
         
         // Show waiting message
-        displaySystemMessage("Join request sent to host. Waiting for approval...");
-        
-        // Show connection modal with waiting status
-        connectionModal.classList.remove('show');
-        
-        // Update UI to show waiting status
-        statusIndicator.classList.remove('offline');
-        statusIndicator.style.backgroundColor = 'var(--warning-yellow)';
-        userRoleDisplay.textContent = `${appState.userName} (Waiting for approval)`;
-        logoutBtn.style.display = 'flex';
+        showGuestWaitingStatus();
         
         // Setup approval monitoring
         setupGuestApprovalSubscription(session.session_id);
@@ -1287,123 +1232,144 @@ async function requestToJoinSession(userIP) {
         alert("Failed to join session. Please try again.");
     }
 }
+// Show guest waiting status
+function showGuestWaitingStatus() {
+    // Hide connection modal
+    connectionModal.classList.remove('show');
+    
+    // Update UI to show waiting status
+    statusIndicator.classList.remove('offline');
+    statusIndicator.style.backgroundColor = 'var(--warning-yellow)';
+    userRoleDisplay.textContent = `${appState.userName} (Waiting for approval)`;
+    logoutBtn.style.display = 'flex';
+    
+    // Disable chat input until approved
+    messageInput.disabled = true;
+    sendMessageBtn.disabled = true;
+    messageInput.placeholder = "Waiting for host approval...";
+    
+    // Clear chat and show waiting message
+    chatMessages.innerHTML = '';
+    displaySystemMessage("Join request sent to host. Waiting for approval...");
+    displaySystemMessage("You will be able to chat once the host approves your request.");
+}
 
-        // Setup realtime subscriptions
-        function setupRealtimeSubscriptions() {
+// Setup realtime subscriptions - FIXED: Better message handling
+function setupRealtimeSubscriptions() {
     // Clear existing subscriptions
     appState.realtimeSubscriptions.forEach(sub => {
         supabaseClient.removeChannel(sub);
     });
     appState.realtimeSubscriptions = [];
     
-    // Only setup realtime if user is connected and (host OR approved guest)
-    if (appState.isConnected && (appState.isHost || appState.approvedGuest)) {
-        // Messages subscription
-        const messagesSub = supabaseClient
-            .channel('messages-' + appState.currentSessionId)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'messages',
-                    filter: `session_id=eq.${appState.currentSessionId}`
-                },
-                async (payload) => {
-                    console.log('New message received:', payload.new);
+    // Only subscribe if we're in active chat mode
+    if (appState.viewingHistoricalSession) {
+        return;
+    }
+    
+    // Messages subscription
+    const messagesSub = supabaseClient
+        .channel('messages-' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                console.log("New message received:", payload.new);
+                
+                // Don't show the user's own messages (they're already displayed)
+                if (payload.new.sender_id !== appState.userId) {
+                    displayMessage(payload.new);
                     
-                    // Check if guest is approved to see this message
-                    if (!appState.isHost && !appState.approvedGuest) {
-                        return; // Guest not approved, don't show messages
+                    // Play notification sound
+                    if (appState.soundEnabled && !appState.viewingHistoricalSession) {
+                        messageSound.play();
                     }
                     
-                    // Don't show the user's own messages (they're already displayed)
-                    if (payload.new.sender_id !== appState.userId) {
-                        console.log('Displaying message from other user');
-                        displayMessage(payload.new);
-                        if (appState.soundEnabled && !appState.viewingHistoricalSession) {
-                            messageSound.play();
-                        }
-                    }
+                    // Scroll to bottom
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
                 }
-            )
+            }
+        )
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'messages',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                updateMessage(payload.new);
+            }
+        )
+        .on(
+            'postgres_changes',
+            {
+                event: 'DELETE',
+                schema: 'public',
+                table: 'messages',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                removeMessage(payload.old.id);
+            }
+        )
+        .subscribe((status) => {
+            console.log("Messages subscription status:", status);
+        });
+    
+    appState.realtimeSubscriptions.push(messagesSub);
+    
+    // Typing indicator subscription
+    const typingSub = supabaseClient
+        .channel('typing-' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'typing_indicators',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                if (payload.new.user_id !== appState.userId) {
+                    showTypingIndicator(payload.new.user_name);
+                }
+            }
+        )
+        .subscribe();
+    
+    appState.realtimeSubscriptions.push(typingSub);
+    
+    // Guest requests subscription (for host only)
+    if (appState.isHost) {
+        const requestsSub = supabaseClient
+            .channel('requests-' + appState.currentSessionId)
             .on(
                 'postgres_changes',
                 {
                     event: 'UPDATE',
                     schema: 'public',
-                    table: 'messages',
+                    table: 'sessions',
                     filter: `session_id=eq.${appState.currentSessionId}`
                 },
                 (payload) => {
-                    updateMessage(payload.new);
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'DELETE',
-                    schema: 'public',
-                    table: 'messages',
-                    filter: `session_id=eq.${appState.currentSessionId}`
-                },
-                (payload) => {
-                    removeMessage(payload.old.id);
-                }
-            )
-            .subscribe((status) => {
-                console.log('Message subscription status:', status);
-            });
-        
-        appState.realtimeSubscriptions.push(messagesSub);
-        
-        // Typing indicator subscription
-        const typingSub = supabaseClient
-            .channel('typing-' + appState.currentSessionId)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'typing_indicators',
-                    filter: `session_id=eq.${appState.currentSessionId}`
-                },
-                (payload) => {
-                    if (payload.new.user_id !== appState.userId) {
-                        showTypingIndicator(payload.new.user_name);
-                    }
+                    updateGuestRequests(payload.new.pending_guests);
                 }
             )
             .subscribe();
         
-        appState.realtimeSubscriptions.push(typingSub);
-        
-        // Guest requests subscription (for host only)
-        if (appState.isHost) {
-            const requestsSub = supabaseClient
-                .channel('requests-' + appState.currentSessionId)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: 'UPDATE',
-                        schema: 'public',
-                        table: 'sessions',
-                        filter: `session_id=eq.${appState.currentSessionId}`
-                    },
-                    (payload) => {
-                        updateGuestRequests(payload.new.pending_guests);
-                    }
-                )
-                .subscribe();
-            
-            appState.realtimeSubscriptions.push(requestsSub);
-        }
+        appState.realtimeSubscriptions.push(requestsSub);
     }
 }
 
 
-
-// Update setupGuestApprovalSubscription function
+// Setup guest approval subscription - FIXED: Proper approval flow
 function setupGuestApprovalSubscription(sessionId) {
     const approvalSub = supabaseClient
         .channel('approval-' + sessionId)
@@ -1422,15 +1388,10 @@ function setupGuestApprovalSubscription(sessionId) {
                 // Check if this guest is approved
                 const guestApproval = approvedGuests.find(g => g.guest_id === appState.userId);
                 
-                if (guestApproval) {
-                    console.log("Guest approved! Setting up chat...");
+                if (guestApproval && guestApproval.status === 'approved') {
+                    console.log("Guest approved! Joining session...");
                     
-                    // Update app state
-                    appState.isConnected = true;
-                    appState.approvedGuest = true;
-                    appState.connectionTime = new Date();
-                    
-                    // Update guest info in session (only if not already there)
+                    // Update session with guest info
                     const { error: updateError } = await supabaseClient
                         .from('sessions')
                         .update({
@@ -1443,7 +1404,12 @@ function setupGuestApprovalSubscription(sessionId) {
                     
                     if (updateError) {
                         console.error("Error updating guest info:", updateError);
+                        return;
                     }
+                    
+                    // Update app state
+                    appState.isConnected = true;
+                    appState.connectionTime = new Date();
                     
                     // Save to localStorage
                     saveSessionToLocalStorage();
@@ -1455,6 +1421,7 @@ function setupGuestApprovalSubscription(sessionId) {
                     // Enable chat
                     messageInput.disabled = false;
                     sendMessageBtn.disabled = false;
+                    messageInput.placeholder = "Type your message here...";
                     
                     // Setup realtime subscriptions
                     setupRealtimeSubscriptions();
@@ -1463,47 +1430,35 @@ function setupGuestApprovalSubscription(sessionId) {
                     await loadChatHistory();
                     
                     // Show welcome message
-                    displaySystemMessage("You have been approved to join the chat!");
+                    displaySystemMessage("You have been approved to join the chat! Welcome!");
                     
-                    // Show notification
-                    showGuestApprovedNotification();
+                    // Play notification sound
+                    if (appState.soundEnabled) {
+                        messageSound.play();
+                    }
                     
                     // Remove this subscription
                     supabaseClient.removeChannel(approvalSub);
                 }
             }
         )
-        .subscribe((status) => {
-            console.log('Approval subscription status:', status);
-        });
+        .subscribe();
 }
 
         // Update UI after connection
-function updateUIAfterConnection() {
-    statusIndicator.classList.remove('offline');
-    
-    if (appState.isHost) {
-        userRoleDisplay.textContent = `${appState.userName} (Host)`;
-        statusIndicator.style.backgroundColor = 'var(--success-green)';
-        
-        // Enable chat immediately for host
-        messageInput.disabled = false;
-        sendMessageBtn.disabled = false;
-        showRequestsBtn.style.display = 'flex';
-    } else {
-        // Guest - show waiting status
-        userRoleDisplay.textContent = `${appState.userName} (Waiting for approval)`;
-        statusIndicator.style.backgroundColor = 'var(--warning-yellow)';
-        
-        // Disable chat until approved
-        messageInput.disabled = true;
-        sendMessageBtn.disabled = true;
-        showRequestsBtn.style.display = 'none';
-    }
-    
-    logoutBtn.style.display = 'flex';
-    messageInput.focus();
-}
+        function updateUIAfterConnection() {
+            statusIndicator.classList.remove('offline');
+            userRoleDisplay.textContent = `${appState.userName} (${appState.isHost ? 'Host' : 'Guest'})`;
+            logoutBtn.style.display = 'flex';
+            
+            messageInput.disabled = false;
+            sendMessageBtn.disabled = false;
+            messageInput.focus();
+            
+            if (appState.isHost) {
+                showRequestsBtn.style.display = 'flex';
+            }
+        }
 
         // Save session to localStorage
         function saveSessionToLocalStorage() {
@@ -1519,39 +1474,19 @@ function updateUIAfterConnection() {
 
         // Reconnect to saved session
         async function reconnectSession(sessionData) {
-    appState.isHost = sessionData.isHost;
-    appState.userName = sessionData.userName;
-    appState.userId = sessionData.userId;
-    appState.sessionId = sessionData.sessionId;
-    appState.currentSessionId = sessionData.currentSessionId;
-    appState.connectionTime = new Date(sessionData.connectionTime);
-    appState.isConnected = true;
-    
-    // Check if guest is approved
-    if (!appState.isHost) {
-        try {
-            const { data: session } = await supabaseClient
-                .from('sessions')
-                .select('approved_guests')
-                .eq('session_id', appState.currentSessionId)
-                .single();
+            appState.isHost = sessionData.isHost;
+            appState.userName = sessionData.userName;
+            appState.userId = sessionData.userId;
+            appState.sessionId = sessionData.sessionId;
+            appState.currentSessionId = sessionData.currentSessionId;
+            appState.connectionTime = new Date(sessionData.connectionTime);
+            appState.isConnected = true;
             
-            if (session?.approved_guests) {
-                const guestApproval = session.approved_guests.find(g => g.guest_id === appState.userId);
-                if (guestApproval) {
-                    appState.approvedGuest = true;
-                }
-            }
-        } catch (error) {
-            console.error("Error checking guest approval:", error);
+            updateUIAfterConnection();
+            setupRealtimeSubscriptions();
+            loadChatHistory();
+            loadSessions();
         }
-    }
-    
-    updateUIAfterConnection();
-    setupRealtimeSubscriptions();
-    await loadChatHistory();
-    loadSessions();
-}
 
         // Handle logout
         async function handleLogout() {
@@ -1602,9 +1537,15 @@ function updateUIAfterConnection() {
             }
         }
 
-        // Load chat history
-        async function loadChatHistory() {
+// Load chat history - FIXED: Guests can only see current session, not historical
+async function loadChatHistory() {
     try {
+        // If guest is viewing historical session (shouldn't happen), show error
+        if (!appState.isHost && appState.viewingHistoricalSession) {
+            displaySystemMessage("Guests cannot view historical chats.");
+            return;
+        }
+        
         const { data: messages, error } = await supabaseClient
             .from('messages')
             .select('*')
@@ -1616,40 +1557,10 @@ function updateUIAfterConnection() {
         chatMessages.innerHTML = "";
         appState.messages = messages || [];
         
-        // Filter messages for guests based on approval status
-        if (!appState.isHost && !appState.viewingHistoricalSession) {
-            // Only show messages from after guest was approved
-            const sessionResponse = await supabaseClient
-                .from('sessions')
-                .select('approved_guests, created_at')
-                .eq('session_id', appState.currentSessionId)
-                .single();
-            
-            if (sessionResponse.data) {
-                const session = sessionResponse.data;
-                const guestApproval = session.approved_guests?.find(g => g.guest_id === appState.userId);
-                
-                if (guestApproval) {
-                    // Only show messages from after approval time
-                    const approvalTime = new Date(guestApproval.approved_at || session.created_at);
-                    appState.messages = appState.messages.filter(msg => 
-                        new Date(msg.created_at) >= approvalTime
-                    );
-                } else {
-                    // Guest not approved yet, show no messages
-                    appState.messages = [];
-                }
-            }
-        }
-        
-        if (appState.messages.length === 0) {
-            if (appState.isHost || appState.viewingHistoricalSession) {
-                displaySystemMessage("Chat history loaded. No messages yet.");
-            } else {
-                displaySystemMessage("Waiting for host approval to see messages...");
-            }
+        if (messages.length === 0) {
+            displaySystemMessage("Chat history loaded. No messages yet.");
         } else {
-            appState.messages.forEach(msg => displayMessage(msg));
+            messages.forEach(msg => displayMessage(msg));
         }
         
         chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -1782,23 +1693,24 @@ function updateUIAfterConnection() {
             }, 3000);
         }
 
-        // Send message
-        async function sendMessage() {
+
+// Send message - FIXED: Messages now properly display
+async function sendMessage() {
     const messageText = messageInput.value.trim();
     const images = appState.currentImages;
     
     if (!messageText && images.length === 0) return;
     
-    // Check if user is allowed to send messages
-    if (!appState.isHost && !appState.approvedGuest) {
-        alert("You need to be approved by the host to send messages.");
+    // Check if user is approved (for guests)
+    if (!appState.isHost && !appState.isConnected) {
+        displaySystemMessage("You need to be approved by the host before sending messages.");
         return;
     }
     
     try {
         // Handle images first
         for (const image of images) {
-            const { data: imageMessage, error: imageError } = await supabaseClient
+            const { data: imageMsg, error: imageError } = await supabaseClient
                 .from('messages')
                 .insert([{
                     session_id: appState.currentSessionId,
@@ -1814,12 +1726,12 @@ function updateUIAfterConnection() {
             if (imageError) throw imageError;
             
             // Display the image message immediately
-            displayMessage(imageMessage);
+            displayMessage(imageMsg);
         }
         
         // Handle text message
         if (messageText) {
-            const { data: textMessage, error: textError } = await supabaseClient
+            const { data: textMsg, error: textError } = await supabaseClient
                 .from('messages')
                 .insert([{
                     session_id: appState.currentSessionId,
@@ -1835,7 +1747,7 @@ function updateUIAfterConnection() {
             if (textError) throw textError;
             
             // Display the text message immediately
-            displayMessage(textMessage);
+            displayMessage(textMsg);
         }
         
         // Clear input
@@ -2089,10 +2001,11 @@ function updateUIAfterConnection() {
         }
 
         // Review historical session
-        async function reviewSession(sessionId) {
-    // Only host can review historical chats
+// Review historical session - FIXED: Guests cannot access
+async function reviewSession(sessionId) {
+    // Only host can review historical sessions
     if (!appState.isHost) {
-        alert("Only host can review historical chats.");
+        displaySystemMessage("Only host can review historical chats.");
         return;
     }
     
@@ -2217,230 +2130,88 @@ function updateUIAfterConnection() {
         }
 
         // Show guest requests
-// Update the showGuestRequests function to show popup notifications
-async function showGuestRequests() {
-    try {
-        const { data: session } = await supabaseClient
-            .from('sessions')
-            .select('pending_guests')
-            .eq('session_id', appState.currentSessionId)
-            .single();
-        
-        guestRequestsList.innerHTML = "";
-        
-        if (session.pending_guests && session.pending_guests.length > 0) {
-            noRequestsMessage.style.display = 'none';
-            
-            session.pending_guests.forEach((guest, index) => {
-                const requestDiv = document.createElement('div');
-                requestDiv.className = 'guest-request';
+        async function showGuestRequests() {
+            try {
+                const { data: session } = await supabaseClient
+                    .from('sessions')
+                    .select('pending_guests')
+                    .eq('session_id', appState.currentSessionId)
+                    .single();
                 
-                requestDiv.innerHTML = `
-                    <div class="guest-info">
-                        <strong>${guest.guest_name}</strong>
-                        <p style="font-size: 12px; margin-top: 5px;">IP: ${guest.guest_ip}</p>
-                        <p style="font-size: 12px;">Requested: ${new Date(guest.requested_at).toLocaleTimeString()}</p>
-                    </div>
-                    <div class="guest-actions">
-                        <button class="btn btn-small btn-success" onclick="approveGuest(${index})">
-                            <i class="fas fa-check"></i> Approve
-                        </button>
-                        <button class="btn btn-small btn-danger" onclick="denyGuest(${index})">
-                            <i class="fas fa-times"></i> Deny
-                        </button>
-                    </div>
-                `;
+                guestRequestsList.innerHTML = "";
                 
-                guestRequestsList.appendChild(requestDiv);
-            });
-            
-            requestCount.textContent = `(${session.pending_guests.length})`;
-            
-            // Show popup notification if there are pending requests
-            if (!guestRequestsModal.classList.contains('show')) {
-                showJoinRequestNotification(session.pending_guests.length);
+                if (session.pending_guests && session.pending_guests.length > 0) {
+                    noRequestsMessage.style.display = 'none';
+                    
+                    session.pending_guests.forEach((guest, index) => {
+                        const requestDiv = document.createElement('div');
+                        requestDiv.className = 'guest-request';
+                        
+                        requestDiv.innerHTML = `
+                            <div class="guest-info">
+                                <strong>${guest.guest_name}</strong>
+                                <p style="font-size: 12px; margin-top: 5px;">IP: ${guest.guest_ip}</p>
+                                <p style="font-size: 12px;">Requested: ${new Date(guest.requested_at).toLocaleTimeString()}</p>
+                            </div>
+                            <div class="guest-actions">
+                                <button class="btn btn-small btn-success" onclick="approveGuest(${index})">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button class="btn btn-small btn-danger" onclick="denyGuest(${index})">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        `;
+                        
+                        guestRequestsList.appendChild(requestDiv);
+                    });
+                    
+                    requestCount.textContent = `(${session.pending_guests.length})`;
+                } else {
+                    noRequestsMessage.style.display = 'block';
+                    requestCount.textContent = 'Requests';
+                }
+                
+                guestRequestsModal.classList.add('show');
+            } catch (error) {
+                console.error("Error loading guest requests:", error);
             }
-            
-        } else {
-            noRequestsMessage.style.display = 'block';
-            requestCount.textContent = 'Requests';
         }
-        
-        guestRequestsModal.classList.add('show');
-        
-    } catch (error) {
-        console.error("Error loading guest requests:", error);
-    }
-}
 
-// Add this new function for popup notifications
-function showJoinRequestNotification(count) {
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.id = 'joinRequestNotification';
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: var(--info-blue);
-        color: white;
-        padding: 15px 20px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        z-index: 2000;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        cursor: pointer;
-        animation: slideIn 0.3s ease-out;
-    `;
-    
-    // Add animation
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+        // Update guest requests
+        function updateGuestRequests(pendingGuests) {
+            appState.pendingGuestRequests = pendingGuests || [];
+            requestCount.textContent = appState.pendingGuestRequests.length > 0 ? 
+                `(${appState.pendingGuestRequests.length})` : 'Requests';
         }
-        @keyframes slideOut {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
-        }
-    `;
-    document.head.appendChild(style);
-    
-    notification.innerHTML = `
-        <i class="fas fa-user-plus" style="font-size: 20px;"></i>
-        <div>
-            <strong>New Join Request${count > 1 ? 's' : ''}!</strong>
-            <p style="margin: 5px 0 0 0; font-size: 14px;">${count} guest${count > 1 ? 's are' : ' is'} waiting for approval</p>
-        </div>
-        <i class="fas fa-times" style="margin-left: 10px;" onclick="closeNotification()"></i>
-    `;
-    
-    // Click handler
-    notification.onclick = (e) => {
-        if (!e.target.closest('.fa-times')) {
-            guestRequestsModal.classList.add('show');
-            closeNotification();
-        }
-    };
-    
-    // Add to body
-    document.body.appendChild(notification);
-    
-    // Auto-close after 10 seconds
-    setTimeout(() => {
-        if (document.getElementById('joinRequestNotification')) {
-            closeNotification();
-        }
-    }, 10000);
-}
 
-// Function to close notification
-function closeNotification() {
-    const notification = document.getElementById('joinRequestNotification');
-    if (notification) {
-        notification.style.animation = 'slideOut 0.3s ease-out forwards';
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
+        // Approve guest
+        async function approveGuest(guestIndex) {
+            try {
+                const { data: session } = await supabaseClient
+                    .from('sessions')
+                    .select('pending_guests, approved_guests')
+                    .eq('session_id', appState.currentSessionId)
+                    .single();
+                
+                const guest = session.pending_guests[guestIndex];
+                const updatedPending = session.pending_guests.filter((_, i) => i !== guestIndex);
+                const updatedApproved = [...(session.approved_guests || []), guest];
+                
+                await supabaseClient
+                    .from('sessions')
+                    .update({
+                        pending_guests: updatedPending,
+                        approved_guests: updatedApproved
+                    })
+                    .eq('session_id', appState.currentSessionId);
+                
+                showGuestRequests();
+            } catch (error) {
+                console.error("Error approving guest:", error);
             }
-        }, 300);
-    }
-}
-// Update the updateGuestRequests function to trigger notifications
-function updateGuestRequests(pendingGuests) {
-    const oldCount = appState.pendingGuestRequests?.length || 0;
-    const newCount = pendingGuests?.length || 0;
-    
-    appState.pendingGuestRequests = pendingGuests || [];
-    requestCount.textContent = appState.pendingGuestRequests.length > 0 ? 
-        `(${appState.pendingGuestRequests.length})` : 'Requests';
-    
-    // Show notification when new request comes in
-    if (newCount > oldCount && appState.isHost && appState.isConnected) {
-        showJoinRequestNotification(newCount);
-    }
-}
+        }
 
-
-// Update the guest approval function to trigger popup
-async function approveGuest(guestIndex) {
-    try {
-        const { data: session } = await supabaseClient
-            .from('sessions')
-            .select('pending_guests, approved_guests')
-            .eq('session_id', appState.currentSessionId)
-            .single();
-        
-        const guest = session.pending_guests[guestIndex];
-        const updatedPending = session.pending_guests.filter((_, i) => i !== guestIndex);
-        const updatedApproved = [...(session.approved_guests || []), {
-            ...guest,
-            approved_at: new Date().toISOString(),
-            status: 'approved'
-        }];
-        
-        await supabaseClient
-            .from('sessions')
-            .update({
-                pending_guests: updatedPending,
-                approved_guests: updatedApproved
-            })
-            .eq('session_id', appState.currentSessionId);
-        
-        // Show approval notification
-        showApprovalNotification(guest.guest_name);
-        
-        // Update the requests list
-        showGuestRequests();
-        
-    } catch (error) {
-        console.error("Error approving guest:", error);
-        alert("Error approving guest. Please try again.");
-    }
-}
-
-// Function to show approval notification
-function showApprovalNotification(guestName) {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: var(--success-green);
-        color: white;
-        padding: 15px 20px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        z-index: 2000;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        animation: slideIn 0.3s ease-out;
-    `;
-    
-    notification.innerHTML = `
-        <i class="fas fa-check-circle" style="font-size: 20px;"></i>
-        <div>
-            <strong>Guest Approved!</strong>
-            <p style="margin: 5px 0 0 0; font-size: 14px;">${guestName} can now join the chat</p>
-        </div>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Auto-close after 5 seconds
-    setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease-out forwards';
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 300);
-    }, 5000);
-}
         // Deny guest
         async function denyGuest(guestIndex) {
             try {
