@@ -1,26 +1,27 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WriteToMe - Secure Chat</title>
+    <title>WriteToMe - Enhanced Secure Chat</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
-:root {
-    --dark-bg: #2a2a2a;          /* Even lighter grey */
-    --darker-bg: #333333;        /* Medium grey */
-    --card-bg: #3a3a3a;          /* Light grey cards */
-    --border-color: #555;        /* Medium grey borders */
-    --text-primary: #f8f8f8;     /* Very light text */
-    --text-secondary: #dddddd;   /* Light grey text */
-    --accent-orange: #ff9800;    /* Unchanged */
-    --accent-orange-dark: #e68900; /* Unchanged */
-    --success-green: #4caf50;    /* Unchanged */
-    --danger-red: #f44336;       /* Unchanged */
-    --warning-yellow: #ffc107;   /* Unchanged */
-}
+        :root {
+            --dark-bg: #2a2a2a;
+            --darker-bg: #333333;
+            --card-bg: #3a3a3a;
+            --border-color: #555;
+            --text-primary: #f8f8f8;
+            --text-secondary: #dddddd;
+            --accent-orange: #ff9800;
+            --accent-orange-dark: #e68900;
+            --success-green: #4caf50;
+            --danger-red: #f44336;
+            --warning-yellow: #ffc107;
+            --info-blue: #2196f3;
+            --active-green: #2e7d32;
+        }
 
         * {
             margin: 0;
@@ -55,6 +56,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
         }
 
         .logo {
@@ -114,20 +117,28 @@
             }
         }
 
-        .chat-section, .image-section {
+        .chat-section {
+            flex: 2;
             background-color: var(--card-bg);
             border-radius: 12px;
             border: 1px solid var(--border-color);
             overflow: hidden;
             box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            height: 700px;
         }
 
-        .chat-section {
-            flex: 2;
-        }
-
-        .image-section {
+        .sessions-section {
             flex: 1;
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            height: 700px;
         }
 
         .section-header {
@@ -137,6 +148,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .section-header h2 {
@@ -147,13 +160,33 @@
             gap: 10px;
         }
 
+        .chat-title {
+            font-size: 14px;
+            color: var(--text-secondary);
+            background: var(--card-bg);
+            padding: 5px 15px;
+            border-radius: 20px;
+            margin-left: 10px;
+        }
+
+        .chat-title.active {
+            background-color: var(--active-green);
+            color: white;
+        }
+
+        .chat-title.historical {
+            background-color: var(--info-blue);
+            color: white;
+        }
+
         .chat-messages {
-            height: 400px;
+            flex: 1;
             overflow-y: auto;
             padding: 20px;
             display: flex;
             flex-direction: column;
             gap: 15px;
+            position: relative;
         }
 
         .message {
@@ -162,6 +195,7 @@
             border-radius: 18px;
             position: relative;
             line-height: 1.4;
+            transition: all 0.3s;
         }
 
         .message.sent {
@@ -171,12 +205,16 @@
             border-bottom-right-radius: 5px;
         }
 
-.message.received {
-    align-self: flex-start;
-    background-color: #555555;  /* Medium grey (was #333) */
-    color: var(--text-primary);
-    border-bottom-left-radius: 5px;
-}
+        .message.received {
+            align-self: flex-start;
+            background-color: #555555;
+            color: var(--text-primary);
+            border-bottom-left-radius: 5px;
+        }
+
+        .message:hover .message-actions {
+            opacity: 1;
+        }
 
         .message-sender {
             font-size: 12px;
@@ -189,6 +227,23 @@
             color: #000;
         }
 
+        .message-content {
+            word-break: break-word;
+        }
+
+        .message-image {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            margin-top: 8px;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+
+        .message-image:hover {
+            transform: scale(1.02);
+        }
+
         .message-time {
             font-size: 11px;
             text-align: right;
@@ -196,15 +251,63 @@
             opacity: 0.8;
         }
 
+        .message-actions {
+            position: absolute;
+            top: -25px;
+            right: 0;
+            background: var(--darker-bg);
+            border-radius: 15px;
+            padding: 5px;
+            display: flex;
+            gap: 5px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .message-action-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .message-action-btn:hover {
+            background-color: var(--border-color);
+            color: white;
+        }
+
+        .message-action-btn.delete {
+            color: var(--danger-red);
+        }
+
+        .message-action-btn.edit {
+            color: var(--info-blue);
+        }
+
+        .message-action-btn.reply {
+            color: var(--success-green);
+        }
+
         .chat-input-area {
             padding: 20px;
             border-top: 1px solid var(--border-color);
             display: flex;
             gap: 10px;
+            align-items: flex-end;
+        }
+
+        .chat-input-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
 
         .chat-input {
-            flex: 1;
             padding: 14px 18px;
             background-color: var(--darker-bg);
             border: 1px solid var(--border-color);
@@ -213,10 +316,63 @@
             font-size: 16px;
             outline: none;
             transition: border-color 0.3s;
+            resize: none;
+            min-height: 60px;
+            max-height: 120px;
         }
 
         .chat-input:focus {
             border-color: var(--accent-orange);
+        }
+
+        .input-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .file-input-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background-color: var(--border-color);
+            color: var(--text-primary);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .file-input-label:hover {
+            background-color: #666;
+        }
+
+        .image-preview-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .image-preview {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .remove-image {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: var(--danger-red);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            font-size: 12px;
         }
 
         .btn {
@@ -232,11 +388,17 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
+            white-space: nowrap;
         }
 
         .btn:hover {
             background-color: var(--accent-orange-dark);
             transform: translateY(-2px);
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 14px;
         }
 
         .btn-danger {
@@ -248,6 +410,15 @@
             background-color: #d32f2f;
         }
 
+        .btn-success {
+            background-color: var(--success-green);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #388e3c;
+        }
+
         .btn-secondary {
             background-color: var(--border-color);
             color: var(--text-primary);
@@ -257,145 +428,184 @@
             background-color: #444;
         }
 
-        .image-container {
-            height: 300px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        .btn-info {
+            background-color: var(--info-blue);
+            color: white;
+        }
+
+        .btn-info:hover {
+            background-color: #1976d2;
+        }
+
+        .sessions-list {
+            flex: 1;
+            overflow-y: auto;
             padding: 20px;
-        }
-
-.image-placeholder {
-    width: 100%;
-    height: 100%;
-    background-color: #3a3a3a;  /* Medium grey (was #0a0a0a) */
-    border: 2px dashed #666666; /* Light grey border */
-            border-radius: 8px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-secondary);
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .image-placeholder:hover {
-            border-color: var(--accent-orange);
-            color: var(--accent-orange);
-        }
-
-        .image-placeholder i {
-            font-size: 48px;
-            margin-bottom: 15px;
-        }
-
-        .image-preview {
-            max-width: 100%;
-            max-height: 100%;
-            border-radius: 8px;
-            object-fit: contain;
-        }
-
-        .image-controls {
-            padding: 20px;
-            border-top: 1px solid var(--border-color);
-            display: flex;
-            flex-direction: column;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 15px;
         }
 
-        .image-url-input {
-            width: 100%;
-            padding: 12px 16px;
+        .session-card {
             background-color: var(--darker-bg);
+            border-radius: 10px;
+            padding: 15px;
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            color: var(--text-primary);
-            outline: none;
-            transition: border-color 0.3s;
+            transition: all 0.3s;
+            position: relative;
         }
 
-        .image-url-input:focus {
-            border-color: var(--accent-orange);
+        .session-card.active {
+            border-color: var(--active-green);
+            box-shadow: 0 0 0 2px var(--active-green);
         }
 
-        .control-buttons {
+        .session-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 5px;
+            height: 100%;
+            background-color: var(--border-color);
+            border-radius: 5px 0 0 5px;
+        }
+
+        .session-card.active::before {
+            background-color: var(--active-green);
+        }
+
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .session-status {
+            font-size: 12px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            background-color: var(--border-color);
+        }
+
+        .session-status.active {
+            background-color: var(--active-green);
+            color: white;
+        }
+
+        .session-info {
+            margin-bottom: 15px;
+        }
+
+        .session-info p {
+            font-size: 13px;
+            margin: 5px 0;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .session-info i {
+            width: 16px;
+        }
+
+        .session-actions {
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
         }
 
-        .control-buttons .btn {
+        .session-actions .btn {
             flex: 1;
-            min-width: 120px;
+            min-width: 80px;
+            padding: 8px 12px;
+            font-size: 12px;
         }
 
-        .admin-panel {
-            margin-top: 30px;
-            background-color: var(--card-bg);
-            border-radius: 12px;
-            border: 1px solid var(--border-color);
-            overflow: hidden;
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
-        }
-
-.admin-header {
-    background-color: #555555;  /* Darker grey (was #f44336 red) */
-    padding: 15px 20px;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-        .admin-content {
-            padding: 20px;
+        .typing-indicator {
+            padding: 10px 20px;
+            font-style: italic;
+            color: var(--accent-orange);
+            font-size: 14px;
             display: none;
+            animation: pulse 1.5s infinite;
         }
 
-        .admin-content.show {
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        .typing-indicator.show {
             display: block;
         }
 
-        .admin-info {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-.info-card {
-    background-color: #333333;  /* Lighter: was var(--darker-bg) */
-    padding: 15px;
-    border-radius: 8px;
-    border-left: 4px solid var(--accent-orange);
-}
-
-        .info-card h4 {
-            color: var(--accent-orange);
+        .reply-indicator {
+            background-color: var(--darker-bg);
+            border-left: 3px solid var(--info-blue);
+            padding: 10px;
             margin-bottom: 10px;
-            font-size: 16px;
+            border-radius: 5px;
+            display: none;
         }
 
-        .info-card p {
-            font-family: monospace;
+        .reply-indicator.show {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .reply-cancel {
+            background: none;
+            border: none;
+            color: var(--danger-red);
+            cursor: pointer;
             font-size: 14px;
-            word-break: break-all;
         }
 
-        .connection-modal {
+        .sound-control {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--card-bg);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            border: 2px solid var(--border-color);
+            z-index: 1000;
+        }
+
+        .sound-control i {
+            font-size: 24px;
+            color: var(--accent-orange);
+        }
+
+        .sound-control.muted {
+            opacity: 0.5;
+        }
+
+        .modal {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             background-color: rgba(0, 0, 0, 0.85);
-            display: flex;
+            display: none;
             align-items: center;
             justify-content: center;
             z-index: 1000;
+        }
+
+        .modal.show {
+            display: flex;
         }
 
         .modal-content {
@@ -422,41 +632,27 @@
             padding: 30px;
         }
 
-        .role-selection {
+        .login-form {
             display: flex;
             flex-direction: column;
-            gap: 15px;
-            margin-bottom: 25px;
+            gap: 20px;
         }
 
-        .role-option {
-            padding: 15px;
-            background-color: var(--darker-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            color: var(--text-primary);
+            font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 8px;
         }
 
-        .role-option:hover {
-            border-color: var(--accent-orange);
-            transform: translateY(-3px);
-        }
-
-        .role-option.selected {
-            border-color: var(--accent-orange);
-            background-color: rgba(255, 152, 0, 0.1);
-        }
-
-        .role-icon {
-            font-size: 24px;
-            color: var(--accent-orange);
-        }
-
-        .password-input {
+        .form-input {
             width: 100%;
             padding: 14px 18px;
             background-color: var(--darker-bg);
@@ -464,13 +660,16 @@
             border-radius: 8px;
             color: var(--text-primary);
             font-size: 16px;
-            margin-top: 10px;
             outline: none;
             transition: border-color 0.3s;
         }
 
-        .password-input:focus {
+        .form-input:focus {
             border-color: var(--accent-orange);
+        }
+
+        select.form-input {
+            cursor: pointer;
         }
 
         .error-message {
@@ -480,6 +679,36 @@
             display: none;
         }
 
+        .error-message.show {
+            display: block;
+        }
+
+        .guest-requests {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+
+        .guest-request {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background-color: var(--darker-bg);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+        }
+
+        .guest-info {
+            flex: 1;
+        }
+
+        .guest-actions {
+            display: flex;
+            gap: 10px;
+        }
+
         footer {
             margin-top: auto;
             padding: 20px;
@@ -487,17 +716,6 @@
             color: var(--text-secondary);
             font-size: 14px;
             border-top: 1px solid var(--border-color);
-        }
-
-        .typing-indicator {
-            padding: 10px 20px;
-            font-style: italic;
-            color: var(--accent-orange);
-            display: none;
-        }
-
-        .typing-indicator.show {
-            display: block;
         }
 
         /* Scrollbar Styling */
@@ -517,57 +735,45 @@
         ::-webkit-scrollbar-thumb:hover {
             background: var(--accent-orange);
         }
-        .login-form {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
 
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
+        .image-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+        }
 
-.form-group label {
-    color: var(--text-primary);
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
+        .image-modal.show {
+            display: flex;
+        }
 
-.form-input {
-    width: 100%;
-    padding: 14px 18px;
-    background-color: var(--darker-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    color: var(--text-primary);
-    font-size: 16px;
-    outline: none;
-    transition: border-color 0.3s;
-}
+        .image-modal img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+        }
 
-.form-input:focus {
-    border-color: var(--accent-orange);
-}
-
-select.form-input {
-    cursor: pointer;
-}
-
-.password-hint {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-top: 4px;
-    font-style: italic;
-}
+        .close-modal {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
     <!-- Connection Modal -->
-    <div id="connectionModal" class="connection-modal">
+    <div id="connectionModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2><i class="fas fa-user-shield"></i> WriteToMe - Secure Connection</h2>
@@ -583,14 +789,16 @@ select.form-input {
                     </div>
                     
                     <div class="form-group">
-                        <label for="passwordInput"><i class="fas fa-lock"></i> Password:</label>
-                        <input type="password" id="passwordInput" class="form-input" placeholder="Enter password">
-                        <div class="password-hint" id="passwordHint">
-                            
-                        </div>
+                        <label for="usernameInput"><i class="fas fa-signature"></i> Username:</label>
+                        <input type="text" id="usernameInput" class="form-input" placeholder="Enter your display name">
                     </div>
                     
-                    <div id="passwordError" class="error-message" style="display: none;">
+                    <div class="form-group">
+                        <label for="passwordInput"><i class="fas fa-lock"></i> Password:</label>
+                        <input type="password" id="passwordInput" class="form-input" placeholder="Enter password">
+                    </div>
+                    
+                    <div id="passwordError" class="error-message">
                         Incorrect password for selected role.
                     </div>
                     
@@ -600,6 +808,32 @@ select.form-input {
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Guest Requests Modal (for Host) -->
+    <div id="guestRequestsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-user-clock"></i> Guest Join Requests</h2>
+            </div>
+            <div class="modal-body">
+                <div class="guest-requests" id="guestRequestsList">
+                    <!-- Guest requests will appear here -->
+                </div>
+                <div id="noRequestsMessage" style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                    No pending guest requests
+                </div>
+                <button id="closeRequestsBtn" class="btn btn-secondary" style="width: 100%;">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Modal -->
+    <div id="imageModal" class="image-modal">
+        <button class="close-modal">&times;</button>
+        <img id="modalImage" alt="Enlarged view">
     </div>
 
     <header>
@@ -614,6 +848,9 @@ select.form-input {
                         <div id="statusIndicator" class="status-indicator offline"></div>
                         <span id="userRoleDisplay">Disconnected</span>
                     </div>
+                    <button id="showRequestsBtn" class="btn btn-info" style="display: none;">
+                        <i class="fas fa-user-plus"></i> <span id="requestCount">Requests</span>
+                    </button>
                     <button id="logoutBtn" class="btn btn-secondary" style="display: none;">
                         <i class="fas fa-sign-out-alt"></i> Logout
                     </button>
@@ -627,94 +864,81 @@ select.form-input {
             <!-- Chat Section -->
             <section class="chat-section">
                 <div class="section-header">
-                    <h2><i class="fas fa-comments"></i> Secure Chat</h2>
+                    <h2>
+                        <i class="fas fa-comments"></i> Secure Chat
+                        <span id="chatTitle" class="chat-title active">Active Chat</span>
+                    </h2>
                     <button id="clearChatBtn" class="btn btn-danger">
                         <i class="fas fa-trash-alt"></i> Clear Chat
                     </button>
                 </div>
+                
+                <div class="reply-indicator" id="replyIndicator">
+                    <span id="replyText">Replying to message...</span>
+                    <button id="cancelReplyBtn" class="reply-cancel">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                </div>
+                
                 <div class="chat-messages" id="chatMessages">
-                    <!-- Messages will appear here -->
                     <div class="message received">
                         <div class="message-sender">System</div>
-                        <div>Welcome to WriteToMe! This is a secure chat room for two people only.</div>
+                        <div>Welcome to WriteToMe! Connect to start chatting.</div>
                         <div class="message-time">Just now</div>
                     </div>
                 </div>
+                
                 <div id="typingIndicator" class="typing-indicator">
                     <i class="fas fa-pencil-alt"></i> <span id="typingUser">User</span> is typing...
                 </div>
+                
                 <div class="chat-input-area">
-                    <input type="text" id="messageInput" class="chat-input" placeholder="Type your message here..." disabled>
+                    <div class="chat-input-container">
+                        <textarea id="messageInput" class="chat-input" placeholder="Type your message here..." disabled rows="1"></textarea>
+                        <div class="image-preview-container" id="imagePreviewContainer"></div>
+                        <div class="input-actions">
+                            <label for="fileInput" class="file-input-label">
+                                <i class="fas fa-image"></i> Image
+                            </label>
+                            <input type="file" id="fileInput" accept="image/*" style="display: none;" multiple>
+                            <input type="text" id="imageUrlInput" class="chat-input" style="flex: 1;" placeholder="Or paste image URL">
+                        </div>
+                    </div>
                     <button id="sendMessageBtn" class="btn" disabled>
                         <i class="fas fa-paper-plane"></i> Send
                     </button>
                 </div>
             </section>
 
-            <!-- Image Sharing Section -->
-            <section class="image-section">
+            <!-- Sessions Section -->
+            <section class="sessions-section">
                 <div class="section-header">
-                    <h2><i class="fas fa-image"></i> Image Tray</h2>
-                    <div class="user-info">
-                        <span id="currentUser">Guest</span>
-                    </div>
+                    <h2><i class="fas fa-history"></i> Chat Sessions</h2>
+                    <button id="refreshSessionsBtn" class="btn btn-small">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
                 </div>
-                <div class="image-container">
-                    <div id="imagePlaceholder" class="image-placeholder">
-                        <i class="fas fa-cloud-upload-alt"></i>
-                        <p>Drag & drop an image here</p>
-                        <p>or click to browse</p>
-                        <p style="font-size: 12px; margin-top: 10px;">Supports JPG, PNG, GIF (Max 5MB)</p>
-                    </div>
-                    <img id="imagePreview" class="image-preview" style="display: none;" alt="Shared image">
-                </div>
-                <div class="image-controls">
-                    <input type="text" id="imageUrlInput" class="image-url-input" placeholder="Or paste image URL here">
-                    <div class="control-buttons">
-                        <button id="uploadImageBtn" class="btn">
-                            <i class="fas fa-upload"></i> Upload
-                        </button>
-                        <button id="downloadImageBtn" class="btn" disabled>
-                            <i class="fas fa-download"></i> Download
-                        </button>
-                        <button id="clearImageBtn" class="btn btn-danger">
-                            <i class="fas fa-times"></i> Clear
-                        </button>
-                    </div>
+                <div class="sessions-list" id="sessionsList">
+                    <!-- Session cards will appear here -->
                 </div>
             </section>
         </div>
+    </div>
 
-        <!-- Admin Panel (Hidden by default, only visible to Host) -->
-        <div class="admin-panel" id="adminPanel" style="display: none;">
-            <div class="admin-header" id="adminToggle">
-                <h3><i class="fas fa-user-secret"></i> Admin Panel - Connected Users Information</h3>
-                <i class="fas fa-chevron-down"></i>
-            </div>
-            <div class="admin-content" id="adminContent">
-                <div class="admin-info" id="adminInfo">
-                    <!-- Admin info will be populated here -->
-                </div>
-                <button id="refreshInfoBtn" class="btn">
-                    <i class="fas fa-sync-alt"></i> Refresh Information
-                </button>
-            </div>
-        </div>
+    <div class="sound-control" id="soundControl">
+        <i class="fas fa-volume-up"></i>
     </div>
 
     <footer>
         <div class="container">
-            <p>WriteToMe &copy; 2023 - Secure Two-Person Communication Platform | End-to-End Encrypted</p>
+            <p>WriteToMe &copy; 2023 - Enhanced Secure Communication Platform | End-to-End Encrypted</p>
         </div>
     </footer>
 
-    <!-- Hidden file input for image upload -->
-    <input type="file" id="fileInput" accept="image/*" style="display: none;">
-
     <script>
-        // Supabase Configuration - REPLACE WITH YOUR OWN CREDENTIALS
-        const SUPABASE_URL = 'https://plqvqenoroacvzwtgoxq.supabase.co'; // Supabase URL
-        const SUPABASE_ANON_KEY = 'sb_publishable_91IHQ5--y4tDIo8L9X2ZJQ_YeThfdu_'; //  Supabase anon key
+        // Supabase Configuration
+        const SUPABASE_URL = 'https://plqvqenoroacvzwtgoxq.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_91IHQ5--y4tDIo8L9X2ZJQ_YeThfdu_';
         
         // Initialize Supabase client
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -723,721 +947,606 @@ select.form-input {
         const appState = {
             isHost: false,
             isConnected: false,
-            userName: "Guest",
-            otherUserName: "Host",
+            userName: "",
             userId: null,
             sessionId: null,
+            currentSessionId: null,
             messages: [],
-            currentImage: null,
+            pendingMessages: [],
             typingTimeout: null,
             connectionTime: null,
-            adminVisible: false,
-            realtimeSubscription: null
+            soundEnabled: true,
+            currentReplyTo: null,
+            currentImages: [],
+            viewingHistoricalSession: false,
+            realtimeSubscriptions: [],
+            pendingGuestRequests: []
         };
+
+        // Message sound
+        const messageSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-message-pop-alert-2354.mp3');
+        messageSound.volume = 0.3;
 
         // DOM Elements
         const connectionModal = document.getElementById('connectionModal');
+        const guestRequestsModal = document.getElementById('guestRequestsModal');
+        const imageModal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+        const closeModalBtn = document.querySelector('.close-modal');
+        
+        // Connection elements
+        const userSelect = document.getElementById('userSelect');
+        const usernameInput = document.getElementById('usernameInput');
+        const passwordInput = document.getElementById('passwordInput');
         const connectBtn = document.getElementById('connectBtn');
         const passwordError = document.getElementById('passwordError');
-        const logoutBtn = document.getElementById('logoutBtn');
         
+        // Header elements
         const statusIndicator = document.getElementById('statusIndicator');
         const userRoleDisplay = document.getElementById('userRoleDisplay');
-        const currentUserSpan = document.getElementById('currentUser');
+        const showRequestsBtn = document.getElementById('showRequestsBtn');
+        const requestCount = document.getElementById('requestCount');
+        const logoutBtn = document.getElementById('logoutBtn');
         
+        // Chat elements
         const chatMessages = document.getElementById('chatMessages');
+        const chatTitle = document.getElementById('chatTitle');
         const messageInput = document.getElementById('messageInput');
         const sendMessageBtn = document.getElementById('sendMessageBtn');
         const clearChatBtn = document.getElementById('clearChatBtn');
-        
-        const imagePlaceholder = document.getElementById('imagePlaceholder');
-        const imagePreview = document.getElementById('imagePreview');
-        const fileInput = document.getElementById('fileInput');
-        const imageUrlInput = document.getElementById('imageUrlInput');
-        const uploadImageBtn = document.getElementById('uploadImageBtn');
-        const downloadImageBtn = document.getElementById('downloadImageBtn');
-        const clearImageBtn = document.getElementById('clearImageBtn');
-        
-        const adminPanel = document.getElementById('adminPanel');
-        const adminToggle = document.getElementById('adminToggle');
-        const adminContent = document.getElementById('adminContent');
-        const adminInfo = document.getElementById('adminInfo');
-        const refreshInfoBtn = document.getElementById('refreshInfoBtn');
-        
         const typingIndicator = document.getElementById('typingIndicator');
         const typingUser = document.getElementById('typingUser');
+        const replyIndicator = document.getElementById('replyIndicator');
+        const replyText = document.getElementById('replyText');
+        const cancelReplyBtn = document.getElementById('cancelReplyBtn');
+        
+        // Image elements
+        const fileInput = document.getElementById('fileInput');
+        const imageUrlInput = document.getElementById('imageUrlInput');
+        const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+        
+        // Sessions elements
+        const sessionsList = document.getElementById('sessionsList');
+        const refreshSessionsBtn = document.getElementById('refreshSessionsBtn');
+        const guestRequestsList = document.getElementById('guestRequestsList');
+        const noRequestsMessage = document.getElementById('noRequestsMessage');
+        const closeRequestsBtn = document.getElementById('closeRequestsBtn');
+        
+        // Sound control
+        const soundControl = document.getElementById('soundControl');
 
         // Initialize the app
         async function initApp() {
-            // Check if user was previously connected
+            // Check for saved session
             const savedSession = localStorage.getItem('writeToMe_session');
             if (savedSession) {
                 const sessionData = JSON.parse(savedSession);
-                appState.isHost = sessionData.isHost;
-                appState.userName = sessionData.userName;
-                appState.userId = sessionData.userId;
-                appState.sessionId = sessionData.sessionId;
-                appState.isConnected = true;
-                
-                // Try to reconnect to the session
-                if (await reconnectToSession()) {
-                    connectionModal.style.display = 'none';
-                    updateUIAfterConnection();
-                    loadChatHistory();
-                    loadCurrentImage();
-                } else {
-                    // Session expired or invalid
-                    localStorage.removeItem('writeToMe_session');
-                    connectionModal.style.display = 'flex';
-                }
+                await reconnectSession(sessionData);
             } else {
-                connectionModal.style.display = 'flex';
+                connectionModal.classList.add('show');
             }
 
-            // Set up event listeners
             setupEventListeners();
+            loadSessions();
         }
 
-        // Set up all event listeners
- // Set up all event listeners
-function setupEventListeners() {
-    // Connection modal - NEW CODE
-    const userSelect = document.getElementById('userSelect');
-    const passwordInput = document.getElementById('passwordInput');
-    const connectBtn = document.getElementById('connectBtn');
-    const passwordHint = document.getElementById('passwordHint');
-
-    // Update password hint when role changes
-    if (userSelect) {
-        userSelect.addEventListener('change', function() {
-            if (this.value === 'host') {
-                passwordHint.textContent = '';
-            } else {
-                passwordHint.textContent = '';
-            }
-            // Clear any error
-            document.getElementById('passwordError').style.display = 'none';
-        });
-    }
-
-    // Allow Enter key in password field
-    if (passwordInput) {
-        passwordInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') handleConnect();
-        });
-    }
-
-    // Connect button
-    if (connectBtn) {
-        connectBtn.addEventListener('click', handleConnect);
-    }
-
-        // ADD THIS LINE FOR LOGOUT:
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-
-    // Chat functionality
-    messageInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
-    messageInput.addEventListener('input', handleTyping);
-    sendMessageBtn.addEventListener('click', sendMessage);
-    clearChatBtn.addEventListener('click', clearChat);
-
-    // Image functionality
-    imagePlaceholder.addEventListener('click', () => fileInput.click());
-            imagePlaceholder.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                imagePlaceholder.style.borderColor = 'var(--accent-orange)';
-                imagePlaceholder.style.backgroundColor = 'rgba(255, 152, 0, 0.1)';
+        // Setup all event listeners
+        function setupEventListeners() {
+            // Connection
+            connectBtn.addEventListener('click', handleConnect);
+            passwordInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleConnect();
             });
-            imagePlaceholder.addEventListener('dragleave', () => {
-                imagePlaceholder.style.borderColor = 'var(--border-color)';
-                imagePlaceholder.style.backgroundColor = '';
+            
+            // Logout
+            logoutBtn.addEventListener('click', handleLogout);
+            
+            // Chat
+            messageInput.addEventListener('input', handleTyping);
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
             });
-            imagePlaceholder.addEventListener('drop', handleImageDrop);
+            sendMessageBtn.addEventListener('click', sendMessage);
+            clearChatBtn.addEventListener('click', clearChat);
+            cancelReplyBtn.addEventListener('click', cancelReply);
+            
+            // Image handling
             fileInput.addEventListener('change', handleFileSelect);
-            uploadImageBtn.addEventListener('click', uploadImageFromUrl);
-            downloadImageBtn.addEventListener('click', downloadImage);
-            clearImageBtn.addEventListener('click', clearImage);
             imageUrlInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') uploadImageFromUrl();
+                if (e.key === 'Enter') addImageFromUrl();
             });
-
-            // Admin panel
-            adminToggle.addEventListener('click', toggleAdminPanel);
-            refreshInfoBtn.addEventListener('click', refreshAdminInfo);
+            
+            // Sessions
+            refreshSessionsBtn.addEventListener('click', loadSessions);
+            showRequestsBtn.addEventListener('click', showGuestRequests);
+            closeRequestsBtn.addEventListener('click', () => {
+                guestRequestsModal.classList.remove('show');
+            });
+            
+            // Sound control
+            soundControl.addEventListener('click', toggleSound);
+            closeModalBtn.addEventListener('click', () => {
+                imageModal.classList.remove('show');
+            });
+            
+            // Image modal
+            imageModal.addEventListener('click', (e) => {
+                if (e.target === imageModal) {
+                    imageModal.classList.remove('show');
+                }
+            });
         }
 
-// Handle connection
-async function handleConnect() {
-    // Get elements (already declared in setupEventListeners, but we need them here)
-    const userSelect = document.getElementById('userSelect');
-    const passwordInput = document.getElementById('passwordInput');
-    
-    const selectedRole = userSelect.value; // 'guest' or 'host'
-    const password = passwordInput.value;
-    
-    // Reset error
-    passwordError.style.display = 'none';
-    
-    // Validate password based on role
-    let isValid = false;
-    if (selectedRole === 'host') {
-        isValid = password === 'Mira4994Mira';
-        appState.isHost = true;
-        appState.userName = "Host";
-    } else { // guest
-        isValid = password === 'LovingStrangers';
-        appState.isHost = false;
-        appState.userName = "Guest";
-    }
-    
-    if (!isValid) {
-        passwordError.style.display = 'block';
-        passwordInput.focus();
-        return;
-    }
-    
-    // Generate unique user ID and session ID
-    appState.userId = generateUserId();
-    appState.sessionId = generateSessionId();
-    appState.connectionTime = new Date();
-    
-    // Connect to Supabase
-    if (await connectToSupabase()) {
-        appState.isConnected = true;
-
-        try {
-        // Get real IP
-        const userIP = await getRealIP();
-        console.log("Detected user IP:", userIP);
-        
-        // Save IP to database based on role
-        if (appState.isHost) {
-            await supabaseClient
-                .from('sessions')
-                .update({ host_ip: userIP })
-                .eq('session_id', appState.sessionId);
-        } else {
-            await supabaseClient
-                .from('sessions')
-                .update({ guest_ip: userIP })
-                .eq('session_id', appState.sessionId);
+        // Handle connection
+        async function handleConnect() {
+            const selectedRole = userSelect.value;
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
+            
+            if (!username) {
+                alert("Please enter a username");
+                return;
+            }
+            
+            // Validate passwords
+            let isValid = false;
+            if (selectedRole === 'host') {
+                isValid = password === 'Mira4994Mira';
+                appState.isHost = true;
+            } else {
+                isValid = password === 'LovingStrangers';
+                appState.isHost = false;
+            }
+            
+            if (!isValid) {
+                passwordError.classList.add('show');
+                return;
+            }
+            
+            passwordError.classList.remove('show');
+            appState.userName = username;
+            appState.userId = generateUserId();
+            
+            // Get user IP
+            const userIP = await getRealIP();
+            
+            if (appState.isHost) {
+                // Host creates a new session
+                await createHostSession(userIP);
+            } else {
+                // Guest requests to join
+                await requestToJoinSession(userIP);
+            }
         }
-    } catch (ipError) {
-        console.error("Error saving IP to database:", ipError);
-    }
-        
-        // Save session to localStorage
-        localStorage.setItem('writeToMe_session', JSON.stringify({
-            isHost: appState.isHost,
-            userName: appState.userName,
-            userId: appState.userId,
-            sessionId: appState.sessionId,
-            connectionTime: appState.connectionTime
-        }));
-        
-        connectionModal.style.display = 'none';
-        updateUIAfterConnection();
-        
-        // Add connection message to chat
-        await saveMessageToDB('System', `${appState.userName} has connected to the chat.`);
-        
-        // Setup real-time subscriptions
-        setupRealtimeSubscription();
-        setupImageSubscription();
-        
-        // If host, show admin panel
-        if (appState.isHost) {
-            adminPanel.style.display = 'block';
-            refreshAdminInfo();
-        }
-    } else {
-        alert("Failed to connect to the server. Please try again.");
-    }
-}
 
-        // Generate a unique user ID
+        // Generate user ID
         function generateUserId() {
             return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         }
 
-        // Generate a session ID
-        function generateSessionId() {
-            return 'session_' + Date.now().toString(36);
-        }
-
-        // Get real IP using multiple free APIs
+        // Get real IP
         async function getRealIP() {
-    try {
-        // Try the most reliable free API first
-        const apis = [
-            'https://api.ipify.org?format=json',
-            'https://api64.ipify.org?format=json',
-            'https://ipapi.co/json/'
-        ];
-        
-        for (const api of apis) {
             try {
-                // Add timeout to prevent hanging
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
-                
-                const response = await fetch(api, { 
-                    signal: controller.signal 
-                });
-                
-                clearTimeout(timeoutId);
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    return data.ip || "Unknown";
-                }
-            } catch (e) {
-                console.log(`API ${api} failed:`, e.message);
-                continue;
-            }
-        }
-        
-        // If all APIs fail, check browser's RTCPeerConnection as fallback
-        return await getIPFromWebRTC() || "Unable to detect";
-    } catch (error) {
-        console.error("Error getting IP:", error);
-        return "Error detecting";
-    }
-}
-
-// WebRTC fallback method (works in some browsers)
-function getIPFromWebRTC() {
-    return new Promise((resolve) => {
-        const pc = new RTCPeerConnection({ iceServers: [] });
-        pc.createDataChannel('');
-        pc.createOffer().then(offer => pc.setLocalDescription(offer))
-            .catch(() => resolve(null));
-        
-        pc.onicecandidate = (ice) => {
-            if (ice && ice.candidate && ice.candidate.candidate) {
-                const candidate = ice.candidate.candidate;
-                const match = candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
-                if (match) {
-                    resolve(match[1]);
-                    pc.close();
-                }
-            }
-        };
-        
-        setTimeout(() => {
-            resolve(null);
-            pc.close();
-        }, 1000);
-    });
-}
-
-        // Connect to Supabase and create/join session
-        async function connectToSupabase() {
-            try {
-                // Check if session exists
-                const { data: existingSessions, error: checkError } = await supabaseClient
-                    .from('sessions')
-                    .select('*')
-                    .eq('is_active', true)
-                    .limit(1);
-                
-                if (checkError) throw checkError;
-                
-                // If no active session, create one (Host only)
-                if (existingSessions.length === 0) {
-                    if (appState.isHost) {
-                        // Host creates a new session
-                        const { data: newSession, error: sessionError } = await supabaseClient
-                            .from('sessions')
-                            .insert([
-                                {
-                                    session_id: appState.sessionId,
-                                    host_id: appState.userId,
-                                    host_name: appState.userName,
-                                    is_active: true,
-                                    created_at: new Date().toISOString()
-                                }
-                            ])
-                            .select()
-                            .single();
-                        
-                        if (sessionError) throw sessionError;
-                        return true;
-                    } else {
-                        // Guest cannot create session, only join
-                        alert("No active session found. Please ask the Host to create a session first.");
-                        return false;
-                    }
-                } else {
-                    // Join existing session
-                    const session = existingSessions[0];
-                    
-                    // Check if session already has 2 users
-                    if (session.guest_id && session.guest_id !== appState.userId) {
-                        alert("Session is full. Only 2 users can connect at a time.");
-                        return false;
-                    }
-                    
-                    // Update session with guest info
-                    if (!appState.isHost) {
-                        const { error: updateError } = await supabaseClient
-                            .from('sessions')
-                            .update({
-                                guest_id: appState.userId,
-                                guest_name: appState.userName,
-                                guest_connected_at: new Date().toISOString()
-                            })
-                            .eq('session_id', session.session_id);
-                        
-                        if (updateError) throw updateError;
-                    }
-                    
-                    appState.sessionId = session.session_id;
-                    appState.otherUserName = appState.isHost ? (session.guest_name || "Guest") : session.host_name;
-                    
-                    return true;
-                }
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                return data.ip || "Unknown";
             } catch (error) {
-                console.error("Error connecting to Supabase:", error);
-                return false;
+                console.error("Error getting IP:", error);
+                return "Unknown";
             }
         }
 
-        // Reconnect to existing session
-        async function reconnectToSession() {
+        // Create host session
+        async function createHostSession(userIP) {
             try {
-                // Check if session still exists
-                const { data: session, error } = await supabaseClient
+                const sessionId = 'session_' + Date.now().toString(36);
+                const { data, error } = await supabaseClient
                     .from('sessions')
-                    .select('*')
-                    .eq('session_id', appState.sessionId)
-                    .eq('is_active', true)
+                    .insert([{
+                        session_id: sessionId,
+                        host_id: appState.userId,
+                        host_name: appState.userName,
+                        host_ip: userIP,
+                        is_active: true,
+                        created_at: new Date().toISOString(),
+                        requires_approval: true
+                    }])
+                    .select()
                     .single();
                 
-                if (error || !session) return false;
+                if (error) throw error;
                 
-                // Check if user is still in session
-                if (appState.isHost) {
-                    if (session.host_id !== appState.userId) return false;
-                    appState.otherUserName = session.guest_name || "Guest";
-                } else {
-                    if (session.guest_id !== appState.userId) return false;
-                    appState.otherUserName = session.host_name;
+                appState.sessionId = sessionId;
+                appState.currentSessionId = sessionId;
+                appState.isConnected = true;
+                appState.connectionTime = new Date();
+                
+                saveSessionToLocalStorage();
+                updateUIAfterConnection();
+                setupRealtimeSubscriptions();
+                loadChatHistory();
+                
+                connectionModal.classList.remove('show');
+                showRequestsBtn.style.display = 'flex';
+            } catch (error) {
+                console.error("Error creating session:", error);
+                alert("Failed to create session. Please try again.");
+            }
+        }
+
+        // Request to join session as guest
+        async function requestToJoinSession(userIP) {
+            try {
+                // Get active sessions
+                const { data: sessions, error } = await supabaseClient
+                    .from('sessions')
+                    .select('*')
+                    .eq('is_active', true)
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+                
+                if (sessions.length === 0) {
+                    alert("No active sessions available. Please ask a host to create one.");
+                    return;
                 }
                 
-                // Setup real-time subscriptions
-                setupRealtimeSubscription();
-                setupImageSubscription();
+                // Show session selection (in real app, you'd have a UI for this)
+                // For now, join the first available session
+                const session = sessions[0];
                 
-                return true;
+                // Add guest to pending guests
+                const pendingGuest = {
+                    guest_id: appState.userId,
+                    guest_name: appState.userName,
+                    guest_ip: userIP,
+                    requested_at: new Date().toISOString()
+                };
+                
+                const { error: updateError } = await supabaseClient
+                    .from('sessions')
+                    .update({
+                        pending_guests: session.pending_guests ? 
+                            [...session.pending_guests, pendingGuest] : [pendingGuest]
+                    })
+                    .eq('session_id', session.session_id);
+                
+                if (updateError) throw updateError;
+                
+                // Store session info and wait for approval
+                appState.sessionId = session.sessionId;
+                appState.currentSessionId = session.session_id;
+                
+                alert("Join request sent to host. Waiting for approval...");
+                
+                // Listen for approval
+                setupGuestApprovalSubscription(session.session_id);
             } catch (error) {
-                console.error("Error reconnecting:", error);
-                return false;
+                console.error("Error requesting to join:", error);
+                alert("Failed to join session. Please try again.");
             }
+        }
+
+        // Setup realtime subscriptions
+        function setupRealtimeSubscriptions() {
+            // Clear existing subscriptions
+            appState.realtimeSubscriptions.forEach(sub => {
+                supabaseClient.removeChannel(sub);
+            });
+            appState.realtimeSubscriptions = [];
+            
+            // Messages subscription
+            const messagesSub = supabaseClient
+                .channel('messages-' + appState.currentSessionId)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `session_id=eq.${appState.currentSessionId}`
+                    },
+                    (payload) => {
+                        if (payload.new.sender_id !== appState.userId) {
+                            displayMessage(payload.new);
+                            if (appState.soundEnabled && !appState.viewingHistoricalSession) {
+                                messageSound.play();
+                            }
+                        }
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `session_id=eq.${appState.currentSessionId}`
+                    },
+                    (payload) => {
+                        updateMessage(payload.new);
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'DELETE',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `session_id=eq.${appState.currentSessionId}`
+                    },
+                    (payload) => {
+                        removeMessage(payload.old.id);
+                    }
+                )
+                .subscribe();
+            
+            appState.realtimeSubscriptions.push(messagesSub);
+            
+            // Typing indicator subscription
+            const typingSub = supabaseClient
+                .channel('typing-' + appState.currentSessionId)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'typing_indicators',
+                        filter: `session_id=eq.${appState.currentSessionId}`
+                    },
+                    (payload) => {
+                        if (payload.new.user_id !== appState.userId) {
+                            showTypingIndicator(payload.new.user_name);
+                        }
+                    }
+                )
+                .subscribe();
+            
+            appState.realtimeSubscriptions.push(typingSub);
+            
+            // Guest requests subscription (for host)
+            if (appState.isHost) {
+                const requestsSub = supabaseClient
+                    .channel('requests-' + appState.currentSessionId)
+                    .on(
+                        'postgres_changes',
+                        {
+                            event: 'UPDATE',
+                            schema: 'public',
+                            table: 'sessions',
+                            filter: `session_id=eq.${appState.currentSessionId}`
+                        },
+                        (payload) => {
+                            updateGuestRequests(payload.new.pending_guests);
+                        }
+                    )
+                    .subscribe();
+                
+                appState.realtimeSubscriptions.push(requestsSub);
+            }
+        }
+
+        // Setup guest approval subscription
+        function setupGuestApprovalSubscription(sessionId) {
+            const approvalSub = supabaseClient
+                .channel('approval-' + sessionId)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'sessions',
+                        filter: `session_id=eq.${sessionId}`
+                    },
+                    async (payload) => {
+                        const session = payload.new;
+                        const approvedGuests = session.approved_guests || [];
+                        
+                        // Check if this guest is approved
+                        const isApproved = approvedGuests.some(g => g.guest_id === appState.userId);
+                        
+                        if (isApproved) {
+                            // Guest is approved, join the session
+                            appState.isConnected = true;
+                            appState.connectionTime = new Date();
+                            
+                            saveSessionToLocalStorage();
+                            updateUIAfterConnection();
+                            setupRealtimeSubscriptions();
+                            loadChatHistory();
+                            
+                            connectionModal.classList.remove('show');
+                            supabaseClient.removeChannel(approvalSub);
+                        }
+                    }
+                )
+                .subscribe();
         }
 
         // Update UI after connection
         function updateUIAfterConnection() {
             statusIndicator.classList.remove('offline');
-            userRoleDisplay.textContent = `${appState.userName} (Connected)`;
-            currentUserSpan.textContent = appState.userName;
-            
-            // Show logout button
+            userRoleDisplay.textContent = `${appState.userName} (${appState.isHost ? 'Host' : 'Guest'})`;
             logoutBtn.style.display = 'flex';
             
-            // Enable chat controls
             messageInput.disabled = false;
             sendMessageBtn.disabled = false;
             messageInput.focus();
             
-            // Enable image controls
-            uploadImageBtn.disabled = false;
-            imageUrlInput.disabled = false;
-        }
-
-// Handle logout
-async function handleLogout() {
-    if (confirm("Are you sure you want to logout?")) {
-        // Remove session from localStorage
-        localStorage.removeItem('writeToMe_session');
-        
-        // Update session in database
-        if (appState.isConnected && appState.sessionId) {
-            try {
-// In handleLogout(), update the database update sections:
-if (appState.isHost) {
-    await supabaseClient
-        .from('sessions')
-        .update({ 
-            is_active: false, 
-            ended_at: new Date().toISOString(),
-            guest_id: null,
-            guest_name: null,
-            guest_connected_at: null,
-            guest_ip: null  // ADD THIS
-        })
-        .eq('session_id', appState.sessionId);
-} else {
-    await supabaseClient
-        .from('sessions')
-        .update({ 
-            guest_id: null, 
-            guest_name: null, 
-            guest_connected_at: null,
-            guest_ip: null  // ADD THIS
-        })
-        .eq('session_id', appState.sessionId);
-}
-            } catch (error) {
-                console.error("Error updating session on logout:", error);
+            if (appState.isHost) {
+                showRequestsBtn.style.display = 'flex';
             }
         }
-        
-        // Reset app state
-        appState.isHost = false;
-        appState.isConnected = false;
-        appState.userName = "Guest";
-        appState.userId = null;
-        appState.sessionId = null;
-        appState.messages = [];
-        appState.currentImage = null;
-        appState.realtimeSubscription = null;
-        
-        // Reset UI
-        statusIndicator.classList.add('offline');
-        userRoleDisplay.textContent = "Disconnected";
-        currentUserSpan.textContent = "Guest";
-        logoutBtn.style.display = 'none';
-        messageInput.disabled = true;
-        sendMessageBtn.disabled = true;
-        uploadImageBtn.disabled = true;
-        imageUrlInput.disabled = true;
-        downloadImageBtn.disabled = true;
-        adminPanel.style.display = 'none';
-        
-        // Clear chat and image
-        chatMessages.innerHTML = '<div class="message received"><div class="message-sender">System</div><div>Welcome to WriteToMe! This is a secure chat room for two people only.</div><div class="message-time">Just now</div></div>';
-        clearImage();
-        
-        // Show connection modal
-        connectionModal.style.display = 'flex';
-        
-        // Reset login form
-        document.getElementById('userSelect').value = 'guest';
-        document.getElementById('passwordInput').value = '';
-        document.getElementById('passwordError').style.display = 'none';
-    }
-}
 
+        // Save session to localStorage
+        function saveSessionToLocalStorage() {
+            localStorage.setItem('writeToMe_session', JSON.stringify({
+                isHost: appState.isHost,
+                userName: appState.userName,
+                userId: appState.userId,
+                sessionId: appState.sessionId,
+                currentSessionId: appState.currentSessionId,
+                connectionTime: appState.connectionTime
+            }));
+        }
 
-        // Setup real-time subscription for messages
-function setupRealtimeSubscription() {
-    console.log('🔄 Setting up real-time subscription for session:', appState.sessionId);
-    
-    // Remove existing subscription if any
-    if (appState.realtimeSubscription) {
-        console.log('🗑️ Removing old subscription');
-        supabaseClient.removeChannel(appState.realtimeSubscription);
-    }
-    
-    // Create new subscription
-    appState.realtimeSubscription = supabaseClient
-        .channel('messages-channel-' + appState.sessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages',
-                filter: 'session_id=eq.' + appState.sessionId
-            },
-            (payload) => {
-                console.log('📨 REAL-TIME EVENT RECEIVED:', payload);
-                console.log('New message from:', payload.new.sender_name);
-                console.log('Current user is:', appState.userName);
+        // Reconnect to saved session
+        async function reconnectSession(sessionData) {
+            appState.isHost = sessionData.isHost;
+            appState.userName = sessionData.userName;
+            appState.userId = sessionData.userId;
+            appState.sessionId = sessionData.sessionId;
+            appState.currentSessionId = sessionData.currentSessionId;
+            appState.connectionTime = new Date(sessionData.connectionTime);
+            appState.isConnected = true;
+            
+            updateUIAfterConnection();
+            setupRealtimeSubscriptions();
+            loadChatHistory();
+            loadSessions();
+        }
+
+        // Handle logout
+        async function handleLogout() {
+            if (confirm("Are you sure you want to logout?")) {
+                // Clear realtime subscriptions
+                appState.realtimeSubscriptions.forEach(sub => {
+                    supabaseClient.removeChannel(sub);
+                });
+                appState.realtimeSubscriptions = [];
                 
-                // Don't show the user's own messages
-                if (payload.new.sender_id !== appState.userId) {
-                    console.log('✅ Displaying message from other user');
-                    displayMessage({
-                        id: payload.new.id,
-                        sender: payload.new.sender_name,
-                        text: payload.new.message,
-                        time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                        type: 'received'
-                    });
-                } else {
-                    console.log('⏩ Skipping own message');
-                }
-            }
-        )
-        .on('system', { event: 'channel_joined' }, () => {
-            console.log('✅ Successfully joined real-time channel');
-        })
-        .on('system', { event: 'channel_error' }, (error) => {
-            console.error('❌ Channel error:', error);
-        })
-        .subscribe((status) => {
-            console.log('📡 Subscription status:', status);
-        });
-}
-
-        // Setup real-time subscription for images
-function setupImageSubscription() {
-    console.log('🖼️ Setting up image subscription');
-    
-    supabaseClient
-        .channel('images-channel-' + appState.sessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'sessions',
-                filter: 'session_id=eq.' + appState.sessionId
-            },
-            (payload) => {
-                console.log('🖼️ Image update received:', payload);
-                const updatedSession = payload.new;
+                // Clear localStorage
+                localStorage.removeItem('writeToMe_session');
                 
-                if (updatedSession.current_image && updatedSession.current_image !== appState.currentImage) {
-                    console.log('✅ New image detected');
-                    appState.currentImage = updatedSession.current_image;
-                    displayImage(updatedSession.current_image);
-                    downloadImageBtn.disabled = false;
-                    addSystemMessage(`${appState.otherUserName} shared an image.`);
-                }
+                // Reset app state
+                appState.isHost = false;
+                appState.isConnected = false;
+                appState.userName = "";
+                appState.userId = null;
+                appState.sessionId = null;
+                appState.currentSessionId = null;
+                appState.messages = [];
+                appState.viewingHistoricalSession = false;
+                
+                // Reset UI
+                statusIndicator.classList.add('offline');
+                userRoleDisplay.textContent = "Disconnected";
+                logoutBtn.style.display = 'none';
+                showRequestsBtn.style.display = 'none';
+                messageInput.disabled = true;
+                sendMessageBtn.disabled = true;
+                chatTitle.textContent = "Active Chat";
+                chatTitle.className = "chat-title active";
+                
+                // Clear chat
+                chatMessages.innerHTML = `
+                    <div class="message received">
+                        <div class="message-sender">System</div>
+                        <div>Welcome to WriteToMe! Connect to start chatting.</div>
+                        <div class="message-time">Just now</div>
+                    </div>
+                `;
+                
+                // Show connection modal
+                connectionModal.classList.add('show');
+                usernameInput.value = "";
+                passwordInput.value = "";
+                passwordError.classList.remove('show');
             }
-        )
-        .subscribe();
-}
+        }
 
-        // Load chat history from database
+        // Load chat history
         async function loadChatHistory() {
             try {
                 const { data: messages, error } = await supabaseClient
                     .from('messages')
                     .select('*')
-                    .eq('session_id', appState.sessionId)
+                    .eq('session_id', appState.currentSessionId)
                     .order('created_at', { ascending: true });
                 
                 if (error) throw error;
                 
-                // Clear current messages
-                chatMessages.innerHTML = '';
-                appState.messages = [];
+                chatMessages.innerHTML = "";
+                appState.messages = messages || [];
                 
-                // Display each message
-                messages.forEach(msg => {
-                    const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
-                    displayMessage({
-                        id: msg.id,
-                        sender: msg.sender_name,
-                        text: msg.message,
-                        time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                        type: messageType
-                    });
-                });
+                if (messages.length === 0) {
+                    displaySystemMessage("Chat history loaded. No messages yet.");
+                } else {
+                    messages.forEach(msg => displayMessage(msg));
+                }
+                
+                chatMessages.scrollTop = chatMessages.scrollHeight;
             } catch (error) {
                 console.error("Error loading chat history:", error);
+                displaySystemMessage("Error loading chat history.");
             }
         }
 
-        // Load current image from database
-        async function loadCurrentImage() {
-            try {
-                const { data: session, error } = await supabaseClient
-                    .from('sessions')
-                    .select('current_image')
-                    .eq('session_id', appState.sessionId)
-                    .single();
-                
-                if (error) throw error;
-                
-                if (session.current_image) {
-                    appState.currentImage = session.current_image;
-                    displayImage(session.current_image);
-                    downloadImageBtn.disabled = false;
-                }
-            } catch (error) {
-                console.error("Error loading current image:", error);
-            }
-        }
-
-        // Save message to database
-        async function saveMessageToDB(senderName, messageText) {
-            try {
-                const { data, error } = await supabaseClient
-                    .from('messages')
-                    .insert([
-                        {
-                            session_id: appState.sessionId,
-                            sender_id: appState.userId,
-                            sender_name: senderName,
-                            message: messageText,
-                            created_at: new Date().toISOString()
-                        }
-                    ])
-                    .select()
-                    .single();
-                
-                if (error) throw error;
-                return data;
-            } catch (error) {
-                console.error("Error saving message to database:", error);
-                return null;
-            }
-        }
-
-        // Send a chat message
-        async function sendMessage() {
-            const messageText = messageInput.value.trim();
-            if (!messageText) return;
-            
-            // Create message object
-            const message = {
-                id: Date.now(),
-                sender: appState.userName,
-                text: messageText,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent'
-            };
-            
-            // Add to messages array
-            appState.messages.push(message);
-            
-            // Display message immediately
-            displayMessage(message);
-            
-            // Clear input
-            messageInput.value = '';
-            
-            // Save to database
-            await saveMessageToDB(appState.userName, messageText);
-        }
-
-        // Display a message in the chat
-        function displayMessage(message) {
+        // Display a message
+        function displayMessage(msg) {
             const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${message.type}`;
-            messageDiv.id = `msg-${message.id}`;
+            messageDiv.className = `message ${msg.sender_id === appState.userId ? 'sent' : 'received'}`;
+            messageDiv.id = `msg-${msg.id}`;
+            messageDiv.dataset.messageId = msg.id;
+            
+            let contentHtml = '';
+            if (msg.image_url) {
+                contentHtml = `<img src="${msg.image_url}" alt="Shared image" class="message-image" onclick="enlargeImage('${msg.image_url}')">`;
+            } else {
+                contentHtml = `<div class="message-content">${escapeHtml(msg.message)}</div>`;
+            }
+            
+            if (msg.reply_to) {
+                contentHtml = `<div style="font-size: 12px; color: #999; margin-bottom: 5px; border-left: 2px solid var(--info-blue); padding-left: 8px;">Replying to: ${msg.reply_to}</div>` + contentHtml;
+            }
             
             messageDiv.innerHTML = `
-                <div class="message-sender">${message.sender}</div>
-                <div>${message.text}</div>
-                <div class="message-time">${message.time}</div>
+                <div class="message-sender">${msg.sender_name}</div>
+                ${contentHtml}
+                <div class="message-time">${new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                <div class="message-actions">
+                    <button class="message-action-btn reply" onclick="replyToMessage(${msg.id}, '${msg.sender_name}')" title="Reply">
+                        <i class="fas fa-reply"></i>
+                    </button>
+                    ${msg.sender_id === appState.userId ? `
+                        <button class="message-action-btn edit" onclick="editMessage(${msg.id})" title="Edit">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="message-action-btn delete" onclick="deleteMessage(${msg.id})" title="Delete">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    ` : ''}
+                </div>
             `;
             
             chatMessages.appendChild(messageDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
-        // Add a system message
-        function addSystemMessage(text) {
+        // Update a message
+        function updateMessage(msg) {
+            const messageDiv = document.getElementById(`msg-${msg.id}`);
+            if (messageDiv) {
+                const contentDiv = messageDiv.querySelector('.message-content');
+                if (contentDiv && !msg.image_url) {
+                    contentDiv.innerHTML = escapeHtml(msg.message);
+                }
+            }
+        }
+
+        // Remove a message
+        function removeMessage(messageId) {
+            const messageDiv = document.getElementById(`msg-${messageId}`);
+            if (messageDiv) {
+                messageDiv.remove();
+            }
+        }
+
+        // Display system message
+        function displaySystemMessage(text) {
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message received';
             
@@ -1449,257 +1558,582 @@ function setupImageSubscription() {
             
             chatMessages.appendChild(messageDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
-            
-            // Also save to database
-            saveMessageToDB('System', text);
         }
 
-        // Handle typing indicator
+        // Handle typing
         function handleTyping() {
-            // Clear previous timeout
             if (appState.typingTimeout) {
                 clearTimeout(appState.typingTimeout);
             }
+            
+            // Send typing indicator
+            sendTypingIndicator();
+            
+            // Set timeout to clear typing indicator
+            appState.typingTimeout = setTimeout(() => {
+                clearTypingIndicator();
+            }, 2000);
         }
 
-        // Clear chat history
-        async function clearChat() {
-            if (confirm("Are you sure you want to clear all chat messages?")) {
-                try {
-                    // Delete messages from database for this session
-                    const { error } = await supabaseClient
+        // Send typing indicator
+        async function sendTypingIndicator() {
+            try {
+                await supabaseClient
+                    .from('typing_indicators')
+                    .insert([{
+                        session_id: appState.currentSessionId,
+                        user_id: appState.userId,
+                        user_name: appState.userName,
+                        created_at: new Date().toISOString()
+                    }]);
+            } catch (error) {
+                console.error("Error sending typing indicator:", error);
+            }
+        }
+
+        // Clear typing indicator
+        function clearTypingIndicator() {
+            // In a real implementation, you'd send a clear indicator
+            // For now, we'll just hide the UI
+            typingIndicator.classList.remove('show');
+        }
+
+        // Show typing indicator
+        function showTypingIndicator(userName) {
+            typingUser.textContent = userName;
+            typingIndicator.classList.add('show');
+            
+            setTimeout(() => {
+                typingIndicator.classList.remove('show');
+            }, 3000);
+        }
+
+        // Send message
+        async function sendMessage() {
+            const messageText = messageInput.value.trim();
+            const images = appState.currentImages;
+            
+            if (!messageText && images.length === 0) return;
+            
+            try {
+                // Handle images first
+                for (const image of images) {
+                    await supabaseClient
                         .from('messages')
-                        .delete()
-                        .eq('session_id', appState.sessionId);
-                    
-                    if (error) throw error;
-                    
-                    // Clear local chat
-                    chatMessages.innerHTML = '';
-                    appState.messages = [];
-                    addSystemMessage("Chat history has been cleared.");
+                        .insert([{
+                            session_id: appState.currentSessionId,
+                            sender_id: appState.userId,
+                            sender_name: appState.userName,
+                            image_url: image,
+                            created_at: new Date().toISOString(),
+                            reply_to: appState.currentReplyTo
+                        }]);
+                }
+                
+                // Handle text message
+                if (messageText) {
+                    await supabaseClient
+                        .from('messages')
+                        .insert([{
+                            session_id: appState.currentSessionId,
+                            sender_id: appState.userId,
+                            sender_name: appState.userName,
+                            message: messageText,
+                            created_at: new Date().toISOString(),
+                            reply_to: appState.currentReplyTo
+                        }]);
+                }
+                
+                // Clear input
+                messageInput.value = "";
+                appState.currentImages = [];
+                imagePreviewContainer.innerHTML = "";
+                cancelReply();
+                
+                // Clear typing indicator
+                if (appState.typingTimeout) {
+                    clearTimeout(appState.typingTimeout);
+                    appState.typingTimeout = null;
+                }
+            } catch (error) {
+                console.error("Error sending message:", error);
+                displaySystemMessage("Error sending message.");
+            }
+        }
+
+        // Reply to a message
+        function replyToMessage(messageId, senderName) {
+            const messageDiv = document.getElementById(`msg-${messageId}`);
+            if (messageDiv) {
+                const messageContent = messageDiv.querySelector('.message-content')?.textContent || "Image";
+                appState.currentReplyTo = `${senderName}: ${messageContent.substring(0, 50)}${messageContent.length > 50 ? '...' : ''}`;
+                
+                replyText.textContent = `Replying to: ${appState.currentReplyTo}`;
+                replyIndicator.classList.add('show');
+                messageInput.focus();
+            }
+        }
+
+        // Cancel reply
+        function cancelReply() {
+            appState.currentReplyTo = null;
+            replyIndicator.classList.remove('show');
+        }
+
+        // Edit a message
+        async function editMessage(messageId) {
+            const newText = prompt("Edit your message:");
+            if (newText !== null && newText.trim()) {
+                try {
+                    await supabaseClient
+                        .from('messages')
+                        .update({
+                            message: newText.trim(),
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', messageId)
+                        .eq('sender_id', appState.userId);
                 } catch (error) {
-                    console.error("Error clearing chat:", error);
-                    alert("Error clearing chat. Please try again.");
+                    console.error("Error editing message:", error);
+                    alert("Error editing message.");
                 }
             }
         }
 
-        // Handle image drop
-        function handleImageDrop(e) {
-            e.preventDefault();
-            imagePlaceholder.style.borderColor = 'var(--border-color)';
-            imagePlaceholder.style.backgroundColor = '';
-            
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                const file = files[0];
-                if (file.type.startsWith('image/')) {
-                    loadImageFile(file);
-                } else {
-                    alert("Please drop an image file only.");
+        // Delete a message
+        async function deleteMessage(messageId) {
+            if (confirm("Are you sure you want to delete this message?")) {
+                try {
+                    if (appState.isHost) {
+                        // Host can delete any message
+                        await supabaseClient
+                            .from('messages')
+                            .delete()
+                            .eq('id', messageId);
+                    } else {
+                        // Guest can only delete their own messages
+                        await supabaseClient
+                            .from('messages')
+                            .delete()
+                            .eq('id', messageId)
+                            .eq('sender_id', appState.userId);
+                    }
+                } catch (error) {
+                    console.error("Error deleting message:", error);
+                    alert("Error deleting message.");
+                }
+            }
+        }
+
+        // Clear chat
+        async function clearChat() {
+            if (confirm("Are you sure you want to clear the chat?")) {
+                try {
+                    if (appState.isHost || appState.viewingHistoricalSession) {
+                        // Host can clear chat for everyone
+                        await supabaseClient
+                            .from('messages')
+                            .delete()
+                            .eq('session_id', appState.currentSessionId);
+                        
+                        displaySystemMessage("Chat has been cleared.");
+                    } else {
+                        // Guest can only clear their own view
+                        // Mark messages as deleted_for_user
+                        const { data: messages } = await supabaseClient
+                            .from('messages')
+                            .select('id')
+                            .eq('session_id', appState.currentSessionId);
+                        
+                        if (messages) {
+                            for (const msg of messages) {
+                                await supabaseClient
+                                    .from('user_message_deletes')
+                                    .upsert([{
+                                        user_id: appState.userId,
+                                        message_id: msg.id,
+                                        deleted_at: new Date().toISOString()
+                                    }]);
+                            }
+                        }
+                        
+                        // Reload chat (filtered messages will be excluded)
+                        loadChatHistory();
+                        displaySystemMessage("Chat cleared from your view.");
+                    }
+                } catch (error) {
+                    console.error("Error clearing chat:", error);
+                    alert("Error clearing chat.");
                 }
             }
         }
 
         // Handle file selection
         function handleFileSelect(e) {
-            const file = e.target.files[0];
-            if (file && file.type.startsWith('image/')) {
-                loadImageFile(file);
-            }
+            const files = Array.from(e.target.files);
+            files.forEach(file => {
+                if (file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        appState.currentImages.push(event.target.result);
+                        updateImagePreview();
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    alert("Please select image files under 5MB.");
+                }
+            });
+            fileInput.value = "";
         }
 
-        // Load image file
-        function loadImageFile(file) {
-            // Check file size (max 5MB)
-            if (file.size > 5 * 1024 * 1024) {
-                alert("Image size should be less than 5MB.");
-                return;
-            }
-            
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                appState.currentImage = e.target.result;
-                displayImage(appState.currentImage);
-                
-                // Enable download button
-                downloadImageBtn.disabled = false;
-                
-                // Save image to database
-                await saveImageToDB(appState.currentImage);
-                
-                // Add system message
-                addSystemMessage(`${appState.userName} shared an image.`);
-            };
-            reader.readAsDataURL(file);
-        }
-
-        // Upload image from URL
-        async function uploadImageFromUrl() {
+        // Add image from URL
+        function addImageFromUrl() {
             const url = imageUrlInput.value.trim();
-            if (!url) return;
-            
-            // Simple URL validation
-            if (!url.match(/\.(jpeg|jpg|gif|png|webp)$/)) {
-                alert("Please enter a valid image URL (jpg, png, gif, webp).");
-                return;
+            if (url) {
+                appState.currentImages.push(url);
+                updateImagePreview();
+                imageUrlInput.value = "";
             }
-            
-            // Set image preview
-            appState.currentImage = url;
-            displayImage(url);
-            
-            // Enable download button
-            downloadImageBtn.disabled = false;
-            
-            // Save image to database
-            await saveImageToDB(url);
-            
-            // Add system message
-            addSystemMessage(`${appState.userName} shared an image from URL.`);
-            
-            // Clear URL input
-            imageUrlInput.value = '';
         }
 
-        // Save image to database
-        async function saveImageToDB(imageData) {
+        // Update image preview
+        function updateImagePreview() {
+            imagePreviewContainer.innerHTML = "";
+            appState.currentImages.forEach((image, index) => {
+                const container = document.createElement('div');
+                container.style.position = 'relative';
+                container.style.display = 'inline-block';
+                
+                const img = document.createElement('img');
+                img.src = image;
+                img.className = 'image-preview';
+                img.onclick = () => enlargeImage(image);
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-image';
+                removeBtn.innerHTML = '×';
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    appState.currentImages.splice(index, 1);
+                    updateImagePreview();
+                };
+                
+                container.appendChild(img);
+                container.appendChild(removeBtn);
+                imagePreviewContainer.appendChild(container);
+            });
+        }
+
+        // Enlarge image
+        function enlargeImage(src) {
+            modalImage.src = src;
+            imageModal.classList.add('show');
+        }
+
+        // Load sessions
+        async function loadSessions() {
             try {
-                const { error } = await supabaseClient
+                const { data: sessions, error } = await supabaseClient
                     .from('sessions')
-                    .update({ current_image: imageData })
-                    .eq('session_id', appState.sessionId);
+                    .select('*')
+                    .order('created_at', { ascending: false });
                 
                 if (error) throw error;
-                return true;
+                
+                sessionsList.innerHTML = "";
+                
+                sessions.forEach(session => {
+                    const sessionCard = document.createElement('div');
+                    sessionCard.className = `session-card ${session.session_id === appState.currentSessionId ? 'active' : ''}`;
+                    
+                    const isActive = session.is_active;
+                    const guestCount = session.approved_guests?.length || 0;
+                    const messageCount = 0; // You would need to query this separately
+                    
+                    sessionCard.innerHTML = `
+                        <div class="session-header">
+                            <h4>Session ${session.session_id.substring(0, 8)}...</h4>
+                            <span class="session-status ${isActive ? 'active' : ''}">
+                                ${isActive ? 'Active Now' : 'Historical'}
+                            </span>
+                        </div>
+                        <div class="session-info">
+                            <p><i class="fas fa-user"></i> Host: ${session.host_name}</p>
+                            <p><i class="fas fa-users"></i> Guests: ${guestCount}</p>
+                            <p><i class="fas fa-network-wired"></i> Host IP: ${session.host_ip || 'N/A'}</p>
+                            <p><i class="fas fa-calendar"></i> Created: ${new Date(session.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <div class="session-actions">
+                            <button class="btn btn-small btn-info" onclick="reviewSession('${session.session_id}')">
+                                <i class="fas fa-eye"></i> Review
+                            </button>
+                            <button class="btn btn-small btn-success" onclick="downloadSession('${session.session_id}')">
+                                <i class="fas fa-download"></i> Download
+                            </button>
+                            ${appState.isHost ? `
+                                <button class="btn btn-small btn-danger" onclick="deleteSession('${session.session_id}')">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                            ` : ''}
+                            ${session.session_id === appState.currentSessionId && !appState.viewingHistoricalSession ? `
+                                <button class="btn btn-small" onclick="returnToActiveChat()">
+                                    <i class="fas fa-arrow-left"></i> Active
+                                </button>
+                            ` : ''}
+                        </div>
+                    `;
+                    
+                    sessionsList.appendChild(sessionCard);
+                });
             } catch (error) {
-                console.error("Error saving image to database:", error);
-                alert("Error saving image. Please try again.");
-                return false;
+                console.error("Error loading sessions:", error);
             }
         }
 
-        // Display image in preview
-        function displayImage(src) {
-            imagePreview.src = src;
-            imagePreview.style.display = 'block';
-            imagePlaceholder.style.display = 'none';
+        // Review historical session
+        async function reviewSession(sessionId) {
+            appState.viewingHistoricalSession = true;
+            appState.currentSessionId = sessionId;
+            
+            // Clear realtime subscriptions for historical view
+            appState.realtimeSubscriptions.forEach(sub => {
+                supabaseClient.removeChannel(sub);
+            });
+            appState.realtimeSubscriptions = [];
+            
+            // Update UI
+            chatTitle.textContent = `Historical Chat - ${new Date().toLocaleDateString()}`;
+            chatTitle.className = "chat-title historical";
+            messageInput.disabled = true;
+            sendMessageBtn.disabled = true;
+            
+            // Load historical messages
+            await loadChatHistory();
+            
+            // Add return button to chat
+            const returnBtn = document.createElement('button');
+            returnBtn.className = 'btn btn-success';
+            returnBtn.innerHTML = '<i class="fas fa-arrow-left"></i> Return to Active Chat';
+            returnBtn.style.margin = '10px auto';
+            returnBtn.style.display = 'block';
+            returnBtn.onclick = returnToActiveChat;
+            
+            const existingReturnBtn = document.getElementById('returnToActiveBtn');
+            if (existingReturnBtn) {
+                existingReturnBtn.remove();
+            }
+            returnBtn.id = 'returnToActiveBtn';
+            chatMessages.insertBefore(returnBtn, chatMessages.firstChild);
         }
 
-        // Download image
-        function downloadImage() {
-            if (!appState.currentImage) return;
+        // Return to active chat
+        function returnToActiveChat() {
+            appState.viewingHistoricalSession = false;
+            appState.currentSessionId = appState.sessionId;
             
-            const link = document.createElement('a');
-            link.href = appState.currentImage;
-            link.download = `WriteToMe_Image_${new Date().getTime()}.jpg`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            chatTitle.textContent = "Active Chat";
+            chatTitle.className = "chat-title active";
+            messageInput.disabled = false;
+            sendMessageBtn.disabled = false;
             
-            addSystemMessage(`${appState.userName} downloaded the image.`);
+            const returnBtn = document.getElementById('returnToActiveBtn');
+            if (returnBtn) {
+                returnBtn.remove();
+            }
+            
+            setupRealtimeSubscriptions();
+            loadChatHistory();
+            loadSessions();
         }
 
-        // Clear image
-        async function clearImage() {
-            if (confirm("Are you sure you want to clear the image?")) {
+        // Download session data
+        async function downloadSession(sessionId) {
+            try {
+                const { data: session } = await supabaseClient
+                    .from('sessions')
+                    .select('*')
+                    .eq('session_id', sessionId)
+                    .single();
+                
+                const { data: messages } = await supabaseClient
+                    .from('messages')
+                    .select('*')
+                    .eq('session_id', sessionId)
+                    .order('created_at', { ascending: true });
+                
+                const sessionData = {
+                    session: session,
+                    messages: messages || []
+                };
+                
+                const dataStr = JSON.stringify(sessionData, null, 2);
+                const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+                
+                const exportFileDefaultName = `WriteToMe_Session_${sessionId.substring(0, 8)}.json`;
+                
+                const linkElement = document.createElement('a');
+                linkElement.setAttribute('href', dataUri);
+                linkElement.setAttribute('download', exportFileDefaultName);
+                linkElement.click();
+            } catch (error) {
+                console.error("Error downloading session:", error);
+                alert("Error downloading session data.");
+            }
+        }
+
+        // Delete session
+        async function deleteSession(sessionId) {
+            if (confirm("Are you sure you want to delete this session? This action cannot be undone.")) {
                 try {
-                    // Clear image in database
-                    const { error } = await supabaseClient
+                    // Delete messages first
+                    await supabaseClient
+                        .from('messages')
+                        .delete()
+                        .eq('session_id', sessionId);
+                    
+                    // Delete session
+                    await supabaseClient
                         .from('sessions')
-                        .update({ current_image: null })
-                        .eq('session_id', appState.sessionId);
+                        .delete()
+                        .eq('session_id', sessionId);
                     
-                    if (error) throw error;
+                    // If this was the current session, return to active chat
+                    if (sessionId === appState.currentSessionId) {
+                        returnToActiveChat();
+                    }
                     
-                    // Clear local state
-                    appState.currentImage = null;
-                    imagePreview.style.display = 'none';
-                    imagePlaceholder.style.display = 'flex';
-                    downloadImageBtn.disabled = true;
-                    
-                    // Add system message
-                    addSystemMessage(`${appState.userName} cleared the image.`);
+                    // Reload sessions
+                    loadSessions();
+                    displaySystemMessage("Session deleted.");
                 } catch (error) {
-                    console.error("Error clearing image:", error);
-                    alert("Error clearing image. Please try again.");
+                    console.error("Error deleting session:", error);
+                    alert("Error deleting session.");
                 }
             }
         }
 
-        // Toggle admin panel visibility
-        function toggleAdminPanel() {
-            appState.adminVisible = !appState.adminVisible;
-            adminContent.classList.toggle('show', appState.adminVisible);
-            
-            const chevron = adminToggle.querySelector('i.fa-chevron-down');
-            if (appState.adminVisible) {
-                chevron.className = 'fas fa-chevron-up';
-            } else {
-                chevron.className = 'fas fa-chevron-down';
-            }
-        }
-
-        // Refresh admin information
-        async function refreshAdminInfo() {
-            if (!appState.isHost) return;
-            
+        // Show guest requests
+        async function showGuestRequests() {
             try {
-                // Get session info from database
-                const { data: session, error } = await supabaseClient
+                const { data: session } = await supabaseClient
                     .from('sessions')
-                    .select('*')
-                    .eq('session_id', appState.sessionId)
+                    .select('pending_guests')
+                    .eq('session_id', appState.currentSessionId)
                     .single();
                 
-                if (error) throw error;
+                guestRequestsList.innerHTML = "";
                 
-                const connectionDuration = appState.connectionTime 
-                    ? Math.floor((new Date() - new Date(appState.connectionTime)) / 1000)
-                    : 0;
+                if (session.pending_guests && session.pending_guests.length > 0) {
+                    noRequestsMessage.style.display = 'none';
+                    
+                    session.pending_guests.forEach((guest, index) => {
+                        const requestDiv = document.createElement('div');
+                        requestDiv.className = 'guest-request';
+                        
+                        requestDiv.innerHTML = `
+                            <div class="guest-info">
+                                <strong>${guest.guest_name}</strong>
+                                <p style="font-size: 12px; margin-top: 5px;">IP: ${guest.guest_ip}</p>
+                                <p style="font-size: 12px;">Requested: ${new Date(guest.requested_at).toLocaleTimeString()}</p>
+                            </div>
+                            <div class="guest-actions">
+                                <button class="btn btn-small btn-success" onclick="approveGuest(${index})">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button class="btn btn-small btn-danger" onclick="denyGuest(${index})">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        `;
+                        
+                        guestRequestsList.appendChild(requestDiv);
+                    });
+                    
+                    requestCount.textContent = `(${session.pending_guests.length})`;
+                } else {
+                    noRequestsMessage.style.display = 'block';
+                    requestCount.textContent = 'Requests';
+                }
                 
-                const minutes = Math.floor(connectionDuration / 60);
-                const seconds = connectionDuration % 60;
-                
-                // Get message count
-                const { count: messageCount } = await supabaseClient
-                    .from('messages')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('session_id', appState.sessionId);
-                
-                    adminInfo.innerHTML = `
-    <div class="info-card">
-        <h4><i class="fas fa-user"></i> Host Information</h4>
-        <p><strong>Name:</strong> ${session.host_name}</p>
-        <p><strong>IP Address:</strong> ${session.host_ip || 'Not recorded'}</p>
-        <p><strong>ID:</strong> ${session.host_id.substring(0, 15)}...</p>
-        <p><strong>Session Started:</strong> ${new Date(session.created_at).toLocaleTimeString()}</p>
-        <p><strong>Duration:</strong> ${minutes}m ${seconds}s</p>
-    </div>
-    <div class="info-card">
-        <h4><i class="fas fa-user-friends"></i> Guest Information</h4>
-        <p><strong>Name:</strong> ${session.guest_name || 'Not connected'}</p>
-        <p><strong>IP Address:</strong> ${session.guest_ip || 'Not recorded'}</p>
-        <p><strong>ID:</strong> ${session.guest_id ? session.guest_id.substring(0, 15) + '...' : 'N/A'}</p>
-        <p><strong>Connected:</strong> ${session.guest_connected_at ? new Date(session.guest_connected_at).toLocaleTimeString() : 'N/A'}</p>
-        <p><strong>Status:</strong> ${session.guest_id ? 'Connected' : 'Disconnected'}</p>
-    </div>
-    <div class="info-card">
-        <h4><i class="fas fa-shield-alt"></i> Session Information</h4>
-        <p><strong>Session ID:</strong> ${session.session_id.substring(0, 20)}...</p>
-        <p><strong>Messages:</strong> ${messageCount || 0}</p>
-        <p><strong>Active:</strong> ${session.is_active ? 'Yes' : 'No'}</p>
-        <p><strong>Last Activity:</strong> ${new Date().toLocaleTimeString()}</p>
-    </div>
-`;
+                guestRequestsModal.classList.add('show');
             } catch (error) {
-                console.error("Error refreshing admin info:", error);
-                adminInfo.innerHTML = `<div class="info-card"><p>Error loading admin information.</p></div>`;
+                console.error("Error loading guest requests:", error);
             }
         }
 
-        // Initialize the app when page loads
+        // Update guest requests
+        function updateGuestRequests(pendingGuests) {
+            appState.pendingGuestRequests = pendingGuests || [];
+            requestCount.textContent = appState.pendingGuestRequests.length > 0 ? 
+                `(${appState.pendingGuestRequests.length})` : 'Requests';
+        }
+
+        // Approve guest
+        async function approveGuest(guestIndex) {
+            try {
+                const { data: session } = await supabaseClient
+                    .from('sessions')
+                    .select('pending_guests, approved_guests')
+                    .eq('session_id', appState.currentSessionId)
+                    .single();
+                
+                const guest = session.pending_guests[guestIndex];
+                const updatedPending = session.pending_guests.filter((_, i) => i !== guestIndex);
+                const updatedApproved = [...(session.approved_guests || []), guest];
+                
+                await supabaseClient
+                    .from('sessions')
+                    .update({
+                        pending_guests: updatedPending,
+                        approved_guests: updatedApproved
+                    })
+                    .eq('session_id', appState.currentSessionId);
+                
+                showGuestRequests();
+            } catch (error) {
+                console.error("Error approving guest:", error);
+            }
+        }
+
+        // Deny guest
+        async function denyGuest(guestIndex) {
+            try {
+                const { data: session } = await supabaseClient
+                    .from('sessions')
+                    .select('pending_guests')
+                    .eq('session_id', appState.currentSessionId)
+                    .single();
+                
+                const updatedPending = session.pending_guests.filter((_, i) => i !== guestIndex);
+                
+                await supabaseClient
+                    .from('sessions')
+                    .update({
+                        pending_guests: updatedPending
+                    })
+                    .eq('session_id', appState.currentSessionId);
+                
+                showGuestRequests();
+            } catch (error) {
+                console.error("Error denying guest:", error);
+            }
+        }
+
+        // Toggle sound
+        function toggleSound() {
+            appState.soundEnabled = !appState.soundEnabled;
+            soundControl.classList.toggle('muted', !appState.soundEnabled);
+            soundControl.querySelector('i').className = appState.soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute';
+        }
+
+        // Utility function to escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize app when page loads
         document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
