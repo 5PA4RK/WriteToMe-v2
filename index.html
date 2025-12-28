@@ -1290,102 +1290,117 @@ async function requestToJoinSession(userIP) {
 
         // Setup realtime subscriptions
         function setupRealtimeSubscriptions() {
-            // Clear existing subscriptions
-            appState.realtimeSubscriptions.forEach(sub => {
-                supabaseClient.removeChannel(sub);
-            });
-            appState.realtimeSubscriptions = [];
-            
-            // Messages subscription
-            const messagesSub = supabaseClient
-                .channel('messages-' + appState.currentSessionId)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: 'INSERT',
-                        schema: 'public',
-                        table: 'messages',
-                        filter: `session_id=eq.${appState.currentSessionId}`
-                    },
-                    (payload) => {
-                        if (payload.new.sender_id !== appState.userId) {
-                            displayMessage(payload.new);
-                            if (appState.soundEnabled && !appState.viewingHistoricalSession) {
-                                messageSound.play();
-                            }
+    // Clear existing subscriptions
+    appState.realtimeSubscriptions.forEach(sub => {
+        supabaseClient.removeChannel(sub);
+    });
+    appState.realtimeSubscriptions = [];
+    
+    // Only setup realtime if user is connected and (host OR approved guest)
+    if (appState.isConnected && (appState.isHost || appState.approvedGuest)) {
+        // Messages subscription
+        const messagesSub = supabaseClient
+            .channel('messages-' + appState.currentSessionId)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `session_id=eq.${appState.currentSessionId}`
+                },
+                async (payload) => {
+                    console.log('New message received:', payload.new);
+                    
+                    // Check if guest is approved to see this message
+                    if (!appState.isHost && !appState.approvedGuest) {
+                        return; // Guest not approved, don't show messages
+                    }
+                    
+                    // Don't show the user's own messages (they're already displayed)
+                    if (payload.new.sender_id !== appState.userId) {
+                        console.log('Displaying message from other user');
+                        displayMessage(payload.new);
+                        if (appState.soundEnabled && !appState.viewingHistoricalSession) {
+                            messageSound.play();
                         }
                     }
-                )
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `session_id=eq.${appState.currentSessionId}`
+                },
+                (payload) => {
+                    updateMessage(payload.new);
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `session_id=eq.${appState.currentSessionId}`
+                },
+                (payload) => {
+                    removeMessage(payload.old.id);
+                }
+            )
+            .subscribe((status) => {
+                console.log('Message subscription status:', status);
+            });
+        
+        appState.realtimeSubscriptions.push(messagesSub);
+        
+        // Typing indicator subscription
+        const typingSub = supabaseClient
+            .channel('typing-' + appState.currentSessionId)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'typing_indicators',
+                    filter: `session_id=eq.${appState.currentSessionId}`
+                },
+                (payload) => {
+                    if (payload.new.user_id !== appState.userId) {
+                        showTypingIndicator(payload.new.user_name);
+                    }
+                }
+            )
+            .subscribe();
+        
+        appState.realtimeSubscriptions.push(typingSub);
+        
+        // Guest requests subscription (for host only)
+        if (appState.isHost) {
+            const requestsSub = supabaseClient
+                .channel('requests-' + appState.currentSessionId)
                 .on(
                     'postgres_changes',
                     {
                         event: 'UPDATE',
                         schema: 'public',
-                        table: 'messages',
+                        table: 'sessions',
                         filter: `session_id=eq.${appState.currentSessionId}`
                     },
                     (payload) => {
-                        updateMessage(payload.new);
-                    }
-                )
-                .on(
-                    'postgres_changes',
-                    {
-                        event: 'DELETE',
-                        schema: 'public',
-                        table: 'messages',
-                        filter: `session_id=eq.${appState.currentSessionId}`
-                    },
-                    (payload) => {
-                        removeMessage(payload.old.id);
+                        updateGuestRequests(payload.new.pending_guests);
                     }
                 )
                 .subscribe();
             
-            appState.realtimeSubscriptions.push(messagesSub);
-            
-            // Typing indicator subscription
-            const typingSub = supabaseClient
-                .channel('typing-' + appState.currentSessionId)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: 'INSERT',
-                        schema: 'public',
-                        table: 'typing_indicators',
-                        filter: `session_id=eq.${appState.currentSessionId}`
-                    },
-                    (payload) => {
-                        if (payload.new.user_id !== appState.userId) {
-                            showTypingIndicator(payload.new.user_name);
-                        }
-                    }
-                )
-                .subscribe();
-            
-            appState.realtimeSubscriptions.push(typingSub);
-            
-            // Guest requests subscription (for host)
-            if (appState.isHost) {
-                const requestsSub = supabaseClient
-                    .channel('requests-' + appState.currentSessionId)
-                    .on(
-                        'postgres_changes',
-                        {
-                            event: 'UPDATE',
-                            schema: 'public',
-                            table: 'sessions',
-                            filter: `session_id=eq.${appState.currentSessionId}`
-                        },
-                        (payload) => {
-                            updateGuestRequests(payload.new.pending_guests);
-                        }
-                    )
-                    .subscribe();
-                
-                appState.realtimeSubscriptions.push(requestsSub);
-            }
+            appState.realtimeSubscriptions.push(requestsSub);
         }
+    }
+}
+
 
 
 // Update setupGuestApprovalSubscription function
@@ -1408,10 +1423,14 @@ function setupGuestApprovalSubscription(sessionId) {
                 const guestApproval = approvedGuests.find(g => g.guest_id === appState.userId);
                 
                 if (guestApproval) {
-                    // Guest is approved!
-                    console.log("Guest approved! Joining session...");
+                    console.log("Guest approved! Setting up chat...");
                     
-                    // Update guest info in session
+                    // Update app state
+                    appState.isConnected = true;
+                    appState.approvedGuest = true;
+                    appState.connectionTime = new Date();
+                    
+                    // Update guest info in session (only if not already there)
                     const { error: updateError } = await supabaseClient
                         .from('sessions')
                         .update({
@@ -1424,12 +1443,7 @@ function setupGuestApprovalSubscription(sessionId) {
                     
                     if (updateError) {
                         console.error("Error updating guest info:", updateError);
-                        return;
                     }
-                    
-                    // Update app state
-                    appState.isConnected = true;
-                    appState.connectionTime = new Date();
                     
                     // Save to localStorage
                     saveSessionToLocalStorage();
@@ -1446,33 +1460,50 @@ function setupGuestApprovalSubscription(sessionId) {
                     setupRealtimeSubscriptions();
                     
                     // Load chat history
-                    loadChatHistory();
+                    await loadChatHistory();
                     
                     // Show welcome message
                     displaySystemMessage("You have been approved to join the chat!");
+                    
+                    // Show notification
+                    showGuestApprovedNotification();
                     
                     // Remove this subscription
                     supabaseClient.removeChannel(approvalSub);
                 }
             }
         )
-        .subscribe();
+        .subscribe((status) => {
+            console.log('Approval subscription status:', status);
+        });
 }
 
         // Update UI after connection
-        function updateUIAfterConnection() {
-            statusIndicator.classList.remove('offline');
-            userRoleDisplay.textContent = `${appState.userName} (${appState.isHost ? 'Host' : 'Guest'})`;
-            logoutBtn.style.display = 'flex';
-            
-            messageInput.disabled = false;
-            sendMessageBtn.disabled = false;
-            messageInput.focus();
-            
-            if (appState.isHost) {
-                showRequestsBtn.style.display = 'flex';
-            }
-        }
+function updateUIAfterConnection() {
+    statusIndicator.classList.remove('offline');
+    
+    if (appState.isHost) {
+        userRoleDisplay.textContent = `${appState.userName} (Host)`;
+        statusIndicator.style.backgroundColor = 'var(--success-green)';
+        
+        // Enable chat immediately for host
+        messageInput.disabled = false;
+        sendMessageBtn.disabled = false;
+        showRequestsBtn.style.display = 'flex';
+    } else {
+        // Guest - show waiting status
+        userRoleDisplay.textContent = `${appState.userName} (Waiting for approval)`;
+        statusIndicator.style.backgroundColor = 'var(--warning-yellow)';
+        
+        // Disable chat until approved
+        messageInput.disabled = true;
+        sendMessageBtn.disabled = true;
+        showRequestsBtn.style.display = 'none';
+    }
+    
+    logoutBtn.style.display = 'flex';
+    messageInput.focus();
+}
 
         // Save session to localStorage
         function saveSessionToLocalStorage() {
@@ -1488,19 +1519,39 @@ function setupGuestApprovalSubscription(sessionId) {
 
         // Reconnect to saved session
         async function reconnectSession(sessionData) {
-            appState.isHost = sessionData.isHost;
-            appState.userName = sessionData.userName;
-            appState.userId = sessionData.userId;
-            appState.sessionId = sessionData.sessionId;
-            appState.currentSessionId = sessionData.currentSessionId;
-            appState.connectionTime = new Date(sessionData.connectionTime);
-            appState.isConnected = true;
+    appState.isHost = sessionData.isHost;
+    appState.userName = sessionData.userName;
+    appState.userId = sessionData.userId;
+    appState.sessionId = sessionData.sessionId;
+    appState.currentSessionId = sessionData.currentSessionId;
+    appState.connectionTime = new Date(sessionData.connectionTime);
+    appState.isConnected = true;
+    
+    // Check if guest is approved
+    if (!appState.isHost) {
+        try {
+            const { data: session } = await supabaseClient
+                .from('sessions')
+                .select('approved_guests')
+                .eq('session_id', appState.currentSessionId)
+                .single();
             
-            updateUIAfterConnection();
-            setupRealtimeSubscriptions();
-            loadChatHistory();
-            loadSessions();
+            if (session?.approved_guests) {
+                const guestApproval = session.approved_guests.find(g => g.guest_id === appState.userId);
+                if (guestApproval) {
+                    appState.approvedGuest = true;
+                }
+            }
+        } catch (error) {
+            console.error("Error checking guest approval:", error);
         }
+    }
+    
+    updateUIAfterConnection();
+    setupRealtimeSubscriptions();
+    await loadChatHistory();
+    loadSessions();
+}
 
         // Handle logout
         async function handleLogout() {
@@ -1553,30 +1604,60 @@ function setupGuestApprovalSubscription(sessionId) {
 
         // Load chat history
         async function loadChatHistory() {
-            try {
-                const { data: messages, error } = await supabaseClient
-                    .from('messages')
-                    .select('*')
-                    .eq('session_id', appState.currentSessionId)
-                    .order('created_at', { ascending: true });
+    try {
+        const { data: messages, error } = await supabaseClient
+            .from('messages')
+            .select('*')
+            .eq('session_id', appState.currentSessionId)
+            .order('created_at', { ascending: true });
+        
+        if (error) throw error;
+        
+        chatMessages.innerHTML = "";
+        appState.messages = messages || [];
+        
+        // Filter messages for guests based on approval status
+        if (!appState.isHost && !appState.viewingHistoricalSession) {
+            // Only show messages from after guest was approved
+            const sessionResponse = await supabaseClient
+                .from('sessions')
+                .select('approved_guests, created_at')
+                .eq('session_id', appState.currentSessionId)
+                .single();
+            
+            if (sessionResponse.data) {
+                const session = sessionResponse.data;
+                const guestApproval = session.approved_guests?.find(g => g.guest_id === appState.userId);
                 
-                if (error) throw error;
-                
-                chatMessages.innerHTML = "";
-                appState.messages = messages || [];
-                
-                if (messages.length === 0) {
-                    displaySystemMessage("Chat history loaded. No messages yet.");
+                if (guestApproval) {
+                    // Only show messages from after approval time
+                    const approvalTime = new Date(guestApproval.approved_at || session.created_at);
+                    appState.messages = appState.messages.filter(msg => 
+                        new Date(msg.created_at) >= approvalTime
+                    );
                 } else {
-                    messages.forEach(msg => displayMessage(msg));
+                    // Guest not approved yet, show no messages
+                    appState.messages = [];
                 }
-                
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-            } catch (error) {
-                console.error("Error loading chat history:", error);
-                displaySystemMessage("Error loading chat history.");
             }
         }
+        
+        if (appState.messages.length === 0) {
+            if (appState.isHost || appState.viewingHistoricalSession) {
+                displaySystemMessage("Chat history loaded. No messages yet.");
+            } else {
+                displaySystemMessage("Waiting for host approval to see messages...");
+            }
+        } else {
+            appState.messages.forEach(msg => displayMessage(msg));
+        }
+        
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    } catch (error) {
+        console.error("Error loading chat history:", error);
+        displaySystemMessage("Error loading chat history.");
+    }
+}
 
         // Display a message
         function displayMessage(msg) {
@@ -1703,56 +1784,80 @@ function setupGuestApprovalSubscription(sessionId) {
 
         // Send message
         async function sendMessage() {
-            const messageText = messageInput.value.trim();
-            const images = appState.currentImages;
+    const messageText = messageInput.value.trim();
+    const images = appState.currentImages;
+    
+    if (!messageText && images.length === 0) return;
+    
+    // Check if user is allowed to send messages
+    if (!appState.isHost && !appState.approvedGuest) {
+        alert("You need to be approved by the host to send messages.");
+        return;
+    }
+    
+    try {
+        // Handle images first
+        for (const image of images) {
+            const { data: imageMessage, error: imageError } = await supabaseClient
+                .from('messages')
+                .insert([{
+                    session_id: appState.currentSessionId,
+                    sender_id: appState.userId,
+                    sender_name: appState.userName,
+                    image_url: image,
+                    created_at: new Date().toISOString(),
+                    reply_to: appState.currentReplyTo
+                }])
+                .select()
+                .single();
             
-            if (!messageText && images.length === 0) return;
+            if (imageError) throw imageError;
             
-            try {
-                // Handle images first
-                for (const image of images) {
-                    await supabaseClient
-                        .from('messages')
-                        .insert([{
-                            session_id: appState.currentSessionId,
-                            sender_id: appState.userId,
-                            sender_name: appState.userName,
-                            image_url: image,
-                            created_at: new Date().toISOString(),
-                            reply_to: appState.currentReplyTo
-                        }]);
-                }
-                
-                // Handle text message
-                if (messageText) {
-                    await supabaseClient
-                        .from('messages')
-                        .insert([{
-                            session_id: appState.currentSessionId,
-                            sender_id: appState.userId,
-                            sender_name: appState.userName,
-                            message: messageText,
-                            created_at: new Date().toISOString(),
-                            reply_to: appState.currentReplyTo
-                        }]);
-                }
-                
-                // Clear input
-                messageInput.value = "";
-                appState.currentImages = [];
-                imagePreviewContainer.innerHTML = "";
-                cancelReply();
-                
-                // Clear typing indicator
-                if (appState.typingTimeout) {
-                    clearTimeout(appState.typingTimeout);
-                    appState.typingTimeout = null;
-                }
-            } catch (error) {
-                console.error("Error sending message:", error);
-                displaySystemMessage("Error sending message.");
-            }
+            // Display the image message immediately
+            displayMessage(imageMessage);
         }
+        
+        // Handle text message
+        if (messageText) {
+            const { data: textMessage, error: textError } = await supabaseClient
+                .from('messages')
+                .insert([{
+                    session_id: appState.currentSessionId,
+                    sender_id: appState.userId,
+                    sender_name: appState.userName,
+                    message: messageText,
+                    created_at: new Date().toISOString(),
+                    reply_to: appState.currentReplyTo
+                }])
+                .select()
+                .single();
+            
+            if (textError) throw textError;
+            
+            // Display the text message immediately
+            displayMessage(textMessage);
+        }
+        
+        // Clear input
+        messageInput.value = "";
+        appState.currentImages = [];
+        imagePreviewContainer.innerHTML = "";
+        cancelReply();
+        
+        // Clear typing indicator
+        if (appState.typingTimeout) {
+            clearTimeout(appState.typingTimeout);
+            appState.typingTimeout = null;
+        }
+        
+        // Scroll to bottom
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+    } catch (error) {
+        console.error("Error sending message:", error);
+        displaySystemMessage("Error sending message. Please try again.");
+    }
+}
 
         // Reply to a message
         function replyToMessage(messageId, senderName) {
@@ -1985,39 +2090,45 @@ function setupGuestApprovalSubscription(sessionId) {
 
         // Review historical session
         async function reviewSession(sessionId) {
-            appState.viewingHistoricalSession = true;
-            appState.currentSessionId = sessionId;
-            
-            // Clear realtime subscriptions for historical view
-            appState.realtimeSubscriptions.forEach(sub => {
-                supabaseClient.removeChannel(sub);
-            });
-            appState.realtimeSubscriptions = [];
-            
-            // Update UI
-            chatTitle.textContent = `Historical Chat - ${new Date().toLocaleDateString()}`;
-            chatTitle.className = "chat-title historical";
-            messageInput.disabled = true;
-            sendMessageBtn.disabled = true;
-            
-            // Load historical messages
-            await loadChatHistory();
-            
-            // Add return button to chat
-            const returnBtn = document.createElement('button');
-            returnBtn.className = 'btn btn-success';
-            returnBtn.innerHTML = '<i class="fas fa-arrow-left"></i> Return to Active Chat';
-            returnBtn.style.margin = '10px auto';
-            returnBtn.style.display = 'block';
-            returnBtn.onclick = returnToActiveChat;
-            
-            const existingReturnBtn = document.getElementById('returnToActiveBtn');
-            if (existingReturnBtn) {
-                existingReturnBtn.remove();
-            }
-            returnBtn.id = 'returnToActiveBtn';
-            chatMessages.insertBefore(returnBtn, chatMessages.firstChild);
-        }
+    // Only host can review historical chats
+    if (!appState.isHost) {
+        alert("Only host can review historical chats.");
+        return;
+    }
+    
+    appState.viewingHistoricalSession = true;
+    appState.currentSessionId = sessionId;
+    
+    // Clear realtime subscriptions for historical view
+    appState.realtimeSubscriptions.forEach(sub => {
+        supabaseClient.removeChannel(sub);
+    });
+    appState.realtimeSubscriptions = [];
+    
+    // Update UI
+    chatTitle.textContent = `Historical Chat - ${new Date().toLocaleDateString()}`;
+    chatTitle.className = "chat-title historical";
+    messageInput.disabled = true;
+    sendMessageBtn.disabled = true;
+    
+    // Load historical messages
+    await loadChatHistory();
+    
+    // Add return button to chat
+    const returnBtn = document.createElement('button');
+    returnBtn.className = 'btn btn-success';
+    returnBtn.innerHTML = '<i class="fas fa-arrow-left"></i> Return to Active Chat';
+    returnBtn.style.margin = '10px auto';
+    returnBtn.style.display = 'block';
+    returnBtn.onclick = returnToActiveChat;
+    
+    const existingReturnBtn = document.getElementById('returnToActiveBtn');
+    if (existingReturnBtn) {
+        existingReturnBtn.remove();
+    }
+    returnBtn.id = 'returnToActiveBtn';
+    chatMessages.insertBefore(returnBtn, chatMessages.firstChild);
+}
 
         // Return to active chat
         function returnToActiveChat() {
