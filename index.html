@@ -695,6 +695,24 @@
             cursor: pointer;
             margin-left: 10px;
         }
+        #debugInfo {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: #4CAF50;
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    z-index: 9999;
+    max-width: 300px;
+    font-size: 12px;
+    display: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+#debugInfo.error {
+    background: #f44336;
+}
     </style>
 </head>
 <body>
@@ -922,6 +940,42 @@
         const modalImage = document.getElementById('modalImage');
         const imageModalClose = document.querySelector('.image-modal-close');
 
+
+// Add this function to show debug info in the UI
+function showDebugInfo(message, isError = false) {
+    console.log(message);
+    
+    // Create or update debug div
+    let debugDiv = document.getElementById('debugInfo');
+    if (!debugDiv) {
+        debugDiv = document.createElement('div');
+        debugDiv.id = 'debugInfo';
+        debugDiv.style.cssText = `
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: ${isError ? '#f44336' : '#4CAF50'};
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 9999;
+            max-width: 300px;
+            font-size: 12px;
+            display: none;
+        `;
+        document.body.appendChild(debugDiv);
+    }
+    
+    debugDiv.textContent = message;
+    debugDiv.style.background = isError ? '#f44336' : '#4CAF50';
+    debugDiv.style.display = 'block';
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+        debugDiv.style.display = 'none';
+    }, 5000);
+}
+
         // Initialize App
         async function initApp() {
             console.log('🔧 Initializing app...');
@@ -1013,192 +1067,311 @@
                 : 'Guest password: LovingStrangers';
         }
 
-        // Handle Connection
-        async function handleConnect() {
-            console.log('🔌 Handling connection...');
+// Handle Connection
+async function handleConnect() {
+    console.log('🔌 Starting connection process...');
+    
+    // Get elements
+    const userSelect = document.getElementById('userSelect');
+    const passwordInput = document.getElementById('passwordInput');
+    const connectBtn = document.getElementById('connectBtn');
+    const passwordError = document.getElementById('passwordError');
+    
+    if (!userSelect || !passwordInput || !connectBtn) {
+        console.error('❌ Missing form elements');
+        showDebugInfo('Missing form elements', true);
+        return;
+    }
+    
+    const selectedRole = userSelect.value;
+    const password = passwordInput.value;
+    
+    console.log(`📝 Role: ${selectedRole}, Password length: ${password.length}`);
+    
+    // Reset error
+    if (passwordError) {
+        passwordError.style.display = 'none';
+    }
+    
+    // Show loading state
+    const originalBtnHTML = connectBtn.innerHTML;
+    connectBtn.disabled = true;
+    connectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
+    
+    // Validate password
+    let isValid = false;
+    let expectedPassword = '';
+    
+    if (selectedRole === 'host') {
+        expectedPassword = 'Mira4994Mira';
+        isValid = password === expectedPassword;
+        appState.isHost = true;
+        appState.userName = "Host";
+        console.log(`🔐 Host password check: ${password === expectedPassword ? '✓' : '✗'}`);
+    } else {
+        expectedPassword = 'LovingStrangers';
+        isValid = password === expectedPassword;
+        appState.isHost = false;
+        appState.userName = "Guest";
+        console.log(`🔐 Guest password check: ${password === expectedPassword ? '✓' : '✗'}`);
+    }
+    
+    if (!isValid) {
+        console.log(`❌ Password incorrect. Expected: "${expectedPassword}", Got: "${password}"`);
+        
+        if (passwordError) {
+            passwordError.style.display = 'block';
+        }
+        
+        passwordInput.focus();
+        passwordInput.select();
+        
+        // Restore button
+        connectBtn.disabled = false;
+        connectBtn.innerHTML = originalBtnHTML;
+        
+        showDebugInfo(`Password incorrect for ${selectedRole}`, true);
+        return;
+    }
+    
+    console.log('✅ Password validated successfully');
+    
+    // Generate IDs
+    appState.userId = generateUserId();
+    appState.currentSessionId = generateSessionId();
+    appState.connectionTime = new Date();
+    
+    console.log(`📋 Generated IDs - User: ${appState.userId.substring(0, 15)}..., Session: ${appState.currentSessionId}`);
+    
+    // Connect to database
+    try {
+        console.log('🔄 Attempting to connect to Supabase...');
+        const connected = await connectToSupabase();
+        
+        if (connected) {
+            console.log('✅ Supabase connection successful');
             
-            connectBtn.disabled = true;
-            connectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
+            appState.isConnected = true;
             
-            const selectedRole = userSelect.value;
-            const password = passwordInput.value;
-            
-            passwordError.style.display = 'none';
-            
-            // Validate password
-            let isValid = false;
-            if (selectedRole === 'host') {
-                isValid = password === 'Mira4994Mira';
-                appState.isHost = true;
-                appState.userName = "Host";
-            } else {
-                isValid = password === 'LovingStrangers';
-                appState.isHost = false;
-                appState.userName = "Guest";
-            }
-            
-            if (!isValid) {
-                passwordError.style.display = 'block';
-                passwordInput.focus();
-                connectBtn.disabled = false;
-                connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
-                return;
-            }
-            
-            // Generate IDs
-            appState.userId = generateUserId();
-            appState.currentSessionId = generateSessionId();
-            appState.connectionTime = new Date();
-            
-            console.log('📝 Generated IDs:', {
+            // Save session to localStorage
+            const sessionData = {
+                isHost: appState.isHost,
+                userName: appState.userName,
                 userId: appState.userId,
                 sessionId: appState.currentSessionId,
-                isHost: appState.isHost
-            });
+                connectionTime: appState.connectionTime
+            };
             
-            // Connect to database
-            if (await connectToSupabase()) {
-                appState.isConnected = true;
-                
-                // Save session
-                localStorage.setItem('writeToMe_session', JSON.stringify({
-                    isHost: appState.isHost,
-                    userName: appState.userName,
-                    userId: appState.userId,
-                    sessionId: appState.currentSessionId,
-                    connectionTime: appState.connectionTime
-                }));
-                
-                connectionModal.style.display = 'none';
-                updateUIAfterConnection();
-                
-                // Save IP
+            localStorage.setItem('writeToMe_session', JSON.stringify(sessionData));
+            console.log('💾 Session saved to localStorage');
+            
+            // Hide connection modal
+            connectionModal.style.display = 'none';
+            
+            // Update UI
+            updateUIAfterConnection();
+            
+            // Save IP address
+            try {
                 const userIP = await getRealIP();
+                console.log(`🌐 Detected IP: ${userIP}`);
                 await saveUserIP(userIP);
-                
-                // Setup real-time
-                setupRealtimeSubscriptions();
-                
-                // Load sessions
-                loadSessions();
-                
-                console.log('✅ Connection successful!');
-            } else {
-                alert("Failed to connect. Please try again.");
+            } catch (ipError) {
+                console.warn('⚠️ Could not save IP:', ipError);
             }
             
-            connectBtn.disabled = false;
-            connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+            // Send system message
+            await saveMessageToDB('System', `${appState.userName} has connected.`);
+            
+            // Setup real-time subscriptions
+            setupRealtimeSubscriptions();
+            
+            // If host, load pending guests
+            if (appState.isHost) {
+                console.log('👑 Host: Loading pending guests...');
+                loadPendingGuests();
+            }
+            
+            // Load chat history
+            await loadChatHistory();
+            
+            showDebugInfo(`Connected as ${appState.userName}`, false);
+            console.log('🎉 Connection process completed successfully!');
+            
+        } else {
+            throw new Error('Failed to connect to Supabase');
         }
+        
+    } catch (error) {
+        console.error('❌ Connection failed:', error);
+        
+        // Show error to user
+        alert(`Connection failed: ${error.message}\n\nCheck console for details.`);
+        
+        // Reset button
+        connectBtn.disabled = false;
+        connectBtn.innerHTML = originalBtnHTML;
+        
+        showDebugInfo(`Connection failed: ${error.message}`, true);
+        
+        // Reset app state
+        appState.isHost = false;
+        appState.isConnected = false;
+        appState.userName = '';
+        appState.userId = null;
+        appState.currentSessionId = null;
+        
+        return;
+    }
+    
+    // Restore button
+    connectBtn.disabled = false;
+    connectBtn.innerHTML = originalBtnHTML;
+    console.log('🔧 Connection process finished');
+}
 
-        // Connect to Supabase with Guest Approval
-        async function connectToSupabase() {
-            try {
-                console.log('🔗 Connecting to Supabase...');
+// Connect to Supabase with Guest Approval
+async function connectToSupabase() {
+    console.log('🔗 Starting Supabase connection...');
+    
+    try {
+        if (appState.isHost) {
+            console.log('👑 User is HOST - Creating session...');
+            
+            // Host creates a new session
+            const sessionData = {
+                session_id: appState.currentSessionId,
+                host_id: appState.userId,
+                host_name: appState.userName,
+                is_active: true,
+                created_at: new Date().toISOString(),
+                requires_approval: true,
+                pending_guests: [],
+                approved_guests: [],
+                active_guests: []
+            };
+            
+            console.log('📦 Session data to insert:', sessionData);
+            
+            const { data, error } = await supabase
+                .from('sessions')
+                .insert([sessionData])
+                .select()
+                .single();
+            
+            if (error) {
+                console.error('❌ Error creating session:', error);
                 
-                if (appState.isHost) {
-                    // Host creates session
-                    console.log('👑 Host creating session...');
+                // If session already exists, try to use it
+                if (error.code === '23505') { // Unique violation
+                    console.log('⚠️ Session exists, checking if we can use it...');
                     
-                    const sessionData = {
-                        session_id: appState.currentSessionId,
-                        host_id: appState.userId,
-                        host_name: appState.userName,
-                        is_active: true,
-                        created_at: new Date().toISOString(),
-                        requires_approval: true,
-                        pending_guests: [],
-                        approved_guests: [],
-                        active_guests: []
-                    };
-                    
-                    console.log('📦 Session data:', sessionData);
-                    
-                    const { data, error } = await supabase
-                        .from('sessions')
-                        .insert([sessionData])
-                        .select()
-                        .single();
-                    
-                    if (error) {
-                        console.error('❌ Error creating session:', error);
-                        throw error;
-                    }
-                    
-                    console.log('✅ Session created:', data);
-                    return true;
-                    
-                } else {
-                    // Guest requests to join
-                    console.log('👤 Guest requesting to join...');
-                    
-                    // Find active sessions
-                    const { data: sessions, error } = await supabase
+                    const { data: existingSession, error: fetchError } = await supabase
                         .from('sessions')
                         .select('*')
-                        .eq('is_active', true)
-                        .order('created_at', { ascending: false })
-                        .limit(5);
+                        .eq('session_id', appState.currentSessionId)
+                        .single();
                     
-                    if (error) {
-                        console.error('❌ Error finding sessions:', error);
-                        throw error;
+                    if (fetchError) {
+                        console.error('❌ Error fetching existing session:', fetchError);
+                        throw fetchError;
                     }
                     
-                    console.log('📋 Found sessions:', sessions);
-                    
-                    if (!sessions || sessions.length === 0) {
-                        alert("No active sessions found. Please ask a host to create a session.");
-                        return false;
-                    }
-                    
-                    // For now, join the first active session
-                    // In a real app, you'd let the guest choose which session to join
-                    const session = sessions[0];
-                    appState.currentSessionId = session.session_id;
-                    
-                    // If session doesn't require approval, join directly
-                    if (!session.requires_approval) {
-                        console.log('✅ No approval required, joining directly...');
-                        await addGuestToSession();
-                        return true;
-                    }
-                    
-                    // Otherwise, add to pending guests
-                    console.log('⏳ Session requires approval, adding to pending...');
-                    
-                    const pending = session.pending_guests || [];
-                    const isAlreadyPending = pending.find(g => g.id === appState.userId);
-                    
-                    if (!isAlreadyPending) {
-                        pending.push({
-                            id: appState.userId,
-                            name: appState.userName,
-                            timestamp: new Date().toISOString()
-                        });
-                        
-                        const { error: updateError } = await supabase
-                            .from('sessions')
-                            .update({ pending_guests: pending })
-                            .eq('session_id', appState.currentSessionId);
-                        
-                        if (updateError) {
-                            console.error('❌ Error adding to pending:', updateError);
-                            throw updateError;
-                        }
-                    }
-                    
-                    // Show waiting screen
-                    showWaitingScreen();
-                    startApprovalPolling();
-                    
-                    return false; // Not fully connected yet
+                    console.log('✅ Using existing session:', existingSession);
+                    return true;
                 }
-            } catch (error) {
-                console.error('❌ Connection error:', error);
+                
+                throw error;
+            }
+            
+            console.log('✅ Session created successfully:', data);
+            return true;
+            
+        } else {
+            console.log('👤 User is GUEST - Finding session to join...');
+            
+            // Guest tries to find an active session
+            const { data: sessions, error: fetchError } = await supabase
+                .from('sessions')
+                .select('*')
+                .eq('is_active', true)
+                .order('created_at', { ascending: false })
+                .limit(5);
+            
+            if (fetchError) {
+                console.error('❌ Error fetching sessions:', fetchError);
+                throw fetchError;
+            }
+            
+            console.log(`📊 Found ${sessions?.length || 0} active sessions`);
+            
+            if (!sessions || sessions.length === 0) {
+                alert("❌ No active sessions found. Please ask a host to create a session first.");
                 return false;
             }
+            
+            // For simplicity, use the most recent session
+            const session = sessions[0];
+            console.log('🎯 Selected session:', session.session_id);
+            appState.currentSessionId = session.session_id;
+            
+            // Check if guest is already approved
+            const approvedGuests = session.approved_guests || [];
+            if (approvedGuests.includes(appState.userId)) {
+                console.log('✅ Guest already approved, joining directly...');
+                await addGuestToSession();
+                return true;
+            }
+            
+            // Check if session requires approval
+            if (session.requires_approval) {
+                console.log('⏳ Session requires approval, adding to pending...');
+                
+                // Add to pending guests
+                const pending = session.pending_guests || [];
+                const isAlreadyPending = pending.find(g => g.id === appState.userId);
+                
+                if (!isAlreadyPending) {
+                    const guestInfo = {
+                        id: appState.userId,
+                        name: appState.userName,
+                        timestamp: new Date().toISOString()
+                    };
+                    
+                    pending.push(guestInfo);
+                    
+                    const { error: updateError } = await supabase
+                        .from('sessions')
+                        .update({ pending_guests: pending })
+                        .eq('session_id', appState.currentSessionId);
+                    
+                    if (updateError) {
+                        console.error('❌ Error adding to pending:', updateError);
+                        throw updateError;
+                    }
+                    
+                    console.log('✅ Added to pending guests');
+                }
+                
+                // Show waiting screen
+                showWaitingScreen();
+                startApprovalPolling();
+                
+                return false; // Not fully connected yet
+                
+            } else {
+                // No approval needed, join directly
+                console.log('✅ No approval required, joining directly...');
+                await addGuestToSession();
+                return true;
+            }
         }
+        
+    } catch (error) {
+        console.error('❌ Supabase connection error:', error);
+        throw error;
+    }
+}
 
         async function addGuestToSession() {
             const active = await getActiveGuests();
@@ -1260,109 +1433,211 @@
         }
 
         function showWaitingScreen() {
-            connectionModal.style.display = 'none';
-            
-            const waitingScreen = document.createElement('div');
-            waitingScreen.id = 'waitingScreen';
-            waitingScreen.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(0, 0, 0, 0.95);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 1001;
-                text-align: center;
-                padding: 20px;
-            `;
-            
-            waitingScreen.innerHTML = `
-                <div style="background-color: var(--card-bg); padding: 40px; border-radius: 12px; border: 2px solid var(--accent-orange); max-width: 500px;">
-                    <h2 style="color: var(--accent-orange); margin-bottom: 20px;">
-                        <i class="fas fa-user-clock"></i> Waiting for Host Approval
-                    </h2>
-                    <p style="margin-bottom: 15px;">Your request has been sent to the host.</p>
-                    <p style="margin-bottom: 25px;">You will be connected once approved.</p>
-                    <div id="waitingStatus" style="margin-bottom: 25px;">
-                        <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
-                            <div class="status-indicator offline"></div>
-                            <span>Waiting for approval...</span>
-                        </div>
-                    </div>
-                    <button id="cancelWaitBtn" class="btn btn-danger" style="width: 100%;">
-                        <i class="fas fa-times"></i> Cancel
-                    </button>
+    console.log('⏳ Showing waiting screen for guest...');
+    
+    connectionModal.style.display = 'none';
+    
+    // Remove existing waiting screen if any
+    const existingScreen = document.getElementById('waitingScreen');
+    if (existingScreen) {
+        document.body.removeChild(existingScreen);
+    }
+    
+    const waitingScreen = document.createElement('div');
+    waitingScreen.id = 'waitingScreen';
+    waitingScreen.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.95);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1001;
+        text-align: center;
+        padding: 20px;
+    `;
+    
+    waitingScreen.innerHTML = `
+        <div style="background-color: var(--card-bg); padding: 40px; border-radius: 12px; border: 2px solid var(--accent-orange); max-width: 500px; width: 100%;">
+            <h2 style="color: var(--accent-orange); margin-bottom: 20px;">
+                <i class="fas fa-user-clock"></i> Waiting for Host Approval
+            </h2>
+            <p style="margin-bottom: 15px; color: var(--text-primary);">
+                Your request has been sent to the host (Session ID: ${appState.currentSessionId.substring(0, 10)}...)
+            </p>
+            <p style="margin-bottom: 25px; color: var(--text-secondary);">
+                You will be connected automatically once approved.
+            </p>
+            <div id="waitingStatus" style="margin-bottom: 25px;">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                    <div class="status-indicator offline" style="animation: blink 1s infinite;"></div>
+                    <span style="color: var(--text-primary);">Waiting for approval...</span>
                 </div>
-            `;
-            
-            document.body.appendChild(waitingScreen);
-            
-            document.getElementById('cancelWaitBtn').addEventListener('click', () => {
-                document.body.removeChild(waitingScreen);
-                connectionModal.style.display = 'flex';
-            });
-        }
-
-        function startApprovalPolling() {
-            const checkInterval = setInterval(async () => {
-                try {
-                    const approved = await getApprovedGuests();
-                    
-                    if (approved.includes(appState.userId)) {
-                        clearInterval(checkInterval);
-                        
-                        // Remove waiting screen
-                        const waitingScreen = document.getElementById('waitingScreen');
-                        if (waitingScreen) {
-                            document.body.removeChild(waitingScreen);
-                        }
-                        
-                        // Complete connection
-                        await addGuestToSession();
-                        appState.isConnected = true;
-                        
-                        // Save session
-                        localStorage.setItem('writeToMe_session', JSON.stringify({
-                            isHost: appState.isHost,
-                            userName: appState.userName,
-                            userId: appState.userId,
-                            sessionId: appState.currentSessionId,
-                            connectionTime: new Date()
-                        }));
-                        
-                        updateUIAfterConnection();
-                        loadChatHistory();
-                        setupRealtimeSubscriptions();
-                        
-                        // Add welcome message
-                        await saveMessageToDB('System', `${appState.userName} has joined the chat.`);
-                    }
-                } catch (error) {
-                    console.error('Polling error:', error);
-                }
-            }, 2000);
-        }
-
-        async function saveUserIP(ip) {
-            try {
-                if (appState.isHost) {
-                    await supabase
-                        .from('sessions')
-                        .update({ host_ip: ip })
-                        .eq('session_id', appState.currentSessionId);
-                } else {
-                    await supabase
-                        .from('sessions')
-                        .update({ guest_ip: ip })
-                        .eq('session_id', appState.currentSessionId);
-                }
-            } catch (error) {
-                console.error('Error saving IP:', error);
+                <div id="waitingTimer" style="margin-top: 10px; font-size: 12px; color: var(--text-secondary);">
+                    Waiting time: <span id="timerSeconds">0</span>s
+                </div>
+            </div>
+            <button id="cancelWaitBtn" class="btn btn-danger" style="width: 100%;">
+                <i class="fas fa-times"></i> Cancel & Return
+            </button>
+        </div>
+        <style>
+            @keyframes blink {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.3; }
             }
+        </style>
+    `;
+    
+    document.body.appendChild(waitingScreen);
+    
+    // Start timer
+    let seconds = 0;
+    const timerElement = document.getElementById('timerSeconds');
+    const timerInterval = setInterval(() => {
+        seconds++;
+        if (timerElement) {
+            timerElement.textContent = seconds;
         }
+    }, 1000);
+    
+    // Cancel button handler
+    document.getElementById('cancelWaitBtn').addEventListener('click', () => {
+        clearInterval(timerInterval);
+        document.body.removeChild(waitingScreen);
+        connectionModal.style.display = 'flex';
+        showDebugInfo('Connection request cancelled', false);
+    });
+    
+    console.log('✅ Waiting screen displayed');
+}
+
+function startApprovalPolling() {
+    console.log('🔄 Starting approval polling...');
+    
+    let pollCount = 0;
+    const maxPolls = 300; // 10 minutes (300 * 2 seconds)
+    
+    const checkInterval = setInterval(async () => {
+        pollCount++;
+        console.log(`🔄 Poll #${pollCount} for approval...`);
+        
+        try {
+            // Get approved guests list
+            const { data: session, error } = await supabase
+                .from('sessions')
+                .select('approved_guests, is_active')
+                .eq('session_id', appState.currentSessionId)
+                .single();
+            
+            if (error) {
+                console.error('❌ Polling error:', error);
+                return;
+            }
+            
+            if (!session.is_active) {
+                console.log('❌ Session is no longer active');
+                clearInterval(checkInterval);
+                alert('Session has ended by the host.');
+                location.reload();
+                return;
+            }
+            
+            const approvedGuests = session.approved_guests || [];
+            
+            if (approvedGuests.includes(appState.userId)) {
+                console.log('✅ Guest approved! Completing connection...');
+                clearInterval(checkInterval);
+                
+                // Remove waiting screen
+                const waitingScreen = document.getElementById('waitingScreen');
+                if (waitingScreen) {
+                    document.body.removeChild(waitingScreen);
+                }
+                
+                // Complete guest connection
+                await addGuestToSession();
+                appState.isConnected = true;
+                
+                // Save session to localStorage
+                localStorage.setItem('writeToMe_session', JSON.stringify({
+                    isHost: appState.isHost,
+                    userName: appState.userName,
+                    userId: appState.userId,
+                    sessionId: appState.currentSessionId,
+                    connectionTime: new Date()
+                }));
+                
+                // Update UI
+                updateUIAfterConnection();
+                
+                // Load chat and setup real-time
+                await loadChatHistory();
+                setupRealtimeSubscriptions();
+                
+                // Add welcome message
+                await saveMessageToDB('System', `${appState.userName} has joined the chat.`);
+                
+                showDebugInfo('Approved! Connected to chat.', false);
+                
+            } else if (pollCount >= maxPolls) {
+                console.log('❌ Polling timeout - not approved');
+                clearInterval(checkInterval);
+                
+                const waitingScreen = document.getElementById('waitingScreen');
+                if (waitingScreen) {
+                    waitingScreen.innerHTML = `
+                        <div style="background-color: var(--card-bg); padding: 40px; border-radius: 12px; border: 2px solid var(--danger-red); max-width: 500px;">
+                            <h2 style="color: var(--danger-red); margin-bottom: 20px;">
+                                <i class="fas fa-exclamation-triangle"></i> Approval Timeout
+                            </h2>
+                            <p style="margin-bottom: 25px;">The host did not approve your request within 10 minutes.</p>
+                            <button id="timeoutReturnBtn" class="btn btn-secondary" style="width: 100%;">
+                                <i class="fas fa-arrow-left"></i> Return to Login
+                            </button>
+                        </div>
+                    `;
+                    
+                    document.getElementById('timeoutReturnBtn').addEventListener('click', () => {
+                        document.body.removeChild(waitingScreen);
+                        connectionModal.style.display = 'flex';
+                    });
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ Polling error:', error);
+        }
+    }, 2000); // Check every 2 seconds
+}
+
+// Add this function to save user IP
+async function saveUserIP(ip) {
+    try {
+        if (appState.isHost) {
+            const { error } = await supabase
+                .from('sessions')
+                .update({ host_ip: ip })
+                .eq('session_id', appState.currentSessionId);
+            
+            if (error) throw error;
+            console.log('✅ Host IP saved');
+        } else {
+            const { error } = await supabase
+                .from('sessions')
+                .update({ guest_ip: ip })
+                .eq('session_id', appState.currentSessionId);
+            
+            if (error) throw error;
+            console.log('✅ Guest IP saved');
+        }
+    } catch (error) {
+        console.error('❌ Error saving IP:', error);
+    }
+}
 
         function updateUIAfterConnection() {
             statusIndicator.classList.remove('offline');
