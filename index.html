@@ -940,7 +940,481 @@
         const modalImage = document.getElementById('modalImage');
         const imageModalClose = document.querySelector('.image-modal-close');
 
+// =========== CONNECTION FUNCTIONS ===========
 
+// 1. Replace the ENTIRE handleConnect() function:
+async function handleConnect() {
+    console.log('=== STARTING CONNECTION ===');
+    
+    const userSelect = document.getElementById('userSelect');
+    const passwordInput = document.getElementById('passwordInput');
+    const passwordError = document.getElementById('passwordError');
+    
+    // Get values
+    const selectedRole = userSelect.value;
+    const password = passwordInput.value;
+    
+    console.log('Role:', selectedRole);
+    console.log('Password entered:', password);
+    
+    // Hide any previous errors
+    passwordError.style.display = 'none';
+    
+    // Validate password
+    if (selectedRole === 'host') {
+        if (password !== 'Mira4994Mira') {
+            console.log('❌ Host password incorrect');
+            passwordError.style.display = 'block';
+            passwordInput.focus();
+            return;
+        }
+        appState.isHost = true;
+        appState.userName = "Host";
+    } else {
+        if (password !== 'LovingStrangers') {
+            console.log('❌ Guest password incorrect');
+            passwordError.style.display = 'block';
+            passwordInput.focus();
+            return;
+        }
+        appState.isHost = false;
+        appState.userName = "Guest";
+    }
+    
+    console.log('✅ Password validated');
+    
+    // Generate IDs
+    appState.userId = 'user_' + Date.now();
+    appState.currentSessionId = 'session_' + Date.now();
+    appState.connectionTime = new Date();
+    
+    console.log('User ID:', appState.userId);
+    console.log('Session ID:', appState.currentSessionId);
+    
+    // Show loading
+    const originalBtnText = connectBtn.innerHTML;
+    connectBtn.disabled = true;
+    connectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
+    
+    try {
+        // SIMPLE DIRECT CONNECTION - No approval needed
+        const success = await simpleConnectToSupabase();
+        
+        if (success) {
+            console.log('✅ Connection successful!');
+            
+            // Save to localStorage
+            localStorage.setItem('writeToMe_session', JSON.stringify({
+                isHost: appState.isHost,
+                userName: appState.userName,
+                userId: appState.userId,
+                sessionId: appState.currentSessionId,
+                connectionTime: appState.connectionTime
+            }));
+            
+            // Hide modal
+            connectionModal.style.display = 'none';
+            
+            // Update UI
+            updateUIAfterConnection();
+            
+            // Load chat
+            await loadChatHistory();
+            
+            // Setup real-time
+            setupRealtimeSubscriptions();
+            
+            // Send welcome message
+            await saveMessageToDB('System', `${appState.userName} has joined the chat.`);
+            
+            console.log('=== CONNECTION COMPLETE ===');
+            
+        } else {
+            throw new Error('Failed to connect to database');
+        }
+        
+    } catch (error) {
+        console.error('Connection error:', error);
+        alert('Connection failed: ' + error.message);
+    } finally {
+        // Restore button
+        connectBtn.disabled = false;
+        connectBtn.innerHTML = originalBtnText;
+    }
+}
+
+// 2. Add this NEW SIMPLE connection function:
+async function simpleConnectToSupabase() {
+    console.log('🔄 Simple connection to Supabase...');
+    
+    try {
+        // Test Supabase connection first
+        console.log('Testing Supabase connection...');
+        const { data: testData, error: testError } = await supabase
+            .from('sessions')
+            .select('count', { count: 'exact', head: true });
+        
+        if (testError) {
+            console.error('❌ Supabase test failed:', testError);
+            throw new Error('Cannot connect to database: ' + testError.message);
+        }
+        
+        console.log('✅ Supabase connection test passed');
+        
+        if (appState.isHost) {
+            console.log('👑 Creating host session...');
+            
+            // Create simple session data (only required fields from your table)
+            const sessionData = {
+                session_id: appState.currentSessionId,
+                host_id: appState.userId,
+                host_name: appState.userName,
+                is_active: true,
+                created_at: new Date().toISOString(),
+                requires_approval: false  // Simple mode - no approval needed
+            };
+            
+            console.log('Session data:', sessionData);
+            
+            const { data, error } = await supabase
+                .from('sessions')
+                .insert([sessionData])
+                .select()
+                .single();
+            
+            if (error) {
+                console.error('Error creating session:', error);
+                
+                // If session exists, try to update it
+                const { data: existing } = await supabase
+                    .from('sessions')
+                    .select('*')
+                    .eq('session_id', appState.currentSessionId)
+                    .single();
+                
+                if (existing) {
+                    console.log('Using existing session');
+                    return true;
+                }
+                
+                throw error;
+            }
+            
+            console.log('✅ Host session created');
+            return true;
+            
+        } else {
+            console.log('👤 Guest joining...');
+            
+            // Find any active session
+            const { data: sessions, error } = await supabase
+                .from('sessions')
+                .select('*')
+                .eq('is_active', true)
+                .order('created_at', { ascending: false })
+                .limit(1);
+            
+            if (error) {
+                console.error('Error finding sessions:', error);
+                throw error;
+            }
+            
+            if (!sessions || sessions.length === 0) {
+                // Create a session for guest (temporary)
+                console.log('No active session, creating one for guest...');
+                appState.isHost = true; // Temporarily become host
+                appState.userName = "Guest-Host";
+                
+                const sessionData = {
+                    session_id: appState.currentSessionId,
+                    host_id: appState.userId,
+                    host_name: appState.userName,
+                    is_active: true,
+                    created_at: new Date().toISOString(),
+                    requires_approval: false
+                };
+                
+                await supabase
+                    .from('sessions')
+                    .insert([sessionData])
+                    .select()
+                    .single();
+                
+                console.log('✅ Created session for guest');
+                return true;
+            }
+            
+            // Join existing session
+            const session = sessions[0];
+            appState.currentSessionId = session.session_id;
+            
+            console.log('Joining session:', session.session_id);
+            
+            // Update session with guest info
+            const { error: updateError } = await supabase
+                .from('sessions')
+                .update({
+                    guest_id: appState.userId,
+                    guest_name: appState.userName,
+                    guest_connected_at: new Date().toISOString()
+                })
+                .eq('session_id', session.session_id);
+            
+            if (updateError) {
+                console.error('Error updating session:', updateError);
+                throw updateError;
+            }
+            
+            console.log('✅ Guest joined session');
+            return true;
+        }
+        
+    } catch (error) {
+        console.error('❌ Simple connection failed:', error);
+        throw error;
+    }
+}
+
+// 3. Update updateUIAfterConnection() - SIMPLIFY:
+function updateUIAfterConnection() {
+    console.log('Updating UI after connection...');
+    
+    // Update status
+    statusIndicator.classList.remove('offline');
+    userRoleDisplay.textContent = `${appState.userName} (Connected)`;
+    logoutBtn.style.display = 'flex';
+    
+    // Enable chat
+    messageInput.disabled = false;
+    sendMessageBtn.disabled = false;
+    attachImageBtn.disabled = false;
+    messageInput.focus();
+    
+    // Hide pending guests section for now
+    pendingGuestsDiv.style.display = 'none';
+    
+    console.log('✅ UI updated');
+}
+
+// 4. Update reconnectToSession() - SIMPLIFY:
+async function reconnectToSession() {
+    console.log('Attempting reconnect...');
+    
+    try {
+        const { data: session, error } = await supabase
+            .from('sessions')
+            .select('*')
+            .eq('session_id', appState.currentSessionId)
+            .eq('is_active', true)
+            .single();
+        
+        if (error || !session) {
+            console.log('Session not found or inactive');
+            return false;
+        }
+        
+        console.log('Found session:', session.session_id);
+        return true;
+        
+    } catch (error) {
+        console.error('Reconnect error:', error);
+        return false;
+    }
+}
+
+// 5. Update initApp() - SIMPLIFY the saved session check:
+async function initApp() {
+    console.log('Initializing app...');
+    
+    // Show modal immediately (for testing)
+    connectionModal.style.display = 'flex';
+    
+    // Clear any saved sessions for testing
+    // localStorage.removeItem('writeToMe_session');
+    
+    const savedSession = localStorage.getItem('writeToMe_session');
+    if (savedSession) {
+        try {
+            const sessionData = JSON.parse(savedSession);
+            console.log('Found saved session:', sessionData);
+            
+            appState.isHost = sessionData.isHost;
+            appState.userName = sessionData.userName;
+            appState.userId = sessionData.userId;
+            appState.currentSessionId = sessionData.sessionId;
+            
+            if (await reconnectToSession()) {
+                console.log('Reconnect successful');
+                appState.isConnected = true;
+                connectionModal.style.display = 'none';
+                updateUIAfterConnection();
+                loadChatHistory();
+                setupRealtimeSubscriptions();
+            } else {
+                console.log('Reconnect failed');
+                localStorage.removeItem('writeToMe_session');
+            }
+        } catch (e) {
+            console.error('Error loading saved session:', e);
+            localStorage.removeItem('writeToMe_session');
+        }
+    }
+    
+    setupEventListeners();
+    console.log('App initialized');
+}
+
+// 6. Update setupEventListeners() - Add password hint:
+function setupEventListeners() {
+    console.log('Setting up event listeners...');
+    
+    // Password hints
+    const passwordHint = document.getElementById('passwordHint');
+    if (passwordHint) {
+        userSelect.addEventListener('change', function() {
+            if (this.value === 'host') {
+                passwordHint.textContent = 'Password: Mira4994Mira';
+            } else {
+                passwordHint.textContent = 'Password: LovingStrangers';
+            }
+            passwordHint.style.display = 'block';
+        });
+        
+        // Show initial hint
+        if (userSelect.value === 'host') {
+            passwordHint.textContent = 'Password: Mira4994Mira';
+        } else {
+            passwordHint.textContent = 'Password: LovingStrangers';
+        }
+        passwordHint.style.display = 'block';
+    }
+    
+    // Enter key in password field
+    passwordInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            console.log('Enter key pressed');
+            handleConnect();
+        }
+    });
+    
+    // Connect button
+    connectBtn.addEventListener('click', handleConnect);
+    
+    // Logout button
+    logoutBtn.addEventListener('click', handleLogout);
+    
+    // Chat
+    messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    sendMessageBtn.addEventListener('click', sendMessage);
+    
+    // Image upload
+    attachImageBtn.addEventListener('click', () => imageUpload.click());
+    imageUpload.addEventListener('change', handleImageUpload);
+    
+    console.log('Event listeners set up');
+}
+
+// 7. Add a TEST function to check database connection:
+async function testDatabaseConnection() {
+    console.log('=== DATABASE CONNECTION TEST ===');
+    
+    try {
+        // Test 1: Can we reach Supabase?
+        console.log('Test 1: Checking Supabase connection...');
+        const { data, error } = await supabase
+            .from('sessions')
+            .select('count', { count: 'exact', head: true });
+        
+        if (error) {
+            console.error('❌ Supabase connection FAILED:', error);
+            alert('Database connection failed: ' + error.message);
+            return false;
+        }
+        
+        console.log('✅ Supabase connection OK');
+        
+        // Test 2: Check sessions table
+        console.log('Test 2: Checking sessions table...');
+        const { data: sessions, error: sessionsError } = await supabase
+            .from('sessions')
+            .select('*')
+            .limit(1);
+        
+        if (sessionsError) {
+            console.error('❌ Sessions table error:', sessionsError);
+            alert('Sessions table error: ' + sessionsError.message);
+            return false;
+        }
+        
+        console.log('✅ Sessions table OK');
+        console.log('Sample session:', sessions[0]);
+        
+        // Test 3: Try to insert a test session
+        console.log('Test 3: Testing session creation...');
+        const testSessionId = 'test_' + Date.now();
+        const testData = {
+            session_id: testSessionId,
+            host_id: 'test_user',
+            host_name: 'Test',
+            is_active: true,
+            created_at: new Date().toISOString()
+        };
+        
+        const { error: insertError } = await supabase
+            .from('sessions')
+            .insert([testData]);
+        
+        if (insertError) {
+            console.error('❌ Session creation failed:', insertError);
+            console.log('This might be a permissions issue. Check RLS policies.');
+        } else {
+            console.log('✅ Session creation OK');
+            
+            // Clean up test session
+            await supabase
+                .from('sessions')
+                .delete()
+                .eq('session_id', testSessionId);
+        }
+        
+        console.log('=== ALL TESTS COMPLETE ===');
+        alert('Database connection tests passed! You can now try to connect.');
+        return true;
+        
+    } catch (error) {
+        console.error('❌ Test failed completely:', error);
+        alert('Test failed: ' + error.message);
+        return false;
+    }
+}
+
+// 8. Add a button to test database (temporary):
+function addTestButton() {
+    const testBtn = document.createElement('button');
+    testBtn.textContent = '🔧 Test Database';
+    testBtn.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 10px 15px;
+        background: #2196F3;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        z-index: 9999;
+        font-size: 12px;
+    `;
+    testBtn.onclick = testDatabaseConnection;
+    document.body.appendChild(testBtn);
+    
+    console.log('Test button added');
+}
 // Add this function to show debug info in the UI
 function showDebugInfo(message, isError = false) {
     console.log(message);
