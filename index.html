@@ -769,6 +769,8 @@
             font-size: 30px;
             cursor: pointer;
         }
+
+        
     </style>
 </head>
 <body>
@@ -1082,45 +1084,45 @@
 
         // Handle connection
         async function handleConnect() {
-            const selectedRole = userSelect.value;
-            const username = usernameInput.value.trim();
-            const password = passwordInput.value;
-            
-            if (!username) {
-                alert("Please enter a username");
-                return;
-            }
-            
-            // Validate passwords
-            let isValid = false;
-            if (selectedRole === 'host') {
-                isValid = password === 'Mira4994Mira';
-                appState.isHost = true;
-            } else {
-                isValid = password === 'LovingStrangers';
-                appState.isHost = false;
-            }
-            
-            if (!isValid) {
-                passwordError.classList.add('show');
-                return;
-            }
-            
-            passwordError.classList.remove('show');
-            appState.userName = username;
-            appState.userId = generateUserId();
-            
-            // Get user IP
-            const userIP = await getRealIP();
-            
-            if (appState.isHost) {
-                // Host creates a new session
-                await createHostSession(userIP);
-            } else {
-                // Guest requests to join
-                await requestToJoinSession(userIP);
-            }
-        }
+    const selectedRole = userSelect.value;
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value;
+    
+    if (!username) {
+        alert("Please enter a username");
+        return;
+    }
+    
+    // Validate passwords
+    let isValid = false;
+    if (selectedRole === 'host') {
+        isValid = password === 'Mira4994Mira';
+        appState.isHost = true;
+    } else {
+        isValid = password === 'LovingStrangers';
+        appState.isHost = false;
+    }
+    
+    if (!isValid) {
+        passwordError.classList.add('show');
+        return;
+    }
+    
+    passwordError.classList.remove('show');
+    appState.userName = username;
+    appState.userId = generateUserId();
+    
+    // Get user IP
+    const userIP = await getRealIP();
+    
+    if (appState.isHost) {
+        // Host creates a new session
+        await createHostSession(userIP);
+    } else {
+        // Guest requests to join
+        await requestToJoinSession(userIP);
+    }
+}
 
         // Generate user ID
         function generateUserId() {
@@ -1139,96 +1141,152 @@
             }
         }
 
-        // Create host session
-        async function createHostSession(userIP) {
-            try {
-                const sessionId = 'session_' + Date.now().toString(36);
-                const { data, error } = await supabaseClient
-                    .from('sessions')
-                    .insert([{
-                        session_id: sessionId,
-                        host_id: appState.userId,
-                        host_name: appState.userName,
-                        host_ip: userIP,
-                        is_active: true,
-                        created_at: new Date().toISOString(),
-                        requires_approval: true
-                    }])
-                    .select()
-                    .single();
-                
-                if (error) throw error;
-                
-                appState.sessionId = sessionId;
-                appState.currentSessionId = sessionId;
-                appState.isConnected = true;
-                appState.connectionTime = new Date();
-                
-                saveSessionToLocalStorage();
-                updateUIAfterConnection();
-                setupRealtimeSubscriptions();
-                loadChatHistory();
-                
-                connectionModal.classList.remove('show');
-                showRequestsBtn.style.display = 'flex';
-            } catch (error) {
-                console.error("Error creating session:", error);
-                alert("Failed to create session. Please try again.");
-            }
-        }
+// Update the createHostSession function to include pending guests array
+async function createHostSession(userIP) {
+    try {
+        const sessionId = 'session_' + Date.now().toString(36);
+        const { data, error } = await supabaseClient
+            .from('sessions')
+            .insert([{
+                session_id: sessionId,
+                host_id: appState.userId,
+                host_name: appState.userName,
+                host_ip: userIP,
+                is_active: true,
+                created_at: new Date().toISOString(),
+                requires_approval: true,
+                pending_guests: [],
+                approved_guests: []
+            }])
+            .select()
+            .single();
+        
+        if (error) throw error;
+        
+        appState.sessionId = sessionId;
+        appState.currentSessionId = sessionId;
+        appState.isConnected = true;
+        appState.connectionTime = new Date();
+        
+        saveSessionToLocalStorage();
+        updateUIAfterConnection();
+        setupRealtimeSubscriptions();
+        loadChatHistory();
+        
+        connectionModal.classList.remove('show');
+        showRequestsBtn.style.display = 'flex';
+        
+        displaySystemMessage("Host session created. Waiting for guest requests...");
+        
+    } catch (error) {
+        console.error("Error creating session:", error);
+        alert("Failed to create session. Please try again.");
+    }
+}
 
-        // Request to join session as guest
-        async function requestToJoinSession(userIP) {
-            try {
-                // Get active sessions
-                const { data: sessions, error } = await supabaseClient
-                    .from('sessions')
-                    .select('*')
-                    .eq('is_active', true)
-                    .order('created_at', { ascending: false });
-                
-                if (error) throw error;
-                
-                if (sessions.length === 0) {
-                    alert("No active sessions available. Please ask a host to create one.");
-                    return;
+// Add a notification system for guests when they're approved
+function showGuestApprovedNotification() {
+    const notification = document.createElement('div');
+    notification.className = 'notification success';
+    notification.innerHTML = `
+        <div class="notification-icon">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        <div class="notification-content">
+            <div class="notification-title">Approved!</div>
+            <div class="notification-message">Your join request has been approved. You can now participate in the chat.</div>
+        </div>
+        <button class="notification-close" onclick="this.parentElement.remove()">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    // Add to notification container
+    let container = document.querySelector('.notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'notification-container';
+        document.body.appendChild(container);
+    }
+    
+    container.appendChild(notification);
+    
+    // Auto-remove after 8 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.animation = 'slideOutRight 0.3s ease-out forwards';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
                 }
-                
-                // Show session selection (in real app, you'd have a UI for this)
-                // For now, join the first available session
-                const session = sessions[0];
-                
-                // Add guest to pending guests
-                const pendingGuest = {
-                    guest_id: appState.userId,
-                    guest_name: appState.userName,
-                    guest_ip: userIP,
-                    requested_at: new Date().toISOString()
-                };
-                
-                const { error: updateError } = await supabaseClient
-                    .from('sessions')
-                    .update({
-                        pending_guests: session.pending_guests ? 
-                            [...session.pending_guests, pendingGuest] : [pendingGuest]
-                    })
-                    .eq('session_id', session.session_id);
-                
-                if (updateError) throw updateError;
-                
-                // Store session info and wait for approval
-                appState.sessionId = session.sessionId;
-                appState.currentSessionId = session.session_id;
-                
-                alert("Join request sent to host. Waiting for approval...");
-                
-                // Listen for approval
-                setupGuestApprovalSubscription(session.session_id);
-            } catch (error) {
-                console.error("Error requesting to join:", error);
-                alert("Failed to join session. Please try again.");
-            }
+            }, 300);
         }
+    }, 8000);
+}
+
+// Update requestToJoinSession function
+async function requestToJoinSession(userIP) {
+    try {
+        // Get active sessions
+        const { data: sessions, error } = await supabaseClient
+            .from('sessions')
+            .select('*')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (sessions.length === 0) {
+            alert("No active sessions available. Please ask a host to create one.");
+            return;
+        }
+        
+        // For simplicity, join the first available session
+        const session = sessions[0];
+        
+        // Add guest to pending guests with more details
+        const pendingGuest = {
+            guest_id: appState.userId,
+            guest_name: appState.userName,
+            guest_ip: userIP,
+            requested_at: new Date().toISOString(),
+            status: 'pending'
+        };
+        
+        const { error: updateError } = await supabaseClient
+            .from('sessions')
+            .update({
+                pending_guests: session.pending_guests ? 
+                    [...session.pending_guests, pendingGuest] : [pendingGuest]
+            })
+            .eq('session_id', session.session_id);
+        
+        if (updateError) throw updateError;
+        
+        // Store session info
+        appState.sessionId = session.session_id;
+        appState.currentSessionId = session.session_id;
+        
+        // Show waiting message
+        displaySystemMessage("Join request sent to host. Waiting for approval...");
+        
+        // Show connection modal with waiting status
+        connectionModal.classList.remove('show');
+        
+        // Update UI to show waiting status
+        statusIndicator.classList.remove('offline');
+        statusIndicator.style.backgroundColor = 'var(--warning-yellow)';
+        userRoleDisplay.textContent = `${appState.userName} (Waiting for approval)`;
+        logoutBtn.style.display = 'flex';
+        
+        // Setup approval monitoring
+        setupGuestApprovalSubscription(session.session_id);
+        
+    } catch (error) {
+        console.error("Error requesting to join:", error);
+        alert("Failed to join session. Please try again.");
+    }
+}
 
         // Setup realtime subscriptions
         function setupRealtimeSubscriptions() {
@@ -1329,42 +1387,77 @@
             }
         }
 
-        // Setup guest approval subscription
-        function setupGuestApprovalSubscription(sessionId) {
-            const approvalSub = supabaseClient
-                .channel('approval-' + sessionId)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: 'UPDATE',
-                        schema: 'public',
-                        table: 'sessions',
-                        filter: `session_id=eq.${sessionId}`
-                    },
-                    async (payload) => {
-                        const session = payload.new;
-                        const approvedGuests = session.approved_guests || [];
-                        
-                        // Check if this guest is approved
-                        const isApproved = approvedGuests.some(g => g.guest_id === appState.userId);
-                        
-                        if (isApproved) {
-                            // Guest is approved, join the session
-                            appState.isConnected = true;
-                            appState.connectionTime = new Date();
-                            
-                            saveSessionToLocalStorage();
-                            updateUIAfterConnection();
-                            setupRealtimeSubscriptions();
-                            loadChatHistory();
-                            
-                            connectionModal.classList.remove('show');
-                            supabaseClient.removeChannel(approvalSub);
-                        }
+
+// Update setupGuestApprovalSubscription function
+function setupGuestApprovalSubscription(sessionId) {
+    const approvalSub = supabaseClient
+        .channel('approval-' + sessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'sessions',
+                filter: `session_id=eq.${sessionId}`
+            },
+            async (payload) => {
+                const session = payload.new;
+                const approvedGuests = session.approved_guests || [];
+                
+                // Check if this guest is approved
+                const guestApproval = approvedGuests.find(g => g.guest_id === appState.userId);
+                
+                if (guestApproval) {
+                    // Guest is approved!
+                    console.log("Guest approved! Joining session...");
+                    
+                    // Update guest info in session
+                    const { error: updateError } = await supabaseClient
+                        .from('sessions')
+                        .update({
+                            guest_id: appState.userId,
+                            guest_name: appState.userName,
+                            guest_ip: guestApproval.guest_ip,
+                            guest_connected_at: new Date().toISOString()
+                        })
+                        .eq('session_id', sessionId);
+                    
+                    if (updateError) {
+                        console.error("Error updating guest info:", updateError);
+                        return;
                     }
-                )
-                .subscribe();
-        }
+                    
+                    // Update app state
+                    appState.isConnected = true;
+                    appState.connectionTime = new Date();
+                    
+                    // Save to localStorage
+                    saveSessionToLocalStorage();
+                    
+                    // Update UI
+                    statusIndicator.style.backgroundColor = 'var(--success-green)';
+                    userRoleDisplay.textContent = `${appState.userName} (Guest - Connected)`;
+                    
+                    // Enable chat
+                    messageInput.disabled = false;
+                    sendMessageBtn.disabled = false;
+                    
+                    // Setup realtime subscriptions
+                    setupRealtimeSubscriptions();
+                    
+                    // Load chat history
+                    loadChatHistory();
+                    
+                    // Show welcome message
+                    displaySystemMessage("You have been approved to join the chat!");
+                    
+                    // Remove this subscription
+                    supabaseClient.removeChannel(approvalSub);
+                }
+            }
+        )
+        .subscribe();
+}
 
         // Update UI after connection
         function updateUIAfterConnection() {
@@ -2013,88 +2106,230 @@
         }
 
         // Show guest requests
-        async function showGuestRequests() {
-            try {
-                const { data: session } = await supabaseClient
-                    .from('sessions')
-                    .select('pending_guests')
-                    .eq('session_id', appState.currentSessionId)
-                    .single();
+// Update the showGuestRequests function to show popup notifications
+async function showGuestRequests() {
+    try {
+        const { data: session } = await supabaseClient
+            .from('sessions')
+            .select('pending_guests')
+            .eq('session_id', appState.currentSessionId)
+            .single();
+        
+        guestRequestsList.innerHTML = "";
+        
+        if (session.pending_guests && session.pending_guests.length > 0) {
+            noRequestsMessage.style.display = 'none';
+            
+            session.pending_guests.forEach((guest, index) => {
+                const requestDiv = document.createElement('div');
+                requestDiv.className = 'guest-request';
                 
-                guestRequestsList.innerHTML = "";
+                requestDiv.innerHTML = `
+                    <div class="guest-info">
+                        <strong>${guest.guest_name}</strong>
+                        <p style="font-size: 12px; margin-top: 5px;">IP: ${guest.guest_ip}</p>
+                        <p style="font-size: 12px;">Requested: ${new Date(guest.requested_at).toLocaleTimeString()}</p>
+                    </div>
+                    <div class="guest-actions">
+                        <button class="btn btn-small btn-success" onclick="approveGuest(${index})">
+                            <i class="fas fa-check"></i> Approve
+                        </button>
+                        <button class="btn btn-small btn-danger" onclick="denyGuest(${index})">
+                            <i class="fas fa-times"></i> Deny
+                        </button>
+                    </div>
+                `;
                 
-                if (session.pending_guests && session.pending_guests.length > 0) {
-                    noRequestsMessage.style.display = 'none';
-                    
-                    session.pending_guests.forEach((guest, index) => {
-                        const requestDiv = document.createElement('div');
-                        requestDiv.className = 'guest-request';
-                        
-                        requestDiv.innerHTML = `
-                            <div class="guest-info">
-                                <strong>${guest.guest_name}</strong>
-                                <p style="font-size: 12px; margin-top: 5px;">IP: ${guest.guest_ip}</p>
-                                <p style="font-size: 12px;">Requested: ${new Date(guest.requested_at).toLocaleTimeString()}</p>
-                            </div>
-                            <div class="guest-actions">
-                                <button class="btn btn-small btn-success" onclick="approveGuest(${index})">
-                                    <i class="fas fa-check"></i>
-                                </button>
-                                <button class="btn btn-small btn-danger" onclick="denyGuest(${index})">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </div>
-                        `;
-                        
-                        guestRequestsList.appendChild(requestDiv);
-                    });
-                    
-                    requestCount.textContent = `(${session.pending_guests.length})`;
-                } else {
-                    noRequestsMessage.style.display = 'block';
-                    requestCount.textContent = 'Requests';
-                }
-                
-                guestRequestsModal.classList.add('show');
-            } catch (error) {
-                console.error("Error loading guest requests:", error);
+                guestRequestsList.appendChild(requestDiv);
+            });
+            
+            requestCount.textContent = `(${session.pending_guests.length})`;
+            
+            // Show popup notification if there are pending requests
+            if (!guestRequestsModal.classList.contains('show')) {
+                showJoinRequestNotification(session.pending_guests.length);
             }
+            
+        } else {
+            noRequestsMessage.style.display = 'block';
+            requestCount.textContent = 'Requests';
         }
+        
+        guestRequestsModal.classList.add('show');
+        
+    } catch (error) {
+        console.error("Error loading guest requests:", error);
+    }
+}
 
-        // Update guest requests
-        function updateGuestRequests(pendingGuests) {
-            appState.pendingGuestRequests = pendingGuests || [];
-            requestCount.textContent = appState.pendingGuestRequests.length > 0 ? 
-                `(${appState.pendingGuestRequests.length})` : 'Requests';
+// Add this new function for popup notifications
+function showJoinRequestNotification(count) {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.id = 'joinRequestNotification';
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: var(--info-blue);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        animation: slideIn 0.3s ease-out;
+    `;
+    
+    // Add animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
         }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    notification.innerHTML = `
+        <i class="fas fa-user-plus" style="font-size: 20px;"></i>
+        <div>
+            <strong>New Join Request${count > 1 ? 's' : ''}!</strong>
+            <p style="margin: 5px 0 0 0; font-size: 14px;">${count} guest${count > 1 ? 's are' : ' is'} waiting for approval</p>
+        </div>
+        <i class="fas fa-times" style="margin-left: 10px;" onclick="closeNotification()"></i>
+    `;
+    
+    // Click handler
+    notification.onclick = (e) => {
+        if (!e.target.closest('.fa-times')) {
+            guestRequestsModal.classList.add('show');
+            closeNotification();
+        }
+    };
+    
+    // Add to body
+    document.body.appendChild(notification);
+    
+    // Auto-close after 10 seconds
+    setTimeout(() => {
+        if (document.getElementById('joinRequestNotification')) {
+            closeNotification();
+        }
+    }, 10000);
+}
 
-        // Approve guest
-        async function approveGuest(guestIndex) {
-            try {
-                const { data: session } = await supabaseClient
-                    .from('sessions')
-                    .select('pending_guests, approved_guests')
-                    .eq('session_id', appState.currentSessionId)
-                    .single();
-                
-                const guest = session.pending_guests[guestIndex];
-                const updatedPending = session.pending_guests.filter((_, i) => i !== guestIndex);
-                const updatedApproved = [...(session.approved_guests || []), guest];
-                
-                await supabaseClient
-                    .from('sessions')
-                    .update({
-                        pending_guests: updatedPending,
-                        approved_guests: updatedApproved
-                    })
-                    .eq('session_id', appState.currentSessionId);
-                
-                showGuestRequests();
-            } catch (error) {
-                console.error("Error approving guest:", error);
+// Function to close notification
+function closeNotification() {
+    const notification = document.getElementById('joinRequestNotification');
+    if (notification) {
+        notification.style.animation = 'slideOut 0.3s ease-out forwards';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
             }
-        }
+        }, 300);
+    }
+}
+// Update the updateGuestRequests function to trigger notifications
+function updateGuestRequests(pendingGuests) {
+    const oldCount = appState.pendingGuestRequests?.length || 0;
+    const newCount = pendingGuests?.length || 0;
+    
+    appState.pendingGuestRequests = pendingGuests || [];
+    requestCount.textContent = appState.pendingGuestRequests.length > 0 ? 
+        `(${appState.pendingGuestRequests.length})` : 'Requests';
+    
+    // Show notification when new request comes in
+    if (newCount > oldCount && appState.isHost && appState.isConnected) {
+        showJoinRequestNotification(newCount);
+    }
+}
 
+
+// Update the guest approval function to trigger popup
+async function approveGuest(guestIndex) {
+    try {
+        const { data: session } = await supabaseClient
+            .from('sessions')
+            .select('pending_guests, approved_guests')
+            .eq('session_id', appState.currentSessionId)
+            .single();
+        
+        const guest = session.pending_guests[guestIndex];
+        const updatedPending = session.pending_guests.filter((_, i) => i !== guestIndex);
+        const updatedApproved = [...(session.approved_guests || []), {
+            ...guest,
+            approved_at: new Date().toISOString(),
+            status: 'approved'
+        }];
+        
+        await supabaseClient
+            .from('sessions')
+            .update({
+                pending_guests: updatedPending,
+                approved_guests: updatedApproved
+            })
+            .eq('session_id', appState.currentSessionId);
+        
+        // Show approval notification
+        showApprovalNotification(guest.guest_name);
+        
+        // Update the requests list
+        showGuestRequests();
+        
+    } catch (error) {
+        console.error("Error approving guest:", error);
+        alert("Error approving guest. Please try again.");
+    }
+}
+
+// Function to show approval notification
+function showApprovalNotification(guestName) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: var(--success-green);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        animation: slideIn 0.3s ease-out;
+    `;
+    
+    notification.innerHTML = `
+        <i class="fas fa-check-circle" style="font-size: 20px;"></i>
+        <div>
+            <strong>Guest Approved!</strong>
+            <p style="margin: 5px 0 0 0; font-size: 14px;">${guestName} can now join the chat</p>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-close after 5 seconds
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease-out forwards';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 5000);
+}
         // Deny guest
         async function denyGuest(guestIndex) {
             try {
