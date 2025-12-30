@@ -917,7 +917,8 @@ function displayMessage(message) {
     messageDiv.id = `msg-${message.id}`;
     
     let messageContent = message.text || '';
-    if (message.image) {
+    // Only show image if it exists and is not an error message
+    if (message.image && !message.text.includes('cannot be saved')) {
         messageContent += `<img src="${message.image}" class="message-image" onclick="showFullImage('${message.image}')">`;
     }
     
