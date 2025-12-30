@@ -1,3 +1,4 @@
+
 // Supabase Configuration
 const SUPABASE_URL = 'https://plqvqenoroacvzwtgoxq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_91IHQ5--y4tDIo8L9X2ZJQ_YeThfdu_';
@@ -218,7 +219,7 @@ async function handleConnect() {
         const authResult = data[0];
         appState.isHost = authResult.user_role === 'host';
         appState.userName = authResult.user_role === 'host' ? "Host" : "Guest";
-        appState.userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        appState.userId = authResult.user_id + "_" + Date.now();
         
     } catch (error) {
         console.error("Authentication error:", error);
@@ -323,139 +324,107 @@ async function handleConnect() {
             connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
         }
         
-// Update the handleConnect function - specifically the guest connection part
-// Replace the guest connection section (starting around line 204) with this:
-
-} else {
-    // Guest requests to join
-    try {
-        // First check if there's an active session
-        const { data: activeSessions, error: sessionsError } = await supabaseClient
-            .from('sessions')
-            .select('*')
-            .eq('is_active', true)
-            .order('created_at', { ascending: false })
-            .limit(1);
-        
-        if (sessionsError || !activeSessions || activeSessions.length === 0) {
-            alert("No active session found. Please ask the host to create a session first.");
-            connectBtn.disabled = false;
-            connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
-            return;
-        }
-        
-        const session = activeSessions[0];
-        
-        console.log("Found session:", session.session_id);
-        console.log("Current user ID:", appState.userId);
-        
-        // Check if guest is already approved
-        // We need to check if guest_id matches OR if pending_guests contains this user
-        let isApproved = false;
-        let isPending = false;
-        
-        if (session.guest_id) {
-            // Check if guest_id matches (could be full UUID or partial)
-            // Since user ID includes timestamp, we need to compare the UUID part
-            const guestIdStr = String(session.guest_id);
-            const userIdStr = String(appState.userId);
+    } else {
+        // Guest requests to join
+        try {
+            // First check if there's an active session
+            const { data: activeSessions, error: sessionsError } = await supabaseClient
+                .from('sessions')
+                .select('*')
+                .eq('is_active', true)
+                .order('created_at', { ascending: false })
+                .limit(1);
             
-            // Check if user ID contains the guest ID or vice versa
-            if (guestIdStr === userIdStr || 
-                userIdStr.includes(guestIdStr) || 
-                guestIdStr.includes(userIdStr.split('_')[0])) {
-                isApproved = true;
+            if (sessionsError || !activeSessions || activeSessions.length === 0) {
+                alert("No active session found. Please ask the host to create a session first.");
+                connectBtn.disabled = false;
+                connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+                return;
             }
-        }
-        
-        // Check pending guests
-        const currentPending = session.pending_guests || [];
-        isPending = currentPending.some(g => {
-            const guestIdStr = String(g.guest_id);
-            const userIdStr = String(appState.userId);
-            return guestIdStr === userIdStr || 
-                   userIdStr.includes(guestIdStr) || 
-                   guestIdStr.includes(userIdStr.split('_')[0]);
-        });
-        
-        console.log("Is approved:", isApproved, "Is pending:", isPending);
-        
-        if (isApproved) {
-            // Guest is already approved - direct connection
-            appState.sessionId = session.session_id;
-            appState.currentSessionId = session.session_id;
-            appState.isConnected = true;
             
-            localStorage.setItem('writeToMe_session', JSON.stringify({
-                isHost: appState.isHost,
-                userName: appState.userName,
-                userId: appState.userId,
-                sessionId: appState.sessionId,
-                connectionTime: appState.connectionTime,
-                soundEnabled: appState.soundEnabled
-            }));
+            const session = activeSessions[0];
             
-            connectionModal.style.display = 'none';
-            connectBtn.disabled = false;
-            connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
-            updateUIAfterConnection();
-            setupRealtimeSubscriptions();
-            loadChatHistory();
-            loadChatSessions();
-            return;
-        }
-        
-        if (isPending) {
-            // Already pending
+            // Check if guest is already approved
+            if (session.guest_id === appState.userId) {
+                // Guest is already approved - direct connection
+                appState.sessionId = session.session_id;
+                appState.currentSessionId = session.session_id;
+                appState.isConnected = true;
+                
+                localStorage.setItem('writeToMe_session', JSON.stringify({
+                    isHost: appState.isHost,
+                    userName: appState.userName,
+                    userId: appState.userId,
+                    sessionId: appState.sessionId,
+                    connectionTime: appState.connectionTime,
+                    soundEnabled: appState.soundEnabled
+                }));
+                
+                connectionModal.style.display = 'none';
+                connectBtn.disabled = false;
+                connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+                updateUIAfterConnection();
+                setupRealtimeSubscriptions();
+                loadChatHistory();
+                loadChatSessions();
+                return;
+            }
+            
+            // Check if already in pending list
+            const currentPending = session.pending_guests || [];
+            const isAlreadyPending = currentPending.some(g => g.guest_id === appState.userId);
+            
+            if (isAlreadyPending) {
+                // Already pending
+                appState.sessionId = session.session_id;
+                connectionModal.style.display = 'none';
+                connectBtn.disabled = false;
+                connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+                updateUIForPendingGuest();
+                setupPendingApprovalSubscription(session.session_id);
+                return;
+            }
+            
+            // Add to pending guests
+            const pendingGuest = {
+                guest_id: appState.userId,
+                guest_name: appState.userName,
+                guest_ip: userIP,
+                requested_at: new Date().toISOString(),
+                status: 'pending'
+            };
+            
+            currentPending.push(pendingGuest);
+            
+            const { error: updateError } = await supabaseClient
+                .from('sessions')
+                .update({ 
+                    pending_guests: currentPending
+                })
+                .eq('session_id', session.session_id);
+            
+            if (updateError) {
+                console.error("Error adding to pending:", updateError);
+                alert("Failed to request access. Please try again.");
+                connectBtn.disabled = false;
+                connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+                return;
+            }
+            
             appState.sessionId = session.session_id;
             connectionModal.style.display = 'none';
             connectBtn.disabled = false;
             connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
             updateUIForPendingGuest();
             setupPendingApprovalSubscription(session.session_id);
-            return;
-        }
-        
-        // Not approved or pending - request access
-        const pendingGuest = {
-            guest_id: appState.userId,
-            guest_name: appState.userName,
-            guest_ip: userIP,
-            requested_at: new Date().toISOString(),
-            status: 'pending'
-        };
-        
-        currentPending.push(pendingGuest);
-        
-        const { error: updateError } = await supabaseClient
-            .from('sessions')
-            .update({ 
-                pending_guests: currentPending
-            })
-            .eq('session_id', session.session_id);
-        
-        if (updateError) {
-            console.error("Error adding to pending:", updateError);
-            alert("Failed to request access. Please try again.");
+            
+        } catch (error) {
+            console.error("Error in guest connection:", error);
+            alert("An error occurred. Please try again.");
             connectBtn.disabled = false;
             connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
-            return;
         }
-        
-        appState.sessionId = session.session_id;
-        connectionModal.style.display = 'none';
-        connectBtn.disabled = false;
-        connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
-        updateUIForPendingGuest();
-        setupPendingApprovalSubscription(session.session_id);
-        
-    } catch (error) {
-        console.error("Error in guest connection:", error);
-        alert("An error occurred. Please try again.");
-        connectBtn.disabled = false;
-        connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
     }
-}
 }
 
 // Set up subscription for pending guests (for host)
@@ -547,7 +516,6 @@ async function getRealIP() {
 }
 
 // Reconnect to existing session
-// Reconnect to existing session
 async function reconnectToSession() {
     try {
         // Check if session still exists
@@ -559,56 +527,28 @@ async function reconnectToSession() {
         
         if (error || !session) return false;
         
-        console.log("Reconnecting to session:", session.session_id);
-        console.log("User ID:", appState.userId);
-        console.log("Host ID:", session.host_id);
-        console.log("Guest ID:", session.guest_id);
-        
         // Check user's role and status
         if (appState.isHost) {
-            // For host, check if host_id matches
-            const hostIdStr = String(session.host_id);
-            const userIdStr = String(appState.userId);
-            
-            if (hostIdStr === userIdStr || 
-                userIdStr.includes(hostIdStr) || 
-                hostIdStr.includes(userIdStr.split('_')[0])) {
+            if (session.host_id !== appState.userId) return false;
+            appState.currentSessionId = session.session_id;
+            setupRealtimeSubscriptions();
+            return true;
+        } else {
+            // For guests, check if they're approved
+            if (session.guest_id === appState.userId) {
                 appState.currentSessionId = session.session_id;
                 setupRealtimeSubscriptions();
                 return true;
-            }
-            return false;
-        } else {
-            // For guests, check if they're approved
-            if (session.guest_id) {
-                const guestIdStr = String(session.guest_id);
-                const userIdStr = String(appState.userId);
-                
-                if (guestIdStr === userIdStr || 
-                    userIdStr.includes(guestIdStr) || 
-                    guestIdStr.includes(userIdStr.split('_')[0])) {
-                    appState.currentSessionId = session.session_id;
-                    setupRealtimeSubscriptions();
-                    return true;
+            } else {
+                // Check if in pending
+                const isPending = session.pending_guests?.some(g => g.guest_id === appState.userId);
+                if (isPending) {
+                    updateUIForPendingGuest();
+                    setupPendingApprovalSubscription(session.session_id);
+                    return false;
                 }
-            }
-            
-            // Check if in pending
-            const currentPending = session.pending_guests || [];
-            const isPending = currentPending.some(g => {
-                const guestIdStr = String(g.guest_id);
-                const userIdStr = String(appState.userId);
-                return guestIdStr === userIdStr || 
-                       userIdStr.includes(guestIdStr) || 
-                       guestIdStr.includes(userIdStr.split('_')[0]);
-            });
-            
-            if (isPending) {
-                updateUIForPendingGuest();
-                setupPendingApprovalSubscription(session.session_id);
                 return false;
             }
-            return false;
         }
     } catch (error) {
         console.error("Error reconnecting:", error);
@@ -817,41 +757,23 @@ function setupRealtimeSubscriptions() {
 }
 
 // Handle typing
-// Handle typing
-async function handleTyping() {
+function handleTyping() {
     if (appState.currentSessionId && !appState.isViewingHistory && appState.isConnected) {
-        try {
-            // Create update data with only essential columns that should exist
-            const updateData = {
-                typing_user: appState.userName
-                // Don't include updated_at - let the database trigger handle it if it exists
-            };
-            
-            await supabaseClient
-                .from('sessions')
-                .update(updateData)
-                .eq('session_id', appState.currentSessionId);
-            
-            // Clear typing indicator after 1 second
-            if (appState.typingTimeout) {
-                clearTimeout(appState.typingTimeout);
-            }
-            appState.typingTimeout = setTimeout(() => {
-                // Clear typing indicator with minimal update
-                const clearData = {
-                    typing_user: null
-                };
-                
-                supabaseClient
-                    .from('sessions')
-                    .update(clearData)
-                    .eq('session_id', appState.currentSessionId)
-                    .catch(e => console.log("Error clearing typing indicator:", e));
-            }, 1000);
-        } catch (error) {
-            console.log("Typing indicator error (non-critical):", error);
-            // Don't alert the user for typing indicator errors
-        }
+        supabaseClient
+            .from('sessions')
+            .update({ typing_user: appState.userName })
+            .eq('session_id', appState.currentSessionId)
+            .then(() => {
+                if (appState.typingTimeout) {
+                    clearTimeout(appState.typingTimeout);
+                }
+                appState.typingTimeout = setTimeout(() => {
+                    supabaseClient
+                        .from('sessions')
+                        .update({ typing_user: null })
+                        .eq('session_id', appState.currentSessionId);
+                }, 1000);
+            });
     }
 }
 
@@ -885,8 +807,7 @@ async function sendMessage() {
     messageInput.style.height = 'auto';
 }
 
-
-// Send message to database (updated version)
+// Send message to database
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log("Sending message to session:", appState.currentSessionId);
@@ -904,7 +825,7 @@ async function sendMessageToDB(text, imageUrl) {
             return null;
         }
         
-        // Create the message data object with only essential columns
+        // Create the message data object
         const messageData = {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
@@ -913,49 +834,40 @@ async function sendMessageToDB(text, imageUrl) {
             created_at: new Date().toISOString()
         };
         
-        // Only add image_url if it exists
+        // Only add image_url if it exists AND your database has this column
+        // First, let's check if the column exists by trying to insert without it
         if (imageUrl) {
             messageData.image_url = imageUrl;
         }
         
         console.log("Message data to insert:", messageData);
         
-        // Try to insert the message without .select() .single() first
-        // This is more forgiving if there are column mismatches
-        const { error } = await supabaseClient
+        // Try to insert the message
+        const { data, error } = await supabaseClient
             .from('messages')
             .insert([messageData]);
         
         if (error) {
             console.error("Error sending message:", error);
             
-            // If there's a column error, try with minimal fields
-            if (error.message.includes('column') || error.message.includes('field')) {
-                console.log("Retrying with minimal fields...");
+            // If error is about image_url column, try without it
+            if (error.message.includes('image_url') && imageUrl) {
+                console.log("Retrying without image_url column...");
+                delete messageData.image_url;
                 
-                // Create minimal message data
-                const minimalData = {
-                    session_id: appState.currentSessionId,
-                    sender_id: appState.userId,
-                    sender_name: appState.userName,
-                    message: text || '',
-                    created_at: new Date().toISOString()
-                };
-                
-                const { error: minimalError } = await supabaseClient
+                const { error: retryError } = await supabaseClient
                     .from('messages')
-                    .insert([minimalData]);
+                    .insert([messageData]);
                 
-                if (minimalError) {
-                    console.error("Minimal insert also failed:", minimalError);
-                    throw minimalError;
+                if (retryError) {
+                    throw retryError;
                 }
                 
-                // Success with minimal data
+                // If we get here, insert succeeded without image_url
                 displayMessage({
                     id: 'temp_' + Date.now(),
                     sender: appState.userName,
-                    text: text + (imageUrl ? ' [Image attached]' : ''),
+                    text: text + (imageUrl ? ' [Image attached but cannot be saved]' : ''),
                     image: imageUrl,
                     time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                     type: 'sent',
@@ -967,19 +879,10 @@ async function sendMessageToDB(text, imageUrl) {
             throw error;
         }
         
-        // If insert succeeded, try to get the last inserted message
-        // This is a fallback since we didn't use .select()
-        const { data: recentMessages, error: fetchError } = await supabaseClient
-            .from('messages')
-            .select('id')
-            .eq('session_id', appState.currentSessionId)
-            .eq('sender_id', appState.userId)
-            .order('created_at', { ascending: false })
-            .limit(1);
-        
+        // If we have data returned (with .select()), use it
         let messageId = 'temp_' + Date.now();
-        if (!fetchError && recentMessages && recentMessages.length > 0) {
-            messageId = recentMessages[0].id;
+        if (data && data[0] && data[0].id) {
+            messageId = data[0].id;
         }
         
         // Display message immediately
@@ -994,10 +897,9 @@ async function sendMessageToDB(text, imageUrl) {
         });
         
         return { id: messageId };
-        
     } catch (error) {
         console.error("Error sending message:", error);
-        alert("Failed to send message. Please try again.");
+        alert("Failed to send message: " + error.message);
         return null;
     }
 }
@@ -1285,25 +1187,20 @@ async function showPendingGuests() {
     pendingGuestsModal.style.display = 'flex';
 }
 
-
 // Approve a guest
 async function approveGuest(index) {
     const guest = appState.pendingGuests[index];
     
     try {
-        const updateData = {
-            guest_id: guest.guest_id,
-            guest_name: guest.guest_name,
-            guest_ip: guest.guest_ip,
-            guest_connected_at: new Date().toISOString(),
-            pending_guests: appState.pendingGuests.filter((_, i) => i !== index)
-        };
-        
-        console.log("Approving guest with ID:", guest.guest_id);
-        
         const { error } = await supabaseClient
             .from('sessions')
-            .update(updateData)
+            .update({
+                guest_id: guest.guest_id,
+                guest_name: guest.guest_name,
+                guest_ip: guest.guest_ip,
+                guest_connected_at: new Date().toISOString(),
+                pending_guests: appState.pendingGuests.filter((_, i) => i !== index)
+            })
             .eq('session_id', appState.currentSessionId);
         
         if (error) throw error;
@@ -1326,13 +1223,11 @@ async function denyGuest(index) {
     const guest = appState.pendingGuests[index];
     
     try {
-        const updateData = {
-            pending_guests: appState.pendingGuests.filter((_, i) => i !== index)
-        };
-        
         const { error } = await supabaseClient
             .from('sessions')
-            .update(updateData)
+            .update({
+                pending_guests: appState.pendingGuests.filter((_, i) => i !== index)
+            })
             .eq('session_id', appState.currentSessionId);
         
         if (error) throw error;
@@ -1349,111 +1244,76 @@ async function denyGuest(index) {
 }
 
 // Load chat sessions for history panel
-// Load chat sessions for history panel (updated)
 async function loadChatSessions() {
     try {
-        // Try to get sessions with message_count
-        let sessionsQuery = supabaseClient
+        const { data: sessions, error } = await supabaseClient
             .from('sessions')
             .select('*')
             .order('created_at', { ascending: false });
         
-        const { data: sessions, error } = await sessionsQuery;
+        if (error) throw error;
         
-        if (error) {
-            console.error("Error loading sessions:", error);
-            
-            // If error is about message_count, try selecting specific columns
-            if (error.message.includes('message_count')) {
-                console.log("Retrying without message_count...");
-                const { data: sessionsWithoutCount, error: countError } = await supabaseClient
-                    .from('sessions')
-                    .select('session_id, host_id, host_name, host_ip, guest_id, guest_name, guest_ip, is_active, requires_approval, pending_guests, created_at, ended_at')
-                    .order('created_at', { ascending: false });
-                
-                if (countError) throw countError;
-                
-                // Add default message_count
-                const sessionsWithDefaultCount = sessionsWithoutCount.map(session => ({
-                    ...session,
-                    message_count: 0
-                }));
-                
-                displaySessions(sessionsWithDefaultCount);
-                return;
+        historyCards.innerHTML = '';
+        
+        sessions.forEach(session => {
+            const isActive = session.session_id === appState.currentSessionId && session.is_active;
+            const card = document.createElement('div');
+            card.className = 'session-card';
+            if (isActive) {
+                card.classList.add('active');
             }
-            throw error;
-        }
-        
-        displaySessions(sessions);
-        
+            
+            card.innerHTML = `
+                <div class="session-card-header">
+                    <div class="session-id">${session.session_id.substring(0, 10)}...</div>
+                    ${isActive ? '<div class="session-active-badge">Active Now</div>' : ''}
+                </div>
+                <div class="session-info">
+                    <div class="session-info-item">
+                        <span class="session-info-label">Host:</span>
+                        <span class="session-info-value">${session.host_name}</span>
+                        <span class="session-info-label">IP: ${session.host_ip || 'N/A'}</span>
+                    </div>
+                    <div class="session-info-item">
+                        <span class="session-info-label">Guest:</span>
+                        <span class="session-info-value">${session.guest_name || 'None'}</span>
+                        <span class="session-info-label">IP: ${session.guest_ip || 'N/A'}</span>
+                    </div>
+                    <div class="session-info-item">
+                        <span class="session-info-label">Started:</span>
+                        <span class="session-info-value">${new Date(session.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <div class="session-info-item">
+                        <span class="session-info-label">Messages:</span>
+                        <span class="session-info-value">${session.message_count || 0}</span>
+                    </div>
+                </div>
+                <div class="session-actions">
+                    <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')">
+                        <i class="fas fa-eye"></i> View
+                    </button>
+                    <button class="btn btn-success btn-small" onclick="downloadSession('${session.session_id}')">
+                        <i class="fas fa-download"></i> Download
+                    </button>
+                    ${appState.isHost ? `
+                    <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                    ` : ''}
+                </div>
+            `;
+            
+            card.addEventListener('click', (e) => {
+                if (!e.target.closest('.session-actions')) {
+                    viewSessionHistory(session.session_id);
+                }
+            });
+            
+            historyCards.appendChild(card);
+        });
     } catch (error) {
         console.error("Error loading sessions:", error);
-        // Show empty history section
-        historyCards.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">Could not load sessions</div>';
     }
-}
-
-// Helper function to display sessions
-function displaySessions(sessions) {
-    historyCards.innerHTML = '';
-    
-    sessions.forEach(session => {
-        const isActive = session.session_id === appState.currentSessionId && session.is_active;
-        const card = document.createElement('div');
-        card.className = 'session-card';
-        if (isActive) {
-            card.classList.add('active');
-        }
-        
-        card.innerHTML = `
-            <div class="session-card-header">
-                <div class="session-id">${session.session_id.substring(0, 10)}...</div>
-                ${isActive ? '<div class="session-active-badge">Active Now</div>' : ''}
-            </div>
-            <div class="session-info">
-                <div class="session-info-item">
-                    <span class="session-info-label">Host:</span>
-                    <span class="session-info-value">${session.host_name || 'Unknown'}</span>
-                    <span class="session-info-label">IP: ${session.host_ip || 'N/A'}</span>
-                </div>
-                <div class="session-info-item">
-                    <span class="session-info-label">Guest:</span>
-                    <span class="session-info-value">${session.guest_name || 'None'}</span>
-                    <span class="session-info-label">IP: ${session.guest_ip || 'N/A'}</span>
-                </div>
-                <div class="session-info-item">
-                    <span class="session-info-label">Started:</span>
-                    <span class="session-info-value">${new Date(session.created_at).toLocaleDateString()}</span>
-                </div>
-                <div class="session-info-item">
-                    <span class="session-info-label">Messages:</span>
-                    <span class="session-info-value">${session.message_count || 0}</span>
-                </div>
-            </div>
-            <div class="session-actions">
-                <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')">
-                    <i class="fas fa-eye"></i> View
-                </button>
-                <button class="btn btn-success btn-small" onclick="downloadSession('${session.session_id}')">
-                    <i class="fas fa-download"></i> Download
-                </button>
-                ${appState.isHost ? `
-                <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')">
-                    <i class="fas fa-trash"></i> Delete
-                </button>
-                ` : ''}
-            </div>
-        `;
-        
-        card.addEventListener('click', (e) => {
-            if (!e.target.closest('.session-actions')) {
-                viewSessionHistory(session.session_id);
-            }
-        });
-        
-        historyCards.appendChild(card);
-    });
 }
 
 // View session history
@@ -1631,24 +1491,20 @@ function updateSoundControl() {
 // Save message to database (system messages)
 async function saveMessageToDB(senderName, messageText) {
     try {
-        // Use minimal fields for system messages
-        const messageData = {
-            session_id: appState.currentSessionId,
-            sender_id: 'system',
-            sender_name: senderName,
-            message: messageText,
-            created_at: new Date().toISOString()
-        };
-        
-        const { error } = await supabaseClient
+        const { data, error } = await supabaseClient
             .from('messages')
-            .insert([messageData]);
+            .insert([
+                {
+                    session_id: appState.currentSessionId,
+                    sender_id: 'system',
+                    sender_name: senderName,
+                    message: messageText,
+                    created_at: new Date().toISOString()
+                }
+            ]);
         
-        if (error) {
-            console.error("Error saving system message:", error);
-            return null;
-        }
-        return { success: true };
+        if (error) throw error;
+        return data;
     } catch (error) {
         console.error("Error saving system message:", error);
         return null;
