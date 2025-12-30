@@ -434,7 +434,8 @@ async function handleConnect() {
     }
 }
 
-// Set up subscription for pending guests (for host)
+
+// Set up subscription for pending guests (for host) - FIXED VERSION
 function setupPendingGuestsSubscription() {
     if (appState.pendingSubscription) {
         supabaseClient.removeChannel(appState.pendingSubscription);
@@ -451,15 +452,23 @@ function setupPendingGuestsSubscription() {
                 filter: 'session_id=eq.' + appState.currentSessionId
             },
             (payload) => {
-                appState.pendingGuests = payload.new.pending_guests || [];
-                pendingCount.textContent = appState.pendingGuests.length;
-                pendingGuestsBtn.style.display = appState.pendingGuests.length > 0 ? 'flex' : 'none';
+                // Handle payload safely - check if payload.new exists
+                if (payload.new) {
+                    appState.pendingGuests = payload.new.pending_guests || [];
+                    pendingCount.textContent = appState.pendingGuests.length;
+                    pendingGuestsBtn.style.display = appState.pendingGuests.length > 0 ? 'flex' : 'none';
+                } else {
+                    // Fallback: reload pending guests manually
+                    loadPendingGuests();
+                }
             }
         )
-        .subscribe();
+        .subscribe((status) => {
+            console.log('Pending guests subscription status:', status);
+        });
 }
 
-// Set up subscription for pending approval (for guest)
+// Set up subscription for pending approval (for guest) - FIXED VERSION
 function setupPendingApprovalSubscription(sessionId) {
     if (appState.pendingSubscription) {
         supabaseClient.removeChannel(appState.pendingSubscription);
@@ -470,47 +479,54 @@ function setupPendingApprovalSubscription(sessionId) {
         .on(
             'postgres_changes',
             {
-                event: 'UPDATE',
+                event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
                 schema: 'public',
                 table: 'sessions',
                 filter: 'session_id=eq.' + sessionId
             },
             async (payload) => {
-                const session = payload.new;
+                console.log('Pending approval payload:', payload);
                 
-                console.log("Pending approval update:", session.guest_id, "Our ID:", appState.userId);
-                
-                if (session.guest_id === appState.userId) {
-                    // Guest has been approved!
-                    console.log("Guest has been approved!");
-                    appState.currentSessionId = sessionId;
-                    appState.isConnected = true;
+                // Handle different event types
+                if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+                    const session = payload.new || {};
                     
-                    localStorage.setItem('writeToMe_session', JSON.stringify({
-                        isHost: appState.isHost,
-                        userName: appState.userName,
-                        userId: appState.userId,
-                        sessionId: appState.sessionId,
-                        connectionTime: appState.connectionTime,
-                        soundEnabled: appState.soundEnabled
-                    }));
+                    console.log("Guest ID in session:", session.guest_id, "Our ID:", appState.userId);
                     
-                    updateUIAfterConnection();
-                    setupRealtimeSubscriptions();
-                    await loadChatHistory();
-                    
-                    // Remove pending subscription
-                    if (appState.pendingSubscription) {
-                        supabaseClient.removeChannel(appState.pendingSubscription);
-                        appState.pendingSubscription = null;
+                    if (session.guest_id === appState.userId) {
+                        // Guest has been approved!
+                        console.log("Guest has been approved!");
+                        appState.currentSessionId = sessionId;
+                        appState.isConnected = true;
+                        
+                        localStorage.setItem('writeToMe_session', JSON.stringify({
+                            isHost: appState.isHost,
+                            userName: appState.userName,
+                            userId: appState.userId,
+                            sessionId: appState.sessionId,
+                            connectionTime: appState.connectionTime,
+                            soundEnabled: appState.soundEnabled
+                        }));
+                        
+                        updateUIAfterConnection();
+                        setupRealtimeSubscriptions();
+                        await loadChatHistory();
+                        
+                        // Remove pending subscription
+                        if (appState.pendingSubscription) {
+                            supabaseClient.removeChannel(appState.pendingSubscription);
+                            appState.pendingSubscription = null;
+                        }
+                        
+                        // Add welcome message
+                        await saveMessageToDB('System', `${appState.userName} has joined the chat.`);
                     }
-                    
-                    // Add welcome message
-                    await saveMessageToDB('System', `${appState.userName} has joined the chat.`);
                 }
             }
         )
-        .subscribe();
+        .subscribe((status) => {
+            console.log('Pending approval subscription status:', status);
+        });
 }
 
 // Get real IP address
