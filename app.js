@@ -806,7 +806,8 @@ async function sendMessage() {
     messageInput.style.height = 'auto';
 }
 
-// Send message to database
+
+// Send message to database (updated version)
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log("Sending message to session:", appState.currentSessionId);
@@ -824,7 +825,7 @@ async function sendMessageToDB(text, imageUrl) {
             return null;
         }
         
-        // Create the message data object
+        // Create the message data object with only essential fields
         const messageData = {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
@@ -833,71 +834,118 @@ async function sendMessageToDB(text, imageUrl) {
             created_at: new Date().toISOString()
         };
         
-        // Only add image_url if it exists AND your database has this column
-        // First, let's check if the column exists by trying to insert without it
+        // Try to add image_url, but be prepared for it to fail
         if (imageUrl) {
             messageData.image_url = imageUrl;
         }
         
-        console.log("Message data to insert:", messageData);
+        console.log("Attempting to insert message:", messageData);
         
         // Try to insert the message
-        const { data, error } = await supabaseClient
-            .from('messages')
-            .insert([messageData]);
-        
-        if (error) {
-            console.error("Error sending message:", error);
+        try {
+            const { data, error } = await supabaseClient
+                .from('messages')
+                .insert([messageData])
+                .select();
             
-            // If error is about image_url column, try without it
-            if (error.message.includes('image_url') && imageUrl) {
-                console.log("Retrying without image_url column...");
-                delete messageData.image_url;
+            if (error) {
+                console.error("Insert error (with image_url):", error);
                 
-                const { error: retryError } = await supabaseClient
-                    .from('messages')
-                    .insert([messageData]);
-                
-                if (retryError) {
-                    throw retryError;
+                // If error is about image_url, try without it
+                if (imageUrl && (error.message.includes('image_url') || error.message.includes('column'))) {
+                    console.log("Retrying without image_url...");
+                    delete messageData.image_url;
+                    
+                    const { data: retryData, error: retryError } = await supabaseClient
+                        .from('messages')
+                        .insert([messageData])
+                        .select();
+                    
+                    if (retryError) {
+                        console.error("Retry error:", retryError);
+                        
+                        // If still error, try a minimal insert
+                        const minimalData = {
+                            session_id: appState.currentSessionId,
+                            sender_id: appState.userId,
+                            sender_name: appState.userName,
+                            message: text || '',
+                            created_at: new Date().toISOString()
+                        };
+                        
+                        const { error: minimalError } = await supabaseClient
+                            .from('messages')
+                            .insert([minimalData]);
+                        
+                        if (minimalError) {
+                            throw minimalError;
+                        }
+                        
+                        // Minimal insert succeeded
+                        displayMessage({
+                            id: 'temp_' + Date.now(),
+                            sender: appState.userName,
+                            text: text + (imageUrl ? ' [Image could not be saved]' : ''),
+                            image: null,
+                            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                            type: 'sent',
+                            is_historical: false
+                        });
+                        
+                        return { id: 'temp_' + Date.now() };
+                    }
+                    
+                    // Retry succeeded
+                    const messageId = retryData && retryData[0] ? retryData[0].id : 'temp_' + Date.now();
+                    displayMessage({
+                        id: messageId,
+                        sender: appState.userName,
+                        text: text + (imageUrl ? ' [Image could not be saved]' : ''),
+                        image: null,
+                        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                        type: 'sent',
+                        is_historical: false
+                    });
+                    
+                    return { id: messageId };
                 }
-                
-                // If we get here, insert succeeded without image_url
-                displayMessage({
-                    id: 'temp_' + Date.now(),
-                    sender: appState.userName,
-                    text: text + (imageUrl ? ' [Image attached but cannot be saved]' : ''),
-                    image: imageUrl,
-                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    type: 'sent',
-                    is_historical: false
-                });
-                
-                return { id: 'temp_' + Date.now() };
+                throw error;
             }
-            throw error;
+            
+            // Original insert succeeded
+            const messageId = data && data[0] ? data[0].id : 'temp_' + Date.now();
+            displayMessage({
+                id: messageId,
+                sender: appState.userName,
+                text: text,
+                image: imageUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false
+            });
+            
+            return { id: messageId };
+            
+        } catch (insertError) {
+            console.error("Insert failed completely:", insertError);
+            
+            // Last resort: just display the message locally without saving to DB
+            displayMessage({
+                id: 'local_' + Date.now(),
+                sender: appState.userName,
+                text: text + (imageUrl ? ' [Message saved locally only]' : ''),
+                image: imageUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false
+            });
+            
+            alert("Message saved locally but not to database. Some features may not work.");
+            return { id: 'local_' + Date.now() };
         }
         
-        // If we have data returned (with .select()), use it
-        let messageId = 'temp_' + Date.now();
-        if (data && data[0] && data[0].id) {
-            messageId = data[0].id;
-        }
-        
-        // Display message immediately
-        displayMessage({
-            id: messageId,
-            sender: appState.userName,
-            text: text,
-            image: imageUrl,
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-            type: 'sent',
-            is_historical: false
-        });
-        
-        return { id: messageId };
     } catch (error) {
-        console.error("Error sending message:", error);
+        console.error("Error in sendMessageToDB:", error);
         alert("Failed to send message: " + error.message);
         return null;
     }
@@ -1243,76 +1291,111 @@ async function denyGuest(index) {
 }
 
 // Load chat sessions for history panel
+// Load chat sessions for history panel (updated)
 async function loadChatSessions() {
     try {
-        const { data: sessions, error } = await supabaseClient
+        // Try to get sessions with message_count
+        let sessionsQuery = supabaseClient
             .from('sessions')
             .select('*')
             .order('created_at', { ascending: false });
         
-        if (error) throw error;
+        const { data: sessions, error } = await sessionsQuery;
         
-        historyCards.innerHTML = '';
-        
-        sessions.forEach(session => {
-            const isActive = session.session_id === appState.currentSessionId && session.is_active;
-            const card = document.createElement('div');
-            card.className = 'session-card';
-            if (isActive) {
-                card.classList.add('active');
+        if (error) {
+            console.error("Error loading sessions:", error);
+            
+            // If error is about message_count, try selecting specific columns
+            if (error.message.includes('message_count')) {
+                console.log("Retrying without message_count...");
+                const { data: sessionsWithoutCount, error: countError } = await supabaseClient
+                    .from('sessions')
+                    .select('session_id, host_id, host_name, host_ip, guest_id, guest_name, guest_ip, is_active, requires_approval, pending_guests, created_at, ended_at')
+                    .order('created_at', { ascending: false });
+                
+                if (countError) throw countError;
+                
+                // Add default message_count
+                const sessionsWithDefaultCount = sessionsWithoutCount.map(session => ({
+                    ...session,
+                    message_count: 0
+                }));
+                
+                displaySessions(sessionsWithDefaultCount);
+                return;
             }
-            
-            card.innerHTML = `
-                <div class="session-card-header">
-                    <div class="session-id">${session.session_id.substring(0, 10)}...</div>
-                    ${isActive ? '<div class="session-active-badge">Active Now</div>' : ''}
-                </div>
-                <div class="session-info">
-                    <div class="session-info-item">
-                        <span class="session-info-label">Host:</span>
-                        <span class="session-info-value">${session.host_name}</span>
-                        <span class="session-info-label">IP: ${session.host_ip || 'N/A'}</span>
-                    </div>
-                    <div class="session-info-item">
-                        <span class="session-info-label">Guest:</span>
-                        <span class="session-info-value">${session.guest_name || 'None'}</span>
-                        <span class="session-info-label">IP: ${session.guest_ip || 'N/A'}</span>
-                    </div>
-                    <div class="session-info-item">
-                        <span class="session-info-label">Started:</span>
-                        <span class="session-info-value">${new Date(session.created_at).toLocaleDateString()}</span>
-                    </div>
-                    <div class="session-info-item">
-                        <span class="session-info-label">Messages:</span>
-                        <span class="session-info-value">${session.message_count || 0}</span>
-                    </div>
-                </div>
-                <div class="session-actions">
-                    <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')">
-                        <i class="fas fa-eye"></i> View
-                    </button>
-                    <button class="btn btn-success btn-small" onclick="downloadSession('${session.session_id}')">
-                        <i class="fas fa-download"></i> Download
-                    </button>
-                    ${appState.isHost ? `
-                    <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')">
-                        <i class="fas fa-trash"></i> Delete
-                    </button>
-                    ` : ''}
-                </div>
-            `;
-            
-            card.addEventListener('click', (e) => {
-                if (!e.target.closest('.session-actions')) {
-                    viewSessionHistory(session.session_id);
-                }
-            });
-            
-            historyCards.appendChild(card);
-        });
+            throw error;
+        }
+        
+        displaySessions(sessions);
+        
     } catch (error) {
         console.error("Error loading sessions:", error);
+        // Show empty history section
+        historyCards.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">Could not load sessions</div>';
     }
+}
+
+// Helper function to display sessions
+function displaySessions(sessions) {
+    historyCards.innerHTML = '';
+    
+    sessions.forEach(session => {
+        const isActive = session.session_id === appState.currentSessionId && session.is_active;
+        const card = document.createElement('div');
+        card.className = 'session-card';
+        if (isActive) {
+            card.classList.add('active');
+        }
+        
+        card.innerHTML = `
+            <div class="session-card-header">
+                <div class="session-id">${session.session_id.substring(0, 10)}...</div>
+                ${isActive ? '<div class="session-active-badge">Active Now</div>' : ''}
+            </div>
+            <div class="session-info">
+                <div class="session-info-item">
+                    <span class="session-info-label">Host:</span>
+                    <span class="session-info-value">${session.host_name || 'Unknown'}</span>
+                    <span class="session-info-label">IP: ${session.host_ip || 'N/A'}</span>
+                </div>
+                <div class="session-info-item">
+                    <span class="session-info-label">Guest:</span>
+                    <span class="session-info-value">${session.guest_name || 'None'}</span>
+                    <span class="session-info-label">IP: ${session.guest_ip || 'N/A'}</span>
+                </div>
+                <div class="session-info-item">
+                    <span class="session-info-label">Started:</span>
+                    <span class="session-info-value">${new Date(session.created_at).toLocaleDateString()}</span>
+                </div>
+                <div class="session-info-item">
+                    <span class="session-info-label">Messages:</span>
+                    <span class="session-info-value">${session.message_count || 0}</span>
+                </div>
+            </div>
+            <div class="session-actions">
+                <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')">
+                    <i class="fas fa-eye"></i> View
+                </button>
+                <button class="btn btn-success btn-small" onclick="downloadSession('${session.session_id}')">
+                    <i class="fas fa-download"></i> Download
+                </button>
+                ${appState.isHost ? `
+                <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+                ` : ''}
+            </div>
+        `;
+        
+        card.addEventListener('click', (e) => {
+            if (!e.target.closest('.session-actions')) {
+                viewSessionHistory(session.session_id);
+            }
+        });
+        
+        historyCards.appendChild(card);
+    });
 }
 
 // View session history
