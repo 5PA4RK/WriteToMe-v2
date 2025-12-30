@@ -824,57 +824,69 @@ async function sendMessageToDB(text, imageUrl) {
             return null;
         }
         
+        // Create the message data object
+        const messageData = {
+            session_id: appState.currentSessionId,
+            sender_id: appState.userId,
+            sender_name: appState.userName,
+            message: text || '',
+            created_at: new Date().toISOString()
+        };
+        
+        // Only add image_url if it exists AND your database has this column
+        // First, let's check if the column exists by trying to insert without it
+        if (imageUrl) {
+            messageData.image_url = imageUrl;
+        }
+        
+        console.log("Message data to insert:", messageData);
+        
+        // Try to insert the message
         const { data, error } = await supabaseClient
             .from('messages')
-            .insert([
-                {
-                    session_id: appState.currentSessionId,
-                    sender_id: appState.userId,
-                    sender_name: appState.userName,
-                    message: text || '',
-                    image_url: imageUrl,
-                    created_at: new Date().toISOString()
-                }
-            ])
-            .select()
-            .single();
+            .insert([messageData]);
         
         if (error) {
             console.error("Error sending message:", error);
             
-            // Try without .select() .single() if that's the issue
-            const { error: simpleError } = await supabaseClient
-                .from('messages')
-                .insert({
-                    session_id: appState.currentSessionId,
-                    sender_id: appState.userId,
-                    sender_name: appState.userName,
-                    message: text || '',
-                    image_url: imageUrl,
-                    created_at: new Date().toISOString()
+            // If error is about image_url column, try without it
+            if (error.message.includes('image_url') && imageUrl) {
+                console.log("Retrying without image_url column...");
+                delete messageData.image_url;
+                
+                const { error: retryError } = await supabaseClient
+                    .from('messages')
+                    .insert([messageData]);
+                
+                if (retryError) {
+                    throw retryError;
+                }
+                
+                // If we get here, insert succeeded without image_url
+                displayMessage({
+                    id: 'temp_' + Date.now(),
+                    sender: appState.userName,
+                    text: text + (imageUrl ? ' [Image attached but cannot be saved]' : ''),
+                    image: imageUrl,
+                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    type: 'sent',
+                    is_historical: false
                 });
-            
-            if (simpleError) {
-                throw simpleError;
+                
+                return { id: 'temp_' + Date.now() };
             }
-            
-            // If we get here, insert succeeded without returning data
-            displayMessage({
-                id: 'temp_' + Date.now(),
-                sender: appState.userName,
-                text: text,
-                image: imageUrl,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_historical: false
-            });
-            
-            return { id: 'temp_' + Date.now() };
+            throw error;
+        }
+        
+        // If we have data returned (with .select()), use it
+        let messageId = 'temp_' + Date.now();
+        if (data && data[0] && data[0].id) {
+            messageId = data[0].id;
         }
         
         // Display message immediately
         displayMessage({
-            id: data.id,
+            id: messageId,
             sender: appState.userName,
             text: text,
             image: imageUrl,
@@ -883,7 +895,7 @@ async function sendMessageToDB(text, imageUrl) {
             is_historical: false
         });
         
-        return data;
+        return { id: messageId };
     } catch (error) {
         console.error("Error sending message:", error);
         alert("Failed to send message: " + error.message);
