@@ -739,3 +739,14 @@ footer {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+/* Add to your existing CSS */
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: var(--danger-red); /* Default offline */
+}
+
+.status-indicator.online {
+    background-color: var(--success-green);
+}
