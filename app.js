@@ -1264,16 +1264,24 @@ async function loadChatSessions() {
             </div>
             <div class="session-info">
                 <div class="session-info-item">
-                    <span class="session-info-label">Host:</span>
-                    <span class="session-info-value">${session.host_name || 'Unknown'} 
-                        <small class="session-ip">(${session.host_ip || 'N/A'})</small>
-                    </span>
+                    <div class="session-info-row">
+                        <span class="session-info-label">Host:</span>
+                        <span class="session-info-value">${session.host_name || 'Unknown'}</span>
+                    </div>
+                    <div class="session-info-row">
+                        <span class="session-info-label">Host IP:</span>
+                        <span class="session-info-value">${session.host_ip || 'N/A'}</span>
+                    </div>
                 </div>
                 <div class="session-info-item">
-                    <span class="session-info-label">Guest:</span>
-                    <span class="session-info-value">${session.guest_name || 'None'} 
-                        <small class="session-ip">(${session.guest_ip || 'N/A'})</small>
-                    </span>
+                    <div class="session-info-row">
+                        <span class="session-info-label">Guest:</span>
+                        <span class="session-info-value">${session.guest_name || 'None'}</span>
+                    </div>
+                    <div class="session-info-row">
+                        <span class="session-info-label">Guest IP:</span>
+                        <span class="session-info-value">${session.guest_ip || 'N/A'}</span>
+                    </div>
                 </div>
                 <div class="session-info-item">
                     <span class="session-info-label">Started:</span>
