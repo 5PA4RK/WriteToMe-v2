@@ -1258,40 +1258,42 @@ async function loadChatSessions() {
             }
             
             card.innerHTML = `
-                <div class="session-card-header">
-                    <div class="session-id">${session.session_id.substring(0, 10)}...</div>
-                    ${isActive ? '<div class="session-active-badge">Active Now</div>' : ''}
+            <div class="session-card-header">
+                <div class="session-id">${session.session_id.substring(0, 10)}...</div>
+                ${isActive ? '<div class="session-active-badge">Active Now</div>' : ''}
+            </div>
+            <div class="session-info">
+                <div class="session-info-item">
+                    <span class="session-info-label">Host:</span>
+                    <span class="session-info-value">${session.host_name || 'Unknown'} 
+                        <small class="session-ip">(${session.host_ip || 'N/A'})</small>
+                    </span>
                 </div>
-                <div class="session-info">
-                    <div class="session-info-item">
-                        <span class="session-info-label">Host:</span>
-                        <span class="session-info-value">${session.host_name || 'Unknown'}</span>
-                        <span class="session-info-label">IP: ${session.host_ip || 'N/A'}</span>
-                    </div>
-                    <div class="session-info-item">
-                        <span class="session-info-label">Guest:</span>
-                        <span class="session-info-value">${session.guest_name || 'None'}</span>
-                        <span class="session-info-label">IP: ${session.guest_ip || 'N/A'}</span>
-                    </div>
-                    <div class="session-info-item">
-                        <span class="session-info-label">Started:</span>
-                        <span class="session-info-value">${new Date(session.created_at).toLocaleDateString()}</span>
-                    </div>
+                <div class="session-info-item">
+                    <span class="session-info-label">Guest:</span>
+                    <span class="session-info-value">${session.guest_name || 'None'} 
+                        <small class="session-ip">(${session.guest_ip || 'N/A'})</small>
+                    </span>
                 </div>
-                <div class="session-actions">
-                    <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')">
-                        <i class="fas fa-eye"></i> View
-                    </button>
-                    <button class="btn btn-success btn-small" onclick="downloadSession('${session.session_id}')">
-                        <i class="fas fa-download"></i> Download
-                    </button>
-                    ${appState.isHost ? `
-                    <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')">
-                        <i class="fas fa-trash"></i> Delete
-                    </button>
-                    ` : ''}
+                <div class="session-info-item">
+                    <span class="session-info-label">Started:</span>
+                    <span class="session-info-value">${new Date(session.created_at).toLocaleDateString()}</span>
                 </div>
-            `;
+            </div>
+            <div class="session-actions">
+                <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')">
+                    <i class="fas fa-eye"></i> View
+                </button>
+                <button class="btn btn-success btn-small" onclick="downloadSession('${session.session_id}')">
+                    <i class="fas fa-download"></i> Download
+                </button>
+                ${appState.isHost ? `
+                <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+                ` : ''}
+            </div>
+        `;
             
             card.addEventListener('click', (e) => {
                 if (!e.target.closest('.session-actions')) {
