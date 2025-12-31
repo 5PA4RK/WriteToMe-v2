@@ -81,9 +81,9 @@ async function initApp() {
             appState.soundEnabled = sessionData.soundEnabled !== false;
             
             // NEW: Hide history for guests immediately
-            if (!appState.isHost) {
-                const historyPanel = document.getElementById('historyPanel');
-                if (historyPanel) historyPanel.style.display = 'none';
+            const historySection = document.getElementById('historySection');
+            if (historySection && !appState.isHost) {
+                historySection.style.display = 'none';
             }
             
             // Try to reconnect to the session
@@ -115,11 +115,13 @@ async function initApp() {
     // Load emojis
     populateEmojis();
     
-    // Load chat sessions (only for host)
-    if (appState.isHost || (!appState.userId)) {
+    // Load chat sessions only if user might be a host
+    // (If no saved session or might be host)
+    if (!savedSession || appState.isHost) {
         loadChatSessions();
     }
 }
+
 // Set up all event listeners
 function setupEventListeners() {
     // Connection modal
@@ -310,7 +312,9 @@ async function handleConnect() {
             loadChatHistory();
             
             // Load chat sessions
-            loadChatSessions();
+            if (appState.isHost) {
+                loadChatSessions();
+            }
             
         } catch (error) {
             console.error("Error in host connection:", error);
@@ -612,20 +616,11 @@ function updateUIForPendingGuest() {
     sendMessageBtn.disabled = true;
     messageInput.placeholder = "Waiting for host approval...";
     
-
-// In handleLogout function, add this after resetting the UI:
-// Show history panel again (will be hidden if guest connects)
-const historyElements = [
-    document.getElementById('historyPanel'),
-    document.querySelector('.history-section'),
-    document.querySelector('.sidebar'),
-    document.getElementById('historyTab'),
-    document.getElementById('refreshHistoryBtn')
-];
-
-historyElements.forEach(element => {
-    if (element) element.style.display = 'block'; // or 'flex' depending on your CSS
-});
+    // NEW: Hide history section for pending guests
+    const historySection = document.getElementById('historySection');
+    if (historySection) {
+        historySection.style.display = 'none';
+    }
     
     chatMessages.innerHTML = `
         <div class="message received">
@@ -651,30 +646,6 @@ function updateUIAfterConnection() {
     messageInput.placeholder = "Type your message here... (Press Enter to send, Shift+Enter for new line)";
     messageInput.focus();
     
-    // NEW: Hide history panel and related elements for guests
-    const historyPanel = document.getElementById('historyPanel');
-    const historySection = document.querySelector('.history-section'); // or whatever your container class is
-    const sidebar = document.querySelector('.sidebar'); // if you have a sidebar
-    const historyTab = document.getElementById('historyTab'); // if you have tabs
-    
-    // Hide history-related elements for guests
-    if (!appState.isHost) {
-        if (historyPanel) historyPanel.style.display = 'none';
-        if (historySection) historySection.style.display = 'none';
-        if (sidebar) sidebar.style.display = 'none';
-        if (historyTab) historyTab.style.display = 'none';
-        
-        // Also hide any buttons that access history
-        const historyButtons = document.querySelectorAll('[onclick*="viewSessionHistory"], [onclick*="loadChatSessions"]');
-        historyButtons.forEach(btn => btn.style.display = 'none');
-    } else {
-        // Show for host
-        if (historyPanel) historyPanel.style.display = 'block';
-        if (historySection) historySection.style.display = 'block';
-        if (sidebar) sidebar.style.display = 'block';
-        if (historyTab) historyTab.style.display = 'block';
-    }
-    
     // Clear any pending approval messages
     const systemMessages = document.querySelectorAll('.message .message-sender');
     systemMessages.forEach(msg => {
@@ -685,6 +656,12 @@ function updateUIAfterConnection() {
             }
         }
     });
+    
+    // NEW: Hide history section for guests
+    const historySection = document.getElementById('historySection');
+    if (historySection) {
+        historySection.style.display = appState.isHost ? 'block' : 'none';
+    }
 }
 
 // Handle logout
@@ -753,10 +730,10 @@ async function handleLogout() {
         chatModeIndicator.style.display = 'none';
         chatTitle.innerHTML = '<i class="fas fa-comments"></i> Active Chat';
         
-        // NEW: Show history panel for next connection (will be hidden if guest)
-        const historyPanel = document.getElementById('historyPanel');
-        if (historyPanel) {
-            historyPanel.style.display = 'block';
+        // NEW: Show history section again
+        const historySection = document.getElementById('historySection');
+        if (historySection) {
+            historySection.style.display = 'block';
         }
         
         // Clear chat
@@ -1287,17 +1264,7 @@ async function denyGuest(index) {
 }
 
 // Load chat sessions for history panel
-// Load chat sessions for history panel
 async function loadChatSessions() {
-    // NEW: Don't load sessions for guests at all
-    if (!appState.isHost) {
-        const historyCards = document.getElementById('historyCards');
-        if (historyCards) {
-            historyCards.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">History is only available to hosts</div>';
-        }
-        return;
-    }
-    
     try {
         const { data: sessions, error } = await supabaseClient
             .from('sessions')
