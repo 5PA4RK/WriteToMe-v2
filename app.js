@@ -593,6 +593,7 @@ async function reconnectToSession() {
 }
 
 // Update UI for pending guest (not yet approved)
+// Update UI for pending guest (not yet approved)
 function updateUIForPendingGuest() {
     statusIndicator.className = 'status-indicator offline';
     userRoleDisplay.textContent = `${appState.userName} (Pending Approval)`;
@@ -603,6 +604,12 @@ function updateUIForPendingGuest() {
     messageInput.disabled = true;
     sendMessageBtn.disabled = true;
     messageInput.placeholder = "Waiting for host approval...";
+    
+    // NEW: Hide history panel for pending guests
+    const historyPanel = document.getElementById('historyPanel');
+    if (historyPanel) {
+        historyPanel.style.display = 'none';
+    }
     
     chatMessages.innerHTML = `
         <div class="message received">
@@ -638,6 +645,12 @@ function updateUIAfterConnection() {
             }
         }
     });
+    
+    // NEW: Hide history panel for guests
+    const historyPanel = document.getElementById('historyPanel'); // Make sure your HTML has this ID
+    if (historyPanel) {
+        historyPanel.style.display = appState.isHost ? 'block' : 'none';
+    }
 }
 
 // Handle logout
@@ -705,6 +718,12 @@ async function handleLogout() {
         messageInput.placeholder = "Type your message here...";
         chatModeIndicator.style.display = 'none';
         chatTitle.innerHTML = '<i class="fas fa-comments"></i> Active Chat';
+        
+        // NEW: Show history panel for next connection (will be hidden if guest)
+        const historyPanel = document.getElementById('historyPanel');
+        if (historyPanel) {
+            historyPanel.style.display = 'block';
+        }
         
         // Clear chat
         chatMessages.innerHTML = `
