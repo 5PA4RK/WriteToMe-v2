@@ -1,11 +1,11 @@
 :root {
-    --dark-bg: #2a2a2a;
-    --darker-bg: #333333;
-    --card-bg: #3a3a3a;
-    --border-color: #555;
-    --text-primary: #f8f8f8;
-    --text-secondary: #dddddd;
-    --accent-orange: #ff9800;
+    --dark-bg: #1e1e1e; /* Slightly darker for depth */
+    --darker-bg: #2a2a2a; /* Keep existing for contrast */
+    --card-bg: #2f2f2f; /* Slightly lighter for cards */
+    --border-color: #444; /* Softer borders */
+    --text-primary: #f0f0f0; /* Brighter primary text */
+    --text-secondary: #b0b0b0; /* Softer secondary text */
+    --accent-orange: #ff9800; /* Keep existing vibrant orange */
     --accent-orange-dark: #e68900;
     --success-green: #4caf50;
     --danger-red: #f44336;
@@ -27,8 +27,10 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    line-height: 1.6;
 }
 
+/* Container */
 .container {
     max-width: 1400px;
     margin: 0 auto;
@@ -36,11 +38,13 @@ body {
     width: 100%;
 }
 
+/* Header */
 header {
     background-color: var(--darker-bg);
     padding: 20px;
     border-bottom: 2px solid var(--accent-orange);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    transition: background-color 0.3s ease;
 }
 
 .header-content {
@@ -60,14 +64,21 @@ header {
 .logo i {
     color: var(--accent-orange);
     font-size: 32px;
+    transition: transform 0.2s ease;
+}
+
+.logo i:hover {
+    transform: scale(1.1);
 }
 
 .logo h1 {
     font-size: 28px;
     color: var(--accent-orange);
     letter-spacing: 1px;
+    font-weight: 700;
 }
 
+/* Controls */
 .header-controls {
     display: flex;
     align-items: center;
@@ -75,6 +86,7 @@ header {
     flex-wrap: wrap;
 }
 
+/* User Status */
 .user-status {
     display: flex;
     align-items: center;
@@ -83,13 +95,16 @@ header {
     padding: 10px 15px;
     border-radius: 8px;
     border: 1px solid var(--border-color);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
+    transition: box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
 .status-indicator {
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background-color: var(--success-green);
+    background-color: var(--success-green); /* default online */
+    transition: background-color 0.3s ease;
 }
 
 .status-indicator.offline {
@@ -106,11 +121,13 @@ header {
     50% { opacity: 0.5; }
 }
 
+/* Main app layout */
 .main-app {
     display: flex;
     flex-direction: column;
     gap: 25px;
     padding: 25px 0;
+    transition: all 0.3s ease;
 }
 
 @media (min-width: 1200px) {
@@ -119,12 +136,14 @@ header {
     }
 }
 
+/* Sections */
 .chat-section, .history-section {
     background-color: var(--card-bg);
     border-radius: 12px;
     border: 1px solid var(--border-color);
     overflow: hidden;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .chat-section {
@@ -137,6 +156,7 @@ header {
     overflow-y: auto;
 }
 
+/* Sticky header in sections */
 .section-header {
     background-color: var(--darker-bg);
     padding: 18px 20px;
@@ -147,6 +167,9 @@ header {
     position: sticky;
     top: 0;
     z-index: 10;
+    backdrop-filter: blur(4px);
+    background-color: rgba(38, 38, 38, 0.95);
+    transition: background-color 0.3s ease;
 }
 
 .section-header h2 {
@@ -155,8 +178,10 @@ header {
     display: flex;
     align-items: center;
     gap: 10px;
+    font-weight: 600;
 }
 
+/* Chat Mode Indicator */
 .chat-mode-indicator {
     display: flex;
     align-items: center;
@@ -165,8 +190,10 @@ header {
     background-color: var(--historical-bg);
     border-radius: 6px;
     font-size: 14px;
+    font-weight: 500;
 }
 
+/* Chat Messages */
 .chat-messages {
     height: 500px;
     overflow-y: auto;
@@ -175,41 +202,50 @@ header {
     flex-direction: column;
     gap: 15px;
     background-color: var(--dark-bg);
+    transition: background-color 0.3s ease;
 }
 
+/* Messages */
 .message {
     max-width: 80%;
     padding: 12px 16px;
     border-radius: 18px;
     position: relative;
     line-height: 1.4;
-    transition: all 0.3s;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .message:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
 }
 
+/* Sent messages */
 .message.sent {
     align-self: flex-end;
     background-color: var(--accent-orange);
     color: var(--darker-bg);
     border-bottom-right-radius: 5px;
+    border-top-right-radius: 18px;
 }
 
+/* Received messages */
 .message.received {
     align-self: flex-start;
     background-color: #555555;
     color: var(--text-primary);
     border-bottom-left-radius: 5px;
+    border-top-left-radius: 18px;
 }
 
+/* Historical message style, subtle border */
 .message.historical {
     background-color: var(--historical-bg);
     border: 1px solid var(--border-color);
 }
 
+/* Sender Name */
 .message-sender {
     font-size: 12px;
     font-weight: bold;
@@ -221,6 +257,7 @@ header {
     color: #000;
 }
 
+/* Message content and time */
 .message-content {
     display: flex;
     align-items: flex-end;
@@ -229,6 +266,7 @@ header {
 
 .message-text {
     flex: 1;
+    font-size: 14px;
 }
 
 .message-time {
@@ -237,12 +275,13 @@ header {
     white-space: nowrap;
 }
 
+/* Actions */
 .message-actions {
     display: flex;
     gap: 8px;
     margin-top: 5px;
     opacity: 0;
-    transition: opacity 0.3s;
+    transition: opacity 0.3s ease;
 }
 
 .message:hover .message-actions {
@@ -257,7 +296,7 @@ header {
     font-size: 12px;
     padding: 2px 6px;
     border-radius: 3px;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
 }
 
 .message-action-btn:hover {
@@ -265,27 +304,31 @@ header {
     background-color: rgba(255, 152, 0, 0.1);
 }
 
+/* Image preview */
 .message-image {
     max-width: 300px;
     max-height: 300px;
     border-radius: 8px;
     margin-top: 8px;
     cursor: pointer;
-    transition: transform 0.3s;
+    transition: transform 0.3s ease;
 }
 
 .message-image:hover {
     transform: scale(1.02);
 }
 
+/* Chat input area */
 .chat-input-area {
     padding: 20px;
     border-top: 1px solid var(--border-color);
     display: flex;
     gap: 10px;
     align-items: flex-end;
+    background-color: var(--darker-bg);
 }
 
+/* Input wrapper */
 .chat-input-wrapper {
     flex: 1;
     display: flex;
@@ -293,6 +336,7 @@ header {
     gap: 10px;
 }
 
+/* Message input box */
 .message-input {
     width: 100%;
     padding: 14px 18px;
@@ -302,7 +346,7 @@ header {
     color: var(--text-primary);
     font-size: 16px;
     outline: none;
-    transition: border-color 0.3s;
+    transition: border-color 0.3s ease, box-shadow 0.2s ease;
     resize: none;
     min-height: 60px;
     max-height: 120px;
@@ -310,14 +354,17 @@ header {
 
 .message-input:focus {
     border-color: var(--accent-orange);
+    box-shadow: 0 0 8px rgba(255, 152, 0, 0.5);
 }
 
+/* Action buttons in input area */
 .input-actions {
     display: flex;
     gap: 10px;
     align-items: center;
 }
 
+/* File upload button */
 .file-input-label {
     display: flex;
     align-items: center;
@@ -327,7 +374,7 @@ header {
     background-color: var(--border-color);
     border-radius: 50%;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background-color 0.3s ease;
 }
 
 .file-input-label:hover {
@@ -335,6 +382,7 @@ header {
     color: var(--darker-bg);
 }
 
+/* Buttons styling */
 .btn {
     padding: 14px 24px;
     background-color: var(--accent-orange);
@@ -343,12 +391,11 @@ header {
     border-radius: 8px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.3s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    white-space: nowrap;
 }
 
 .btn:hover {
@@ -356,38 +403,43 @@ header {
     transform: translateY(-2px);
 }
 
+/* Danger button */
 .btn-danger {
     background-color: var(--danger-red);
-    color: white;
+    color: #fff;
 }
 
 .btn-danger:hover {
     background-color: #d32f2f;
 }
 
+/* Secondary button */
 .btn-secondary {
     background-color: var(--border-color);
     color: var(--text-primary);
 }
 
 .btn-secondary:hover {
-    background-color: #444;
+    background-color: #555;
 }
 
+/* Success button */
 .btn-success {
     background-color: var(--success-green);
-    color: white;
+    color: #fff;
 }
 
 .btn-success:hover {
     background-color: #3d8b40;
 }
 
+/* Small size buttons */
 .btn-small {
     padding: 8px 16px;
     font-size: 14px;
 }
 
+/* Session cards styling */
 .history-cards {
     padding: 20px;
     display: flex;
@@ -401,7 +453,7 @@ header {
     padding: 15px;
     border-left: 4px solid var(--border-color);
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.3s ease, box-shadow 0.2s ease;
     position: relative;
 }
 
@@ -415,6 +467,7 @@ header {
     background-color: rgba(76, 175, 80, 0.1);
 }
 
+/* Session header */
 .session-card-header {
     display: flex;
     justify-content: space-between;
@@ -430,7 +483,7 @@ header {
 
 .session-active-badge {
     background-color: var(--success-green);
-    color: white;
+    color: #fff;
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 12px;
@@ -458,22 +511,24 @@ header {
 .session-info-value {
     font-size: 14px;
     font-weight: 500;
-    word-break: break-all;
+    word-break: break-word;
 }
 
+/* Session actions */
 .session-actions {
     display: flex;
     gap: 10px;
     justify-content: flex-end;
 }
 
+/* Modal overlay */
 .modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.8);
+    background-color: rgba(0, 0, 0, 0.85);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -481,6 +536,7 @@ header {
     padding: 20px;
 }
 
+/* Modal content */
 .modal-content {
     background-color: var(--card-bg);
     border-radius: 12px;
@@ -489,8 +545,11 @@ header {
     max-height: 90vh;
     overflow-y: auto;
     border: 1px solid var(--accent-orange);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+    transition: box-shadow 0.3s ease;
 }
 
+/* Modal header */
 .modal-header {
     background-color: var(--darker-bg);
     padding: 20px;
@@ -506,12 +565,15 @@ header {
     display: flex;
     align-items: center;
     gap: 10px;
+    font-weight: 600;
 }
 
+/* Modal body */
 .modal-body {
     padding: 20px;
 }
 
+/* Guests list */
 .pending-guests-list {
     display: flex;
     flex-direction: column;
@@ -521,6 +583,7 @@ header {
     margin: 20px 0;
 }
 
+/* Guest item */
 .pending-guest {
     display: flex;
     justify-content: space-between;
@@ -529,6 +592,13 @@ header {
     background-color: var(--darker-bg);
     border-radius: 8px;
     border: 1px solid var(--border-color);
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    cursor: pointer;
+}
+
+.pending-guest:hover {
+    background-color: rgba(76, 175, 80, 0.1);
+    transform: translateY(-2px);
 }
 
 .guest-info {
@@ -542,6 +612,7 @@ header {
     gap: 10px;
 }
 
+/* Sound control */
 .sound-control {
     display: flex;
     align-items: center;
@@ -550,7 +621,7 @@ header {
     background-color: var(--darker-bg);
     border-radius: 20px;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .sound-control:hover {
@@ -561,6 +632,7 @@ header {
     color: var(--danger-red);
 }
 
+/* Typing indicator */
 .typing-indicator {
     padding: 10px 20px;
     font-style: italic;
@@ -572,6 +644,7 @@ header {
     display: block;
 }
 
+/* Emoji picker styling */
 .emoji-picker {
     position: absolute;
     bottom: 100%;
@@ -606,6 +679,7 @@ header {
     color: var(--darker-bg);
 }
 
+/* Image modal overlay */
 .image-modal-overlay {
     position: fixed;
     top: 0;
@@ -623,14 +697,19 @@ header {
 .image-modal-content {
     max-width: 90vw;
     max-height: 90vh;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.4);
 }
 
 .image-modal-content img {
-    max-width: 100%;
-    max-height: 100%;
+    width: 100%;
+    height: auto;
+    display: block;
     border-radius: 8px;
 }
 
+/* Connection Modal */
 .connection-modal {
     position: fixed;
     top: 0;
@@ -644,10 +723,12 @@ header {
     z-index: 1000;
 }
 
+/* Login form */
 .login-form {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    width: 100%;
 }
 
 .form-group {
@@ -673,24 +754,20 @@ header {
     color: var(--text-primary);
     font-size: 16px;
     outline: none;
-    transition: border-color 0.3s;
+    transition: border-color 0.3s ease, box-shadow 0.2s ease;
 }
 
 .form-input:focus {
     border-color: var(--accent-orange);
+    box-shadow: 0 0 8px rgba(255, 152, 0, 0.5);
 }
 
+/* Select inputs */
 select.form-input {
     cursor: pointer;
 }
 
-.password-hint {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-top: 4px;
-    font-style: italic;
-}
-
+/* Error message style */
 .error-message {
     color: var(--danger-red);
     font-size: 14px;
@@ -698,6 +775,7 @@ select.form-input {
     display: none;
 }
 
+/* Footer */
 footer {
     margin-top: auto;
     padding: 20px;
@@ -707,7 +785,7 @@ footer {
     border-top: 1px solid var(--border-color);
 }
 
-/* Scrollbar Styling */
+/* Scrollbar styling for smooth look */
 ::-webkit-scrollbar {
     width: 8px;
 }
@@ -725,7 +803,7 @@ footer {
     background: var(--accent-orange);
 }
 
-/* Loading animation */
+/* Loading spinner with a modern touch */
 .loading-spinner {
     display: inline-block;
     width: 20px;
@@ -738,15 +816,4 @@ footer {
 
 @keyframes spin {
     to { transform: rotate(360deg); }
-}
-/* Add to your existing CSS */
-.status-indicator {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background-color: var(--danger-red); /* Default offline */
-}
-
-.status-indicator.online {
-    background-color: var(--success-green);
 }
