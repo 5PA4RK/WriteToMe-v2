@@ -1039,6 +1039,53 @@ function convertUrlsToMedia(text) {
     return text;
 }
 
+// Add URL preview functionality
+function checkForUrlsInInput() {
+    const text = messageInput.value;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = text.match(urlRegex);
+    
+    // Remove any existing preview
+    const existingPreview = document.getElementById('urlPreview');
+    if (existingPreview) {
+        existingPreview.remove();
+    }
+    
+    if (urls && urls.length > 0) {
+        // Create preview container
+        const previewDiv = document.createElement('div');
+        previewDiv.id = 'urlPreview';
+        previewDiv.className = 'url-preview';
+        previewDiv.innerHTML = `<i class="fas fa-link"></i> URL detected - will be embedded when sent`;
+        
+        // Insert after the textarea
+        const inputWrapper = document.querySelector('.chat-input-wrapper');
+        if (inputWrapper) {
+            inputWrapper.appendChild(previewDiv);
+        }
+    }
+}
+
+// Update the event listener setup
+function setupEventListeners() {
+    // ... existing code ...
+    
+    // Chat functionality
+    messageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    
+    messageInput.addEventListener('input', () => {
+        handleTyping();
+        checkForUrlsInInput(); // Add this line
+    });
+    
+    // ... rest of existing code ...
+}
+
 // Edit a message
 async function editMessage(messageId) {
     const newText = prompt("Edit your message:");
