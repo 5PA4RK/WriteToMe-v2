@@ -849,7 +849,6 @@ async function handleTyping() {
 }
 
 // Send a chat message
-// Send a chat message
 async function sendMessage() {
     if (!appState.isConnected || appState.isViewingHistory) {
         alert("You cannot send messages right now.");
@@ -872,15 +871,6 @@ async function sendMessage() {
         reader.readAsDataURL(imageFile);
         imageUpload.value = '';
     } else {
-        // Check if message contains URLs that should be embedded
-        const hasMediaUrls = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|bmp|webp|svg|mp4|webm|ogg|mov|avi|wmv|flv|mkv|mp3|wav|ogg|m4a|flac|aac)|youtube\.com\/watch\?v=|youtu\.be\/|vimeo\.com\/)/i.test(messageText);
-        
-        if (hasMediaUrls) {
-            // Remove any URL preview
-            const preview = document.getElementById('urlPreview');
-            if (preview) preview.remove();
-        }
-        
         await sendMessageToDB(messageText, null);
     }
     
@@ -1049,54 +1039,6 @@ function convertUrlsToMedia(text) {
     return text;
 }
 
-// Add URL preview functionality
-function checkForUrlsInInput() {
-    const text = messageInput.value;
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const urls = text.match(urlRegex);
-    
-    // Remove any existing preview
-    const existingPreview = document.getElementById('urlPreview');
-    if (existingPreview) {
-        existingPreview.remove();
-    }
-    
-    if (urls && urls.length > 0) {
-        // Create preview container
-        const previewDiv = document.createElement('div');
-        previewDiv.id = 'urlPreview';
-        previewDiv.className = 'url-preview';
-        previewDiv.innerHTML = `<i class="fas fa-link"></i> URL detected - will be embedded when sent`;
-        
-        // Insert after the textarea
-        const inputWrapper = document.querySelector('.chat-input-wrapper');
-        if (inputWrapper) {
-            inputWrapper.appendChild(previewDiv);
-        }
-    }
-}
-
-// Update the event listener setup
-function setupEventListeners() {
-    // ... existing code ...
-    
-    // Chat functionality
-    messageInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
-    
-    messageInput.addEventListener('input', () => {
-        handleTyping();
-        checkForUrlsInInput(); // Add this line
-    });
-    
-    // ... rest of existing code ...
-}
-
-// Edit a message
 // Edit a message
 async function editMessage(messageId) {
     const newText = prompt("Edit your message:");
@@ -1117,9 +1059,7 @@ async function editMessage(messageId) {
             if (messageElement) {
                 const textElement = messageElement.querySelector('.message-text');
                 if (textElement) {
-                    // Convert URLs in the new text
-                    const convertedText = convertUrlsToMedia(`${newText.trim()} <small style="opacity:0.7;">(edited)</small>`);
-                    textElement.innerHTML = convertedText;
+                    textElement.innerHTML = `${newText.trim()} <small style="opacity:0.7;">(edited)</small>`;
                 }
             }
         } catch (error) {
