@@ -849,6 +849,7 @@ async function handleTyping() {
 }
 
 // Send a chat message
+// Send a chat message
 async function sendMessage() {
     if (!appState.isConnected || appState.isViewingHistory) {
         alert("You cannot send messages right now.");
@@ -871,6 +872,15 @@ async function sendMessage() {
         reader.readAsDataURL(imageFile);
         imageUpload.value = '';
     } else {
+        // Check if message contains URLs that should be embedded
+        const hasMediaUrls = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|bmp|webp|svg|mp4|webm|ogg|mov|avi|wmv|flv|mkv|mp3|wav|ogg|m4a|flac|aac)|youtube\.com\/watch\?v=|youtu\.be\/|vimeo\.com\/)/i.test(messageText);
+        
+        if (hasMediaUrls) {
+            // Remove any URL preview
+            const preview = document.getElementById('urlPreview');
+            if (preview) preview.remove();
+        }
+        
         await sendMessageToDB(messageText, null);
     }
     
@@ -1087,6 +1097,7 @@ function setupEventListeners() {
 }
 
 // Edit a message
+// Edit a message
 async function editMessage(messageId) {
     const newText = prompt("Edit your message:");
     if (newText !== null && newText.trim() !== '') {
@@ -1106,7 +1117,9 @@ async function editMessage(messageId) {
             if (messageElement) {
                 const textElement = messageElement.querySelector('.message-text');
                 if (textElement) {
-                    textElement.innerHTML = `${newText.trim()} <small style="opacity:0.7;">(edited)</small>`;
+                    // Convert URLs in the new text
+                    const convertedText = convertUrlsToMedia(`${newText.trim()} <small style="opacity:0.7;">(edited)</small>`);
+                    textElement.innerHTML = convertedText;
                 }
             }
         } catch (error) {
