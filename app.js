@@ -67,7 +67,6 @@ const imageModal = document.getElementById('imageModal');
 const fullSizeImage = document.getElementById('fullSizeImage');
 
 // Initialize the app
-// Initialize the app
 async function initApp() {
     // Check if user was previously connected
     const savedSession = localStorage.getItem('writeToMe_session');
@@ -79,12 +78,6 @@ async function initApp() {
             appState.userId = sessionData.userId;
             appState.sessionId = sessionData.sessionId;
             appState.soundEnabled = sessionData.soundEnabled !== false;
-            
-            // NEW: Hide history for guests immediately
-            const historySection = document.getElementById('historySection');
-            if (historySection && !appState.isHost) {
-                historySection.style.display = 'none';
-            }
             
             // Try to reconnect to the session
             if (await reconnectToSession()) {
@@ -115,11 +108,8 @@ async function initApp() {
     // Load emojis
     populateEmojis();
     
-    // Load chat sessions only if user might be a host
-    // (If no saved session or might be host)
-    if (!savedSession || appState.isHost) {
-        loadChatSessions();
-    }
+    // Load chat sessions
+    loadChatSessions();
 }
 
 // Set up all event listeners
@@ -920,7 +910,6 @@ async function sendMessageToDB(text, imageUrl) {
 }
 
 // Display a message in the chat
-// Display a message in the chat
 function displayMessage(message) {
     if (appState.isViewingHistory && message.is_historical === false) {
         return;
@@ -934,10 +923,6 @@ function displayMessage(message) {
     messageDiv.id = `msg-${message.id}`;
     
     let messageContent = message.text || '';
-    
-    // Check for image URLs in the text and convert them to image tags
-    messageContent = convertUrlsToMedia(messageContent);
-    
     if (message.image) {
         messageContent += `<img src="${message.image}" class="message-image" onclick="showFullImage('${message.image}')">`;
     }
@@ -965,78 +950,6 @@ function displayMessage(message) {
     
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-// Function to convert URLs in text to embedded media
-function convertUrlsToMedia(text) {
-    if (!text) return text;
-    
-    // Regular expressions for different media types
-    const imageRegex = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|bmp|webp|svg)(?:\?[^\s]*)?)/gi;
-    const videoRegex = /(https?:\/\/[^\s]+\.(?:mp4|webm|ogg|mov|avi|wmv|flv|mkv)(?:\?[^\s]*)?)/gi;
-    const audioRegex = /(https?:\/\/[^\s]+\.(?:mp3|wav|ogg|m4a|flac|aac)(?:\?[^\s]*)?)/gi;
-    const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/gi;
-    const vimeoRegex = /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/gi;
-    const generalUrlRegex = /(https?:\/\/[^\s]+)/gi;
-    
-    // Replace YouTube links
-    text = text.replace(youtubeRegex, (match, videoId) => {
-        return `<div class="embed-container">
-                    <iframe src="https://www.youtube.com/embed/${videoId}" 
-                            frameborder="0" 
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                            allowfullscreen>
-                    </iframe>
-                </div>`;
-    });
-    
-    // Replace Vimeo links
-    text = text.replace(vimeoRegex, (match, videoId) => {
-        return `<div class="embed-container">
-                    <iframe src="https://player.vimeo.com/video/${videoId}" 
-                            frameborder="0" 
-                            allow="autoplay; fullscreen; picture-in-picture" 
-                            allowfullscreen>
-                    </iframe>
-                </div>`;
-    });
-    
-    // Replace image links
-    text = text.replace(imageRegex, (match) => {
-        return `<img src="${match}" class="message-image" onclick="showFullImage('${match}')" loading="lazy">`;
-    });
-    
-    // Replace video links
-    text = text.replace(videoRegex, (match) => {
-        return `<div class="video-container">
-                    <video controls class="message-video">
-                        <source src="${match}" type="video/mp4">
-                        Your browser does not support the video tag.
-                    </video>
-                </div>`;
-    });
-    
-    // Replace audio links
-    text = text.replace(audioRegex, (match) => {
-        return `<div class="audio-container">
-                    <audio controls class="message-audio">
-                        <source src="${match}" type="audio/mpeg">
-                        Your browser does not support the audio element.
-                    </audio>
-                </div>`;
-    });
-    
-    // For other URLs, make them clickable links
-    text = text.replace(generalUrlRegex, (match) => {
-        // Skip if already embedded as media
-        if (match.includes('<img') || match.includes('<video') || match.includes('<audio') || 
-            match.includes('<iframe') || match.includes('<div class="embed-container"')) {
-            return match;
-        }
-        return `<a href="${match}" target="_blank" rel="noopener noreferrer" class="message-link">${match}</a>`;
-    });
-    
-    return text;
 }
 
 // Edit a message
