@@ -1100,3 +1100,369 @@ input:focus, button:focus, textarea:focus {
     border-radius: 4px;
     margin-top: 4px;
 }
+
+/* Password hint styling */
+.password-hint {
+    font-size: 12px;
+    color: var(--accent-light);
+    margin-top: 4px;
+    font-style: italic;
+    opacity: 0.8;
+    padding: 4px 8px;
+    background: rgba(138, 43, 226, 0.1);
+    border-radius: 4px;
+    border-left: 2px solid var(--accent-primary);
+    display: none;
+}
+/* User Management Styles */
+.user-management-section {
+    margin-top: 25px;
+    background-color: var(--card-bg);
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+}
+
+.user-management-controls {
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    background: rgba(21, 33, 62, 0.8);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.search-box {
+    position: relative;
+    flex: 1;
+    max-width: 300px;
+}
+
+.search-box input {
+    width: 100%;
+    padding: 10px 15px 10px 40px;
+    background: rgba(15, 52, 96, 0.8);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.search-box i {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent-light);
+}
+
+.users-list {
+    padding: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.user-card {
+    background: linear-gradient(135deg, rgba(21, 33, 62, 0.9), rgba(15, 52, 96, 0.9));
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-left: 4px solid var(--accent-secondary);
+    transition: all 0.3s;
+    backdrop-filter: blur(5px);
+}
+
+.user-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(138, 43, 226, 0.2);
+    border-left-color: var(--accent-primary);
+}
+
+.user-card.inactive {
+    opacity: 0.7;
+    border-left-color: var(--danger-red);
+}
+
+.user-card.host {
+    border-left-color: var(--success-green);
+}
+
+.user-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.user-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-name i {
+    color: var(--accent-light);
+    font-size: 18px;
+}
+
+.user-name h3 {
+    font-size: 16px;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.user-badge {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.badge-host {
+    background: linear-gradient(135deg, var(--success-green), #2ecc71);
+    color: white;
+}
+
+.badge-guest {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary));
+    color: white;
+}
+
+.badge-inactive {
+    background: linear-gradient(135deg, var(--danger-red), #ff4757);
+    color: white;
+}
+
+.user-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.user-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.user-detail-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.user-detail-value {
+    font-size: 13px;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+.user-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.modal-actions .btn {
+    flex: 1;
+}
+/* Admin Panel Styles */
+.admin-panel {
+    margin-top: 25px;
+    background-color: var(--card-bg);
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+}
+
+.admin-tabs {
+    display: flex;
+    background: linear-gradient(90deg, var(--darker-bg), var(--card-bg));
+    border-bottom: 1px solid var(--accent-secondary);
+    overflow-x: auto;
+}
+
+.admin-tab {
+    padding: 15px 25px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s;
+    white-space: nowrap;
+    border-bottom: 3px solid transparent;
+}
+
+.admin-tab:hover {
+    color: var(--accent-light);
+    background: rgba(138, 43, 226, 0.1);
+}
+
+.admin-tab.active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+    background: linear-gradient(135deg, rgba(138, 43, 226, 0.15), rgba(106, 90, 205, 0.15));
+}
+
+.admin-tab-content {
+    min-height: 400px;
+}
+
+.tab-pane {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+/* Update the existing history-section to work within tabs */
+.admin-panel .history-section,
+.admin-panel .user-management-section {
+    background: none;
+    border: none;
+    box-shadow: none;
+    margin: 0;
+    border-radius: 0;
+}
+
+.admin-panel .history-cards {
+    max-height: 500px;
+    overflow-y: auto;
+}
+/* Make sure the pending guests button is visible in header */
+.header-controls #pendingGuestsBtn {
+    display: none !important; /* Start hidden */
+}
+
+.header-controls #pendingGuestsBtn[style*="display: flex"] {
+    display: flex !important;
+}
+/* Add to style.css */
+.guest-count-badge {
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-light));
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    margin-left: 5px;
+}
+/* Pending Guests Modal Styles */
+.pending-guest {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: linear-gradient(135deg, rgba(21, 33, 62, 0.8), rgba(15, 52, 96, 0.8));
+    border-radius: 12px;
+    border: 1px solid var(--accent-secondary);
+    backdrop-filter: blur(5px);
+    transition: all 0.3s;
+    margin-bottom: 10px;
+}
+
+.pending-guest:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(138, 43, 226, 0.2);
+    border-color: var(--accent-primary);
+}
+
+.guest-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+}
+
+.guest-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.guest-name i {
+    color: var(--accent-light);
+}
+
+.guest-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.guest-details small {
+    color: var(--text-secondary);
+    font-size: 12px;
+    display: block;
+}
+
+.guest-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Pulsing animation for pending button */
+@keyframes pulsePending {
+    0% { box-shadow: 0 0 0 0 rgba(138, 43, 226, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(138, 43, 226, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(138, 43, 226, 0); }
+}
+
+#pendingGuestsBtn.has-pending {
+    animation: pulsePending 2s infinite;
+    position: relative;
+}
+
+#pendingGuestsBtn.has-pending::after {
+    content: '';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 10px;
+    height: 10px;
+    background: var(--danger-red);
+    border-radius: 50%;
+    border: 2px solid var(--darker-bg);
+}
+
+/* Modal max height */
+.pending-guests-list {
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+/* Scrollbar for pending list */
+.pending-guests-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.pending-guests-list::-webkit-scrollbar-track {
+    background: rgba(21, 33, 62, 0.5);
+    border-radius: 10px;
+}
+
+.pending-guests-list::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary));
+    border-radius: 10px;
+}
