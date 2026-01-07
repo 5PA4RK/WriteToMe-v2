@@ -621,6 +621,7 @@ async function handleConnect() {
 }
 
 // Connect as host
+// Connect as host
 async function connectAsHost(userIP) {
     try {
         const sessionId = 'session_' + Date.now().toString(36);
@@ -637,7 +638,7 @@ async function connectAsHost(userIP) {
                     is_active: true,
                     requires_approval: true,
                     created_at: new Date().toISOString(),
-                    max_guests: 50 // Set a reasonable limit
+                    max_guests: 50
                 }
             ])
             .select()
@@ -673,13 +674,11 @@ async function connectAsHost(userIP) {
         // Add connection message to chat
         await saveMessageToDB('System', `${appState.userName} has created a new chat session. Multiple guests can now join.`);
         
-        // Setup real-time subscriptions
+        // Setup real-time subscriptions - THIS IS IMPORTANT
         setupRealtimeSubscriptions();
         
-        // If host, show pending guests button
-        pendingGuestsBtn.style.display = 'flex';
+        // Load initial pending guests
         loadPendingGuests();
-        setupPendingGuestsSubscription();
         
         // Load chat history
         loadChatHistory();
@@ -1292,6 +1291,7 @@ if (appState.isHost) {
 }
 
 // Setup real-time subscriptions
+// Setup real-time subscriptions
 function setupRealtimeSubscriptions() {
     if (appState.realtimeSubscription) {
         supabaseClient.removeChannel(appState.realtimeSubscription);
@@ -1326,6 +1326,36 @@ function setupRealtimeSubscriptions() {
                     if (appState.soundEnabled && !appState.isViewingHistory) {
                         messageSound.currentTime = 0;
                         messageSound.play().catch(e => console.log("Audio play failed:", e));
+                    }
+                }
+            }
+        )
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'session_guests',
+                filter: 'session_id=eq.' + appState.currentSessionId + 'AND status=eq.pending'
+            },
+            (payload) => {
+                console.log('Pending guest update:', payload);
+                if (appState.isHost) {
+                    loadPendingGuests();
+                    
+                    // Show notification for new pending guests
+                    if (payload.eventType === 'INSERT') {
+                        showNewGuestNotification(payload.new);
+                        
+                        // Update pending count in real-time
+                        if (pendingCount) {
+                            const currentCount = parseInt(pendingCount.textContent) || 0;
+                            pendingCount.textContent = currentCount + 1;
+                            pendingGuestsBtn.style.display = 'flex';
+                        }
+                    } else if (payload.eventType === 'UPDATE' && payload.new.status !== 'pending') {
+                        // Guest was approved/rejected - update count
+                        loadPendingGuests();
                     }
                 }
             }
@@ -1695,31 +1725,33 @@ async function loadPendingGuests() {
         if (error) {
             console.error("Error loading pending guests:", error);
             appState.pendingGuests = [];
+            updatePendingUI();
             return;
         }
         
         appState.pendingGuests = guests || [];
+        updatePendingUI();
         
-        console.log("Loaded pending guests:", appState.pendingGuests.length, guests);
-        
-        // Update the button visibility and count
-        if (pendingGuestsBtn && pendingCount) {
-            pendingCount.textContent = appState.pendingGuests.length;
-            if (appState.pendingGuests.length > 0) {
-                pendingGuestsBtn.style.display = 'flex';
-                pendingGuestsBtn.classList.add('has-pending');
-            } else {
-                pendingGuestsBtn.style.display = 'none';
-                pendingGuestsBtn.classList.remove('has-pending');
-            }
-        }
     } catch (error) {
         console.error("Error in loadPendingGuests:", error);
         appState.pendingGuests = [];
-        
-        if (pendingGuestsBtn && pendingCount) {
-            pendingCount.textContent = '0';
+        updatePendingUI();
+    }
+}
+
+// Helper function to update pending UI
+function updatePendingUI() {
+    if (!appState.isHost) return;
+    
+    // Update the button visibility and count
+    if (pendingGuestsBtn && pendingCount) {
+        pendingCount.textContent = appState.pendingGuests.length;
+        if (appState.pendingGuests.length > 0) {
+            pendingGuestsBtn.style.display = 'flex';
+            pendingGuestsBtn.classList.add('has-pending');
+        } else {
             pendingGuestsBtn.style.display = 'none';
+            pendingGuestsBtn.classList.remove('has-pending');
         }
     }
 }
