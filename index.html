@@ -3,54 +3,153 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WriteToMira - Secure Chat Application">
     <title>WriteToMira - Secure Chat</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" as="style" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com/ajax/libs">
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://plqvqenoroacvzwtgoxq.supabase.co">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">
+    
+    <!-- Inline critical CSS -->
+    <style>
+        /* Critical above-the-fold styles */
+        :root {
+            --primary: #8a2be2;
+            --primary-light: #9370db;
+            --primary-dark: #483d8b;
+            --secondary: #2d4263;
+            --success: #4ecdc4;
+            --danger: #ff6b6b;
+            --warning: #ffd166;
+            --info: #118ab2;
+            --bg-dark: #0f3460;
+            --bg-darker: #15213e;
+            --bg-card: rgba(21, 33, 62, 0.9);
+            --text: #e6e6e6;
+            --text-muted: #b8b8b8;
+            --border: #2d4263;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            width: 100%;
+        }
+
+        .connection-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 15, 30, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+
+        /* Loading skeleton */
+        .skeleton {
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* No script fallback */
+        .no-js-message {
+            text-align: center;
+            padding: 40px;
+            background: var(--bg-card);
+            border-radius: 16px;
+            margin: 20px;
+            border: 1px solid var(--primary);
+        }
+    </style>
+    
+    <!-- Main stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Connection Modal -->
-<!-- Replace the entire login form inside the connection modal -->
-<!-- Replace your connection modal with this -->
-<div id="connectionModal" class="connection-modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2><i class="fas fa-user-shield"></i> WriteToMira - Secure Connection</h2>
+    <!-- No JavaScript message -->
+    <noscript>
+        <div class="no-js-message">
+            <h2><i class="fas fa-exclamation-triangle"></i> JavaScript Required</h2>
+            <p>WriteToMira requires JavaScript to function properly. Please enable JavaScript in your browser settings.</p>
         </div>
-        <div class="modal-body">
-            <div class="login-form">
+    </noscript>
 
-                <div class="form-group">
-                    <label for="usernameInput"><i class="fas fa-user"></i> Username:</label>
-                    <input type="text" id="usernameInput" class="form-input" placeholder="Enter Name7">
-                </div>
-                
-                <div class="form-group">
-                    <label for="passwordInput"><i class="fas fa-lock"></i> Password:</label>
-                    <input type="password" id="passwordInput" class="form-input" placeholder="Enter password">
-                    <div class="password-hint" id="passwordHint">
-                        <!-- Password hints will go here -->
+    <!-- Connection Modal -->
+    <div id="connectionModal" class="connection-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-user-shield"></i> WriteToMira - Secure Connection</h2>
+            </div>
+            <div class="modal-body">
+                <div class="login-form">
+                    <div class="form-group">
+                        <label for="usernameInput"><i class="fas fa-user"></i> Username:</label>
+                        <input type="text" id="usernameInput" class="form-input" placeholder="Enter username" autocomplete="username">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="passwordInput"><i class="fas fa-lock"></i> Password:</label>
+                        <input type="password" id="passwordInput" class="form-input" placeholder="Enter password" autocomplete="current-password">
+                        <div class="password-hint" id="passwordHint" aria-live="polite"></div>
+                    </div>
+                    
+                    <div id="passwordError" class="error-message" style="display: none;" role="alert">
+                        Incorrect password for selected role.
+                    </div>
+                    
+                    <button id="connectBtn" class="btn" style="width: 100%; margin-top: 20px;" aria-label="Connect to chat">
+                        <i class="fas fa-plug"></i> Connect
+                    </button>
+
+                    <!-- Demo credentials -->
+                    <div class="demo-credentials" style="margin-top: 20px; padding: 15px; background: rgba(138, 43, 226, 0.1); border-radius: 8px; font-size: 12px;">
+                        <p style="margin-bottom: 5px; color: var(--primary-light);"><i class="fas fa-info-circle"></i> Demo Accounts:</p>
+                        <p><strong>Host:</strong> username: host | password: host123</p>
+                        <p><strong>Guest:</strong> username: guest | password: guest123</p>
                     </div>
                 </div>
-                
-                <div id="passwordError" class="error-message" style="display: none;">
-                    Incorrect password for selected role.
-                </div>
-                
-                <button id="connectBtn" class="btn" style="width: 100%; margin-top: 20px;">
-                    <i class="fas fa-plug"></i> Connect
-                </button>
             </div>
         </div>
     </div>
-</div>
 
     <!-- Pending Guests Modal -->
-    <div id="pendingGuestsModal" class="modal-overlay" style="display: none;">
-        <div class="modal-content">
+    <div id="pendingGuestsModal" class="modal-overlay" style="display: none;" aria-hidden="true">
+        <div class="modal-content" role="dialog" aria-labelledby="pendingGuestsTitle">
             <div class="modal-header">
-                <h2><i class="fas fa-user-clock"></i> Pending Guests</h2>
-                <button id="closePendingModal" class="btn btn-secondary btn-small">
+                <h2 id="pendingGuestsTitle"><i class="fas fa-user-clock"></i> Pending Guests</h2>
+                <button id="closePendingModal" class="btn btn-secondary btn-small" aria-label="Close modal">
                     <i class="fas fa-times"></i> Close
                 </button>
             </div>
@@ -58,45 +157,139 @@
                 <div id="pendingGuestsList" class="pending-guests-list">
                     <!-- Pending guests will be listed here -->
                 </div>
-                <div id="noPendingGuests" style="text-align: center; padding: 20px; color: var(--text-secondary);">
-                    No pending guests at the moment.
+                <div id="noPendingGuests" style="text-align: center; padding: 20px; color: var(--text-muted);">
+                    <i class="fas fa-users-slash fa-2x" style="margin-bottom: 10px;"></i>
+                    <p>No pending guests at the moment.</p>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Image Modal -->
-    <div id="imageModal" class="image-modal-overlay" style="display: none;">
+    <div id="imageModal" class="image-modal-overlay" style="display: none;" aria-hidden="true">
         <div class="image-modal-content">
             <img id="fullSizeImage" src="" alt="Full size image">
+            <button id="closeImageModal" class="btn btn-secondary btn-small" style="position: absolute; top: 15px; right: 15px;" aria-label="Close image">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
     </div>
 
-    <header>
+    <!-- Add User Modal -->
+    <div id="addUserModal" class="modal-overlay" style="display: none;" aria-hidden="true">
+        <div class="modal-content" role="dialog" aria-labelledby="addUserTitle">
+            <div class="modal-header">
+                <h2 id="addUserTitle"><i class="fas fa-user-plus"></i> Add New User</h2>
+                <button id="closeAddUserModal" class="btn btn-secondary btn-small" aria-label="Close modal">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="addUserForm" onsubmit="return false;">
+                    <div class="form-group">
+                        <label for="newUsername"><i class="fas fa-user"></i> Username:</label>
+                        <input type="text" id="newUsername" class="form-input" placeholder="Enter username" required autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label for="newDisplayName"><i class="fas fa-id-card"></i> Display Name:</label>
+                        <input type="text" id="newDisplayName" class="form-input" placeholder="Enter display name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassword"><i class="fas fa-lock"></i> Password:</label>
+                        <input type="password" id="newPassword" class="form-input" placeholder="Enter password" required autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="newRole"><i class="fas fa-user-tag"></i> Role:</label>
+                        <select id="newRole" class="form-input" required>
+                            <option value="guest">Guest</option>
+                            <option value="host">Host</option>
+                        </select>
+                    </div>
+                    <div id="addUserError" class="error-message" style="display: none;" role="alert"></div>
+                    <button id="saveUserBtn" class="btn" style="width: 100%; margin-top: 20px;" type="submit">
+                        <i class="fas fa-save"></i> Save User
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div id="editUserModal" class="modal-overlay" style="display: none;" aria-hidden="true">
+        <div class="modal-content" role="dialog" aria-labelledby="editUserTitle">
+            <div class="modal-header">
+                <h2 id="editUserTitle"><i class="fas fa-user-edit"></i> Edit User</h2>
+                <button id="closeEditUserModal" class="btn btn-secondary btn-small" aria-label="Close modal">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="editUserForm" onsubmit="return false;">
+                    <input type="hidden" id="editUserId">
+                    <div class="form-group">
+                        <label for="editUsername"><i class="fas fa-user"></i> Username:</label>
+                        <input type="text" id="editUsername" class="form-input" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="editDisplayName"><i class="fas fa-id-card"></i> Display Name:</label>
+                        <input type="text" id="editDisplayName" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editPassword"><i class="fas fa-lock"></i> New Password (leave blank to keep current):</label>
+                        <input type="password" id="editPassword" class="form-input" placeholder="Enter new password" autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="editRole"><i class="fas fa-user-tag"></i> Role:</label>
+                        <select id="editRole" class="form-input" required>
+                            <option value="guest">Guest</option>
+                            <option value="host">Host</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editIsActive" style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="editIsActive" style="width: auto;">
+                            <span>Active Account</span>
+                        </label>
+                    </div>
+                    <div id="editUserError" class="error-message" style="display: none;" role="alert"></div>
+                    <div class="modal-actions">
+                        <button id="updateUserBtn" class="btn" type="submit">
+                            <i class="fas fa-save"></i> Update User
+                        </button>
+                        <button id="deleteUserBtn" class="btn btn-danger" type="button">
+                            <i class="fas fa-trash"></i> Delete User
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header role="banner">
         <div class="container">
             <div class="header-content">
                 <div class="logo">
-                    <i class="fas fa-comment-alt"></i>
+                    <i class="fas fa-comment-alt" aria-hidden="true"></i>
                     <h1>WriteToMira</h1>
                 </div>
                 <div class="header-controls">
-                    <div class="sound-control" id="soundControl">
+                    <button id="soundControl" class="sound-control" aria-label="Toggle sound">
                         <i class="fas fa-volume-up"></i>
                         <span>Sound On</span>
-                    </div>
+                    </button>
+                    
                     <div class="user-status">
-                        <div id="statusIndicator" class="status-indicator offline"></div>
+                        <div id="statusIndicator" class="status-indicator offline" aria-label="Connection status"></div>
                         <span id="userRoleDisplay">Disconnected</span>
                     </div>
                     
-                    <!-- PENDING GUESTS BUTTON (for hosts only) -->
-                    <button id="pendingGuestsBtn" class="btn btn-secondary" style="display: none;">
+                    <button id="pendingGuestsBtn" class="btn btn-secondary" style="display: none;" aria-label="View pending guests">
                         <i class="fas fa-user-clock"></i> 
                         <span id="pendingCount">0</span> Pending
                     </button>
                     
-                    <!-- LOGOUT BUTTON -->
-                    <button id="logoutBtn" class="btn btn-secondary" style="display: none;">
+                    <button id="logoutBtn" class="btn btn-secondary" style="display: none;" aria-label="Logout">
                         <i class="fas fa-sign-out-alt"></i> Logout
                     </button>
                 </div>
@@ -104,10 +297,11 @@
         </div>
     </header>
 
-    <div class="container">
+    <!-- Main Content -->
+    <main class="container" role="main">
         <div class="main-app">
             <!-- Chat Section -->
-            <section class="chat-section">
+            <section class="chat-section" aria-labelledby="chatTitle">
                 <div class="section-header">
                     <h2 id="chatTitle"><i class="fas fa-comments"></i> Active Chat</h2>
                     <div class="chat-mode-indicator" id="chatModeIndicator" style="display: none;">
@@ -118,13 +312,14 @@
                         </button>
                     </div>
                     <div class="chat-actions">
-                        <button id="clearChatBtn" class="btn btn-danger btn-small">
+                        <button id="clearChatBtn" class="btn btn-danger btn-small" aria-label="Clear chat">
                             <i class="fas fa-trash-alt"></i> Clear
                         </button>
                     </div>
                 </div>
-                <div class="chat-messages" id="chatMessages">
-                    <!-- Messages will appear here -->
+                
+                <div class="chat-messages" id="chatMessages" role="log" aria-live="polite" aria-atomic="false">
+                    <!-- Welcome message skeleton -->
                     <div class="message received">
                         <div class="message-sender">System</div>
                         <div class="message-content">
@@ -133,209 +328,208 @@
                         </div>
                     </div>
                 </div>
-                <div id="typingIndicator" class="typing-indicator">
+                
+                <div id="typingIndicator" class="typing-indicator" aria-live="polite" style="display: none;">
                     <i class="fas fa-pencil-alt"></i> <span id="typingUser">User</span> is typing...
                 </div>
+                
                 <div class="chat-input-area">
                     <div class="chat-input-wrapper">
-                        <textarea id="messageInput" class="message-input" placeholder="Type your message here... (Press Enter to send, Shift+Enter for new line)" disabled></textarea>
+                        <textarea 
+                            id="messageInput" 
+                            class="message-input" 
+                            placeholder="Type your message here... (Press Enter to send, Shift+Enter for new line)" 
+                            disabled
+                            rows="1"
+                            aria-label="Message input"
+                        ></textarea>
                         <div class="input-actions">
-                            <label for="imageUpload" class="file-input-label">
+                            <label for="imageUpload" class="file-input-label" aria-label="Upload image" title="Upload image">
                                 <i class="fas fa-image"></i>
                                 <input type="file" id="imageUpload" accept="image/*" style="display: none;">
                             </label>
-                            <button id="emojiBtn" class="file-input-label">
+                            <button id="emojiBtn" class="file-input-label" aria-label="Open emoji picker" title="Emojis">
                                 <i class="fas fa-smile"></i>
                             </button>
-                            <div class="emoji-picker" id="emojiPicker">
+                            <div class="emoji-picker" id="emojiPicker" role="menu" aria-label="Emoji picker">
                                 <!-- Emojis will be populated by JavaScript -->
                             </div>
                         </div>
                     </div>
-                    <button id="sendMessageBtn" class="btn" disabled>
+                    <button id="sendMessageBtn" class="btn" disabled aria-label="Send message">
                         <i class="fas fa-paper-plane"></i> Send
                     </button>
                 </div>
             </section>
 
-
-        </div>
-    </div>
-
-<!-- Add this right after the chat-section -->
-<div class="admin-panel" id="adminSection" style="display: none;">
-    <div class="admin-tabs">
-        <button id="historyTabBtn" class="admin-tab active">
-            <i class="fas fa-history"></i> Chat Sessions
-        </button>
-        <button id="usersTabBtn" class="admin-tab">
-            <i class="fas fa-users-cog"></i> User Management
-        </button>
-    </div>
-    
-    <div class="admin-tab-content">
-        <div id="historyTabContent" class="tab-pane active">
-            <!-- This will contain the history cards -->
-            <div class="history-section">
-                <div class="section-header">
-                    <h2><i class="fas fa-history"></i> Chat Sessions</h2>
-                    <button id="refreshHistoryBtn" class="btn btn-small">
-                        <i class="fas fa-sync-alt"></i>
+            <!-- Admin Panel -->
+            <div class="admin-panel" id="adminSection" style="display: none;" aria-label="Admin panel">
+                <div class="admin-tabs" role="tablist">
+                    <button id="historyTabBtn" class="admin-tab active" role="tab" aria-selected="true" aria-controls="historyTabContent">
+                        <i class="fas fa-history"></i> Chat Sessions
                     </button>
-                </div>
-                <div class="history-cards" id="historyCards">
-                    <!-- Session cards will be populated here -->
-                </div>
-            </div>
-        </div>
-        
-        <div id="usersTabContent" class="tab-pane">
-            <!-- This will contain the user management -->
-            <div class="user-management-section">
-                <div class="section-header">
-                    <h2><i class="fas fa-users-cog"></i> User Management</h2>
+                    <button id="usersTabBtn" class="admin-tab" role="tab" aria-selected="false" aria-controls="usersTabContent">
+                        <i class="fas fa-users-cog"></i> User Management
+                    </button>
                 </div>
                 
-                <div class="user-management-controls">
-                    <button id="addUserBtn" class="btn btn-success">
-                        <i class="fas fa-user-plus"></i> Add New User
-                    </button>
-                    <div class="search-box">
-                        <input type="text" id="userSearchInput" placeholder="Search users..." class="form-input">
-                        <i class="fas fa-search"></i>
+                <div class="admin-tab-content">
+                    <!-- History Tab -->
+                    <div id="historyTabContent" class="tab-pane active" role="tabpanel" aria-labelledby="historyTabBtn">
+                        <div class="history-section">
+                            <div class="section-header">
+                                <h2><i class="fas fa-history"></i> Chat Sessions</h2>
+                                <button id="refreshHistoryBtn" class="btn btn-small" aria-label="Refresh sessions">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div class="history-cards" id="historyCards">
+                                <!-- Session cards will be populated here -->
+                                <div class="skeleton" style="height: 200px; border-radius: 12px; margin-bottom: 15px;"></div>
+                                <div class="skeleton" style="height: 200px; border-radius: 12px; margin-bottom: 15px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Users Tab -->
+                    <div id="usersTabContent" class="tab-pane" role="tabpanel" aria-labelledby="usersTabBtn" hidden>
+                        <div class="user-management-section">
+                            <div class="section-header">
+                                <h2><i class="fas fa-users-cog"></i> User Management</h2>
+                            </div>
+                            
+                            <div class="user-management-controls">
+                                <button id="addUserBtn" class="btn btn-success" aria-label="Add new user">
+                                    <i class="fas fa-user-plus"></i> Add New User
+                                </button>
+                                <div class="search-box">
+                                    <input type="text" id="userSearchInput" placeholder="Search users..." class="form-input" aria-label="Search users">
+                                    <i class="fas fa-search"></i>
+                                </div>
+                            </div>
+                            
+                            <div class="users-list" id="usersList">
+                                <!-- Users will be populated here -->
+                                <div class="skeleton" style="height: 150px; border-radius: 12px; margin-bottom: 15px;"></div>
+                                <div class="skeleton" style="height: 150px; border-radius: 12px; margin-bottom: 15px;"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                
-                <div class="users-list" id="usersList">
-                    <!-- Users will be populated here -->
-                </div>
             </div>
         </div>
-    </div>
-</div>
+    </main>
 
-
-    <!-- Add this after the history-cards div -->
-<div class="user-management-section" id="userManagementSection" style="display: none;">
-    <div class="section-header">
-        <h2><i class="fas fa-users-cog"></i> User Management</h2>
-        <button id="backToHistoryBtn" class="btn btn-small">
-            <i class="fas fa-arrow-left"></i> Back to History
-        </button>
-    </div>
-    
-    <div class="user-management-controls">
-        <button id="addUserBtn" class="btn btn-success">
-            <i class="fas fa-user-plus"></i> Add New User
-        </button>
-        <div class="search-box">
-            <input type="text" id="userSearchInput" placeholder="Search users..." class="form-input">
-            <i class="fas fa-search"></i>
-        </div>
-    </div>
-    
-    <div class="users-list" id="usersList">
-        <!-- Users will be populated here -->
-    </div>
-</div>
-
-<!-- Add User Modal -->
-<div id="addUserModal" class="modal-overlay" style="display: none;">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2><i class="fas fa-user-plus"></i> Add New User</h2>
-            <button id="closeAddUserModal" class="btn btn-secondary btn-small">
-                <i class="fas fa-times"></i> Close
-            </button>
-        </div>
-        <div class="modal-body">
-            <div class="form-group">
-                <label for="newUsername"><i class="fas fa-user"></i> Username:</label>
-                <input type="text" id="newUsername" class="form-input" placeholder="Enter username">
-            </div>
-            <div class="form-group">
-                <label for="newDisplayName"><i class="fas fa-id-card"></i> Display Name:</label>
-                <input type="text" id="newDisplayName" class="form-input" placeholder="Enter display name">
-            </div>
-            <div class="form-group">
-                <label for="newPassword"><i class="fas fa-lock"></i> Password:</label>
-                <input type="password" id="newPassword" class="form-input" placeholder="Enter password">
-            </div>
-            <div class="form-group">
-                <label for="newRole"><i class="fas fa-user-tag"></i> Role:</label>
-                <select id="newRole" class="form-input">
-                    <option value="guest">Guest</option>
-                    <option value="host">Host</option>
-                </select>
-            </div>
-            <div id="addUserError" class="error-message" style="display: none;"></div>
-            <button id="saveUserBtn" class="btn" style="width: 100%; margin-top: 20px;">
-                <i class="fas fa-save"></i> Save User
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- Edit User Modal -->
-<div id="editUserModal" class="modal-overlay" style="display: none;">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2><i class="fas fa-user-edit"></i> Edit User</h2>
-            <button id="closeEditUserModal" class="btn btn-secondary btn-small">
-                <i class="fas fa-times"></i> Close
-            </button>
-        </div>
-        <div class="modal-body">
-            <input type="hidden" id="editUserId">
-            <div class="form-group">
-                <label for="editUsername"><i class="fas fa-user"></i> Username:</label>
-                <input type="text" id="editUsername" class="form-input" readonly>
-            </div>
-            <div class="form-group">
-                <label for="editDisplayName"><i class="fas fa-id-card"></i> Display Name:</label>
-                <input type="text" id="editDisplayName" class="form-input">
-            </div>
-            <div class="form-group">
-                <label for="editPassword"><i class="fas fa-lock"></i> New Password (leave blank to keep current):</label>
-                <input type="password" id="editPassword" class="form-input" placeholder="Enter new password">
-            </div>
-            <div class="form-group">
-                <label for="editRole"><i class="fas fa-user-tag"></i> Role:</label>
-                <select id="editRole" class="form-input">
-                    <option value="guest">Guest</option>
-                    <option value="host">Host</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="editIsActive" style="display: flex; align-items: center; gap: 10px;">
-                    <input type="checkbox" id="editIsActive" style="width: auto;">
-                    <span>Active Account</span>
-                </label>
-            </div>
-            <div id="editUserError" class="error-message" style="display: none;"></div>
-            <div class="modal-actions">
-                <button id="updateUserBtn" class="btn">
-                    <i class="fas fa-save"></i> Update User
-                </button>
-                <button id="deleteUserBtn" class="btn btn-danger">
-                    <i class="fas fa-trash"></i> Delete User
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-    <footer>
+    <!-- Footer -->
+    <footer role="contentinfo">
         <div class="container">
-            <p>WriteToMira &copy; 2025 - Secure Communication Platform For Mira| End-to-End Encrypted</p>
+            <p>WriteToMira &copy; <span id="currentYear">2025</span> - Secure Communication Platform | End-to-End Encrypted</p>
+            <p style="font-size: 12px; margin-top: 5px; opacity: 0.7;">
+                <i class="fas fa-shield-alt"></i> Your conversations are secured with industry-standard encryption
+            </p>
         </div>
     </footer>
 
     <!-- Audio for message notification -->
-    <audio id="messageSound" preload="auto">
+    <audio id="messageSound" preload="none">
         <source src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3" type="audio/mpeg">
     </audio>
 
-    <script src="app.js"></script>
+    <!-- Loading Spinner Template -->
+    <template id="loadingSpinner">
+        <div class="loading-spinner-container" style="text-align: center; padding: 40px;">
+            <div class="loading-spinner" style="width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; margin: 0 auto 20px; animation: spin 1s linear infinite;"></div>
+            <p>Loading...</p>
+        </div>
+    </template>
+
+    <!-- Message Template -->
+    <template id="messageTemplate">
+        <div class="message" data-type="">
+            <div class="message-sender"></div>
+            <div class="message-content">
+                <div class="message-text"></div>
+                <div class="message-time"></div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Session Card Template -->
+    <template id="sessionCardTemplate">
+        <div class="session-card" data-active="false">
+            <div class="session-card-header">
+                <div class="session-header-left">
+                    <div class="session-id"></div>
+                    <div class="session-stats">
+                        <span class="guest-count">
+                            <i class="fas fa-users"></i> <span class="count">0</span>
+                        </span>
+                        <span class="pending-count" style="display: none;">
+                            <i class="fas fa-user-clock"></i> <span class="count">0</span>
+                        </span>
+                    </div>
+                </div>
+                <div class="session-active-badge" style="display: none;">Active Now</div>
+            </div>
+            
+            <div class="session-info">
+                <div class="session-info-section">
+                    <div class="session-info-row">
+                        <span class="session-info-label">Host:</span>
+                        <span class="session-info-value host-name"></span>
+                    </div>
+                    <div class="session-info-row">
+                        <span class="session-info-label">Started:</span>
+                        <span class="session-info-value start-time"></span>
+                    </div>
+                </div>
+                
+                <div class="session-info-section">
+                    <div class="session-info-row">
+                        <span class="session-info-label">Status:</span>
+                        <span class="session-info-value status"></span>
+                    </div>
+                    <div class="session-info-row">
+                        <span class="session-info-label">Duration:</span>
+                        <span class="session-info-value duration"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="session-actions">
+                <button class="btn btn-secondary btn-small view-chat-btn" aria-label="View chat">
+                    <i class="fas fa-eye"></i> View Chat
+                </button>
+                <button class="btn btn-success btn-small export-btn" aria-label="Export session">
+                    <i class="fas fa-download"></i> Export
+                </button>
+            </div>
+        </div>
+    </template>
+
+    <!-- Inline configuration -->
+    <script>
+        // Set current year in footer
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('currentYear').textContent = new Date().getFullYear();
+        });
+    </script>
+
+    <!-- Supabase -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    
+    <!-- Main application -->
+    <script src="app.js" defer></script>
+    
+    <!-- Service Worker Registration (optional) -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(error => {
+                    console.log('ServiceWorker registration failed:', error);
+                });
+            });
+        }
+    </script>
 </body>
 </html>
