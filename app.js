@@ -1999,44 +1999,76 @@ async function showPendingGuests() {
 }
 
 // Approve a guest by guest record ID
-async function approveGuest(index) {
-    const guest = appState.pendingGuests[index];
-    
+async function approveGuest(guestRecordId) {
     try {
-        const updateData = {
-            guest_id: guest.guest_id,
-            guest_name: guest.guest_name,
-            guest_ip: guest.guest_ip,
-            guest_connected_at: new Date().toISOString(),
-            pending_guests: appState.pendingGuests.filter((_, i) => i !== index)
-        };
+        // First get the guest details
+        const { data: guest, error: fetchError } = await supabaseClient
+            .from('session_guests')
+            .select('*')
+            .eq('id', guestRecordId)
+            .single();
         
-        console.log("✅ Approving guest:", guest.guest_name, "ID:", guest.guest_id);
+        if (fetchError) throw fetchError;
         
+        // Update guest status to approved
         const { error } = await supabaseClient
-            .from('sessions')
-            .update(updateData)
-            .eq('session_id', appState.currentSessionId);
+            .from('session_guests')
+            .update({
+                status: 'approved',
+                approved_at: new Date().toISOString()
+            })
+            .eq('id', guestRecordId);
         
         if (error) throw error;
         
-        // Update local state
-        appState.pendingGuests = appState.pendingGuests.filter((_, i) => i !== index);
+        // Update the pending list
+        appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
         
         // Update UI
-        updatePendingUI();
+        if (pendingCount) {
+            pendingCount.textContent = appState.pendingGuests.length;
+            if (appState.pendingGuests.length === 0) {
+                pendingGuestsBtn.style.display = 'none';
+            }
+        }
+        // Add this function after the approveGuest function
+async function updateActiveGuestsCount() {
+    if (!appState.isHost || !appState.currentSessionId) return;
+    
+    try {
+        const { data: approvedGuests, error } = await supabaseClient
+            .from('session_guests')
+            .select('guest_name')
+            .eq('session_id', appState.currentSessionId)
+            .eq('status', 'approved');
         
-        // Refresh modal
+        if (error) {
+            console.error("Error fetching active guests:", error);
+            return;
+        }
+        
+        console.log("Active guests count updated:", approvedGuests?.length || 0);
+        // You can update UI here if needed, like showing active guest count
+        
+    } catch (error) {
+        console.error("Error in updateActiveGuestsCount:", error);
+    }
+}
+        
+        // Refresh the modal display
         showPendingGuests();
         
+        // Send system message
         await saveMessageToDB('System', `${guest.guest_name} has been approved and joined the chat.`);
+        
+        // Update active guests count
+        updateActiveGuestsCount();
         
     } catch (error) {
         console.error("Error approving guest:", error);
         alert("Failed to approve guest: " + error.message);
     }
 }
-
 
 // Deny a guest by guest record ID
 async function denyGuest(guestRecordId) {
