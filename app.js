@@ -622,6 +622,7 @@ async function handleConnect() {
 
 
 // Connect as host
+// Connect as host
 async function connectAsHost(userIP) {
     try {
         const sessionId = 'session_' + Date.now().toString(36);
@@ -674,14 +675,11 @@ async function connectAsHost(userIP) {
         // Add connection message to chat
         await saveMessageToDB('System', `${appState.userName} has created a new chat session. Multiple guests can now join.`);
         
-        // Setup real-time subscriptions - THIS IS IMPORTANT
+        // Setup real-time subscriptions (THIS INCLUDES PENDING GUESTS SUBSCRIPTION)
         setupRealtimeSubscriptions();
         
-        // ADD THIS LINE: Setup pending guests subscription
-        setupPendingGuestsSubscription();
-        
         // Load initial pending guests
-        loadPendingGuests();
+        await loadPendingGuests();
         
         // Load chat history
         loadChatHistory();
@@ -1339,6 +1337,7 @@ if (appState.isHost) {
 }
 
 // Setup real-time subscriptions
+// Setup real-time subscriptions
 function setupRealtimeSubscriptions() {
     console.log('Setting up real-time subscriptions for session:', appState.currentSessionId);
     console.log('Is host?', appState.isHost);
@@ -1400,30 +1399,62 @@ function setupRealtimeSubscriptions() {
             .on(
                 'postgres_changes',
                 {
-                    event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+                    event: 'INSERT', // Listen to INSERT events only
                     schema: 'public',
                     table: 'session_guests',
-                    filter: 'session_id=eq.' + appState.currentSessionId
+                    filter: `session_id=eq.${appState.currentSessionId}`
                 },
                 async (payload) => {
-                    console.log('Session guests update detected:', payload);
-                    console.log('Event type:', payload.eventType);
-                    console.log('New data:', payload.new);
-                    console.log('Old data:', payload.old);
+                    console.log('Session guests INSERT detected:', payload);
+                    console.log('New guest data:', payload.new);
                     
-                    // Only handle pending guests
-                    if (payload.new && payload.new.status === 'pending') {
-                        console.log('NEW PENDING GUEST DETECTED:', payload.new.guest_name);
+                    // Check if it's a pending guest
+                    if (payload.new.status === 'pending') {
+                        console.log('✅ NEW PENDING GUEST DETECTED:', payload.new.guest_name);
                         
-                        // Force reload pending guests
-                        await loadPendingGuests();
+                        // Add to local state
+                        appState.pendingGuests.push(payload.new);
+                        
+                        // Update UI immediately
+                        updatePendingUI();
                         
                         // Show notification
                         showNewGuestNotification(payload.new);
-                    } else if (payload.new && payload.new.status !== 'pending') {
-                        // Guest was approved/rejected - update the list
-                        console.log('Guest status changed:', payload.new.status);
-                        await loadPendingGuests();
+                        
+                        // If modal is open, refresh it
+                        if (pendingGuestsModal.style.display === 'flex') {
+                            await loadPendingGuests(); // Reload from DB
+                        }
+                    }
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE', // Listen to UPDATE events
+                    schema: 'public',
+                    table: 'session_guests',
+                    filter: `session_id=eq.${appState.currentSessionId}`
+                },
+                async (payload) => {
+                    console.log('Session guests UPDATE detected:', payload);
+                    console.log('Old status:', payload.old?.status);
+                    console.log('New status:', payload.new?.status);
+                    
+                    // If a pending guest was approved or rejected
+                    if (payload.old?.status === 'pending' && payload.new?.status !== 'pending') {
+                        console.log('Pending guest status changed:', payload.new.status);
+                        
+                        // Remove from pending list
+                        appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== payload.new.id);
+                        
+                        // Update UI
+                        updatePendingUI();
+                        
+                        // If modal is open, refresh it
+                        if (pendingGuestsModal.style.display === 'flex') {
+                            await loadPendingGuests(); // Reload from DB
+                        }
                     }
                 }
             )
@@ -1788,6 +1819,7 @@ function addSystemMessage(text) {
 
 
 // Load pending guests
+// Load pending guests
 async function loadPendingGuests() {
     if (!appState.isHost || !appState.currentSessionId) {
         console.log('Not loading pending guests: isHost=', appState.isHost, 'sessionId=', appState.currentSessionId);
@@ -1825,16 +1857,25 @@ async function loadPendingGuests() {
 }
 
 // Helper function to update pending UI
+// Helper function to update pending UI
 function updatePendingUI() {
     if (!appState.isHost) return;
     
+    console.log('Updating pending UI with', appState.pendingGuests.length, 'guests');
+    
     // Update the button visibility and count
     if (pendingGuestsBtn && pendingCount) {
-        pendingCount.textContent = appState.pendingGuests.length;
-        if (appState.pendingGuests.length > 0) {
+        const pendingCountValue = appState.pendingGuests.length;
+        console.log('Setting pending count to:', pendingCountValue);
+        
+        pendingCount.textContent = pendingCountValue;
+        
+        if (pendingCountValue > 0) {
+            console.log('Showing pending guests button');
             pendingGuestsBtn.style.display = 'flex';
             pendingGuestsBtn.classList.add('has-pending');
         } else {
+            console.log('Hiding pending guests button');
             pendingGuestsBtn.style.display = 'none';
             pendingGuestsBtn.classList.remove('has-pending');
         }
