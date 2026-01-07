@@ -263,8 +263,32 @@ async function authenticateUserFallback(username, password) {
     }
 }
 
+// Add this function to debug subscriptions
+function debugSubscriptions() {
+    console.log('=== SUBSCRIPTION DEBUG ===');
+    console.log('Current Session ID:', appState.currentSessionId);
+    console.log('Is Host:', appState.isHost);
+    console.log('Is Connected:', appState.isConnected);
+    console.log('Messages Subscription:', appState.realtimeSubscription ? 'Active' : 'Inactive');
+    console.log('Pending Subscription:', appState.pendingSubscription ? 'Active' : 'Inactive');
+    console.log('Typing Subscription:', appState.typingSubscription ? 'Active' : 'Inactive');
+    
+    // Test Supabase connection
+    supabaseClient
+        .from('messages')
+        .select('count', { count: 'exact', head: true })
+        .then(result => {
+            console.log('Supabase connection test:', result.error ? 'FAILED' : 'OK');
+        })
+        .catch(error => {
+            console.log('Supabase connection test: FAILED', error);
+        });
+}
+
+// Call this in initApp for debugging
+debugSubscriptions();
 // Initialize the app
-// Initialize the app
+// Initialize the app - UPDATED
 async function initApp() {
     const mainContainer = document.querySelector('.main-container') || document.querySelector('.app-container');
     if (mainContainer) {
@@ -281,27 +305,24 @@ async function initApp() {
             appState.sessionId = sessionData.sessionId;
             appState.soundEnabled = sessionData.soundEnabled !== false;
             
-// In initApp(), update the reconnection logic:
-if (await reconnectToSession()) {
-    appState.isConnected = true;
-    connectionModal.style.display = 'none';
-    updateUIAfterConnection();
-    loadChatHistory();
-    
-    // SET UP SUBSCRIPTIONS IMMEDIATELY
-    setupRealtimeSubscriptions();
-    
-    if (appState.isHost) {
-        setupPendingGuestsSubscription();
-        loadPendingGuests();
-    }
-    
-    console.log("✅ App initialized with subscriptions");
-} else {
-    localStorage.removeItem('writeToMe_session');
-    connectionModal.style.display = 'flex';
-}
+            console.log("🔄 Attempting to reconnect to saved session...");
+            
+            if (await reconnectToSession()) {
+                appState.isConnected = true;
+                hideConnectionModal();
+                updateUIAfterConnection();
+                
+                console.log("✅ Successfully reconnected!");
+                
+                // Start subscription checker
+                setInterval(checkAndReconnectSubscriptions, 10000); // Check every 10 seconds
+            } else {
+                console.log("❌ Failed to reconnect, clearing session");
+                localStorage.removeItem('writeToMe_session');
+                showConnectionModal();
+            }
         } catch (e) {
+            console.error("Error parsing saved session:", e);
             localStorage.removeItem('writeToMe_session');
             showConnectionModal();
         }
@@ -313,9 +334,81 @@ if (await reconnectToSession()) {
     setupEventListeners();
     setupUserManagementListeners();
     populateEmojis();
-    loadChatSessions();
+    
+    // Only load chat sessions if we might be a host
+    if (!savedSession || appState.isHost) {
+        loadChatSessions();
+    }
+    
+    // Debug
+    debugSubscriptions();
 }
 
+// Reconnect to existing session - FIXED VERSION
+async function reconnectToSession() {
+    try {
+        const { data: session, error } = await supabaseClient
+            .from('sessions')
+            .select('*')
+            .eq('session_id', appState.sessionId)
+            .single();
+        
+        if (error || !session) {
+            console.log("Session not found or error:", error);
+            return false;
+        }
+        
+        console.log("✅ Session found:", session.session_id);
+        console.log("👤 Our user ID:", appState.userId);
+        
+        if (appState.isHost) {
+            if (session.host_id === appState.userId) {
+                appState.currentSessionId = session.session_id;
+                
+                // SET UP ALL SUBSCRIPTIONS
+                setupRealtimeSubscriptions();
+                setupPendingGuestsSubscription(); // Add this
+                
+                // Load initial data
+                loadChatHistory();
+                loadPendingGuests();
+                
+                return true;
+            }
+            return false;
+        } else {
+            // Check if guest is approved in session_guests table
+            const { data: guestStatus, error: guestError } = await supabaseClient
+                .from('session_guests')
+                .select('status')
+                .eq('session_id', session.session_id)
+                .eq('guest_id', appState.userId)
+                .single();
+            
+            if (guestError) {
+                console.log("Guest not found in session_guests:", guestError);
+                return false;
+            }
+            
+            if (guestStatus.status === 'approved') {
+                appState.currentSessionId = session.session_id;
+                setupRealtimeSubscriptions();
+                loadChatHistory();
+                return true;
+            } else if (guestStatus.status === 'pending') {
+                appState.currentSessionId = session.session_id;
+                updateUIForPendingGuest();
+                setupPendingApprovalSubscription(session.session_id);
+                return false;
+            } else {
+                return false;
+            }
+        }
+    } catch (error) {
+        console.error("Error reconnecting:", error);
+        return false;
+    }
+}
 // Set up all event listeners
 function setupEventListeners() {
     // Connection modal
@@ -982,45 +1075,107 @@ async function connectAsGuest(userIP) {
 }
 
 // Set up subscription for pending guests (for host) - UPDATED for session_guests table
+// Set up subscription for pending guests (for host) - COMPLETELY REWRITTEN
 function setupPendingGuestsSubscription() {
-    if (!appState.isHost || !appState.currentSessionId) return;
-    
-    // Remove existing subscription
-    if (appState.pendingSubscription) {
-        supabaseClient.removeChannel(appState.pendingSubscription);
+    if (!appState.isHost || !appState.currentSessionId) {
+        console.log("⚠️ Cannot setup pending subscription: Not host or no session ID");
+        return;
     }
     
-    console.log("Setting up pending guests subscription for session:", appState.currentSessionId);
+    // Remove existing subscription if any
+    if (appState.pendingSubscription) {
+        supabaseClient.removeChannel(appState.pendingSubscription);
+        appState.pendingSubscription = null;
+    }
+    
+    console.log("🚀 Setting up pending guests subscription for session:", appState.currentSessionId);
+    
+    // Create a unique channel name
+    const channelName = 'pending-guests-' + appState.currentSessionId + '-' + Date.now();
     
     appState.pendingSubscription = supabaseClient
-        .channel('pending-guests-channel-' + appState.currentSessionId)
+        .channel(channelName)
         .on(
             'postgres_changes',
             {
-                event: '*',
+                event: 'INSERT',
                 schema: 'public',
                 table: 'session_guests',
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
             async (payload) => {
-                console.log('Session guests update received:', payload);
+                console.log('📥 NEW pending guest INSERTED:', payload.new);
                 
-                // Reload pending guests for any change
-                await loadPendingGuests();
-                
-                // If modal is open, refresh it
-                if (pendingGuestsModal.style.display === 'flex') {
-                    showPendingGuests();
-                }
-                
-                // Show notification for new pending guests
-                if (payload.eventType === 'INSERT' && payload.new.status === 'pending') {
+                // Add to local state
+                if (payload.new.status === 'pending') {
+                    appState.pendingGuests.push(payload.new);
+                    updatePendingButtonUI();
+                    
+                    // Show notification
                     showNewGuestNotification(payload.new);
+                    
+                    // Refresh modal if open
+                    if (pendingGuestsModal.style.display === 'flex') {
+                        showPendingGuests();
+                    }
                 }
             }
         )
-        .subscribe((status) => {
-            console.log('Pending guests subscription status:', status);
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'session_guests',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            async (payload) => {
+                console.log('🔄 Pending guest UPDATED:', payload.new);
+                
+                // Refresh the list
+                await loadPendingGuests();
+                
+                // Refresh modal if open
+                if (pendingGuestsModal.style.display === 'flex') {
+                    showPendingGuests();
+                }
+            }
+        )
+        .on(
+            'postgres_changes',
+            {
+                event: 'DELETE',
+                schema: 'public',
+                table: 'session_guests',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            async (payload) => {
+                console.log('🗑️ Pending guest DELETED:', payload.old);
+                
+                // Remove from local state
+                appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== payload.old.id);
+                updatePendingButtonUI();
+                
+                // Refresh modal if open
+                if (pendingGuestsModal.style.display === 'flex') {
+                    showPendingGuests();
+                }
+            }
+        )
+        .subscribe((status, err) => {
+            console.log('📡 Pending guests subscription status:', status);
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ SUCCESS: Subscribed to pending guests');
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || err) {
+                console.error('❌ ERROR subscribing to pending guests:', err || status);
+                // Try to reconnect after 3 seconds
+                setTimeout(() => {
+                    if (appState.isHost && appState.currentSessionId) {
+                        console.log('🔄 Retrying pending guests subscription...');
+                        setupPendingGuestsSubscription();
+                    }
+                }, 3000);
+            }
         });
 }
 
@@ -1380,24 +1535,87 @@ async function handleLogout() {
         showConnectionModal();
     }
 }
+// Test function to verify Supabase Realtime
+async function testSupabaseRealtime() {
+    console.log("🧪 Testing Supabase Realtime...");
+    
+    try {
+        // Test 1: Check if we can connect to Supabase
+        const { data: testData, error: testError } = await supabaseClient
+            .from('messages')
+            .select('count', { count: 'exact', head: true });
+        
+        if (testError) {
+            console.error("❌ Supabase connection failed:", testError);
+            return false;
+        }
+        
+        console.log("✅ Supabase connection OK");
+        
+        // Test 2: Create a test subscription
+        const testChannel = supabaseClient.channel('test-channel-' + Date.now())
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages'
+                },
+                () => {
+                    console.log("✅ Realtime test: Subscription triggered!");
+                }
+            )
+            .subscribe((status, err) => {
+                console.log("🧪 Test subscription status:", status);
+                if (status === 'SUBSCRIBED') {
+                    console.log("✅ Realtime is WORKING!");
+                    // Clean up test channel
+                    setTimeout(() => {
+                        supabaseClient.removeChannel(testChannel);
+                    }, 5000);
+                } else {
+                    console.error("❌ Realtime test failed:", err || status);
+                }
+            });
+        
+        return true;
+    } catch (error) {
+        console.error("❌ Realtime test error:", error);
+        return false;
+    }
+}
 
-// Check and reconnect subscriptions if needed
-// Check and reconnect subscriptions if needed
+// Call this in initApp or when needed
+// testSupabaseRealtime();
+// Check and reconnect subscriptions if needed - IMPROVED
 function checkAndReconnectSubscriptions() {
-    console.log("Checking subscriptions...");
+    if (!appState.isConnected || !appState.currentSessionId) return;
+    
+    console.log("🔍 Checking subscription status...");
+    
+    // Define a function to check if a subscription is active
+    const isSubscriptionActive = (subscription) => {
+        return subscription && 
+               subscription.state && 
+               subscription.state === 'joined';
+    };
     
     // Check messages subscription
-    if (appState.isConnected && appState.currentSessionId && 
-        (!appState.realtimeSubscription)) {
-        console.log("Reconnecting messages subscription...");
+    if (!isSubscriptionActive(appState.realtimeSubscription)) {
+        console.log("🔄 Reconnecting messages subscription...");
         setupRealtimeSubscriptions();
     }
     
     // Check pending guests subscription (for hosts)
-    if (appState.isHost && appState.currentSessionId && 
-        (!appState.pendingSubscription)) {
-        console.log("Reconnecting pending guests subscription...");
+    if (appState.isHost && !isSubscriptionActive(appState.pendingSubscription)) {
+        console.log("🔄 Reconnecting pending guests subscription...");
         setupPendingGuestsSubscription();
+    }
+    
+    // Check typing subscription
+    if (!isSubscriptionActive(appState.typingSubscription)) {
+        console.log("🔄 Reconnecting typing subscription...");
+        // Typing subscription is part of setupRealtimeSubscriptions
     }
 }
 
@@ -1408,7 +1626,13 @@ function checkAndReconnectSubscriptions() {
 setInterval(checkAndReconnectSubscriptions, 30000); // Check every 30 seconds
 
 // Setup real-time subscriptions - UPDATED
+// Setup real-time subscriptions - COMPLETELY REWRITTEN
 function setupRealtimeSubscriptions() {
+    if (!appState.currentSessionId) {
+        console.log("⚠️ No session ID, cannot setup subscriptions");
+        return;
+    }
+    
     // Remove existing subscriptions
     if (appState.realtimeSubscription) {
         supabaseClient.removeChannel(appState.realtimeSubscription);
@@ -1419,16 +1643,12 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-    if (!appState.currentSessionId) {
-        console.log("No session ID, cannot setup subscriptions");
-        return;
-    }
+    console.log("🚀 Setting up ALL real-time subscriptions for session:", appState.currentSessionId);
     
-    console.log("Setting up real-time subscriptions for session:", appState.currentSessionId);
-    
-    // Messages subscription - FIXED
+    // 1. MESSAGES SUBSCRIPTION
+    const messagesChannelName = 'messages-' + appState.currentSessionId + '-' + Date.now();
     appState.realtimeSubscription = supabaseClient
-        .channel('messages-channel-' + appState.currentSessionId)
+        .channel(messagesChannelName)
         .on(
             'postgres_changes',
             {
@@ -1438,9 +1658,10 @@ function setupRealtimeSubscriptions() {
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
             (payload) => {
-                console.log('New message received:', payload.new);
+                console.log('📨 New message received via subscription:', payload.new);
                 
-                if (payload.new.sender_id !== appState.userId) {
+                // Only display if not from current user and not viewing history
+                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
                     displayMessage({
                         id: payload.new.id,
                         sender: payload.new.sender_name,
@@ -1451,7 +1672,8 @@ function setupRealtimeSubscriptions() {
                         is_historical: false
                     });
                     
-                    if (appState.soundEnabled && !appState.isViewingHistory) {
+                    // Play sound if enabled
+                    if (appState.soundEnabled) {
                         try {
                             messageSound.currentTime = 0;
                             messageSound.play().catch(e => console.log("Audio play failed:", e));
@@ -1462,13 +1684,19 @@ function setupRealtimeSubscriptions() {
                 }
             }
         )
-        .subscribe((status) => {
-            console.log('Messages subscription status:', status);
+        .subscribe((status, err) => {
+            console.log('📡 Messages subscription status:', status);
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ SUCCESS: Subscribed to messages');
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || err) {
+                console.error('❌ ERROR subscribing to messages:', err || status);
+            }
         });
     
-    // Typing indicator subscription
+    // 2. TYPING SUBSCRIPTION
+    const typingChannelName = 'typing-' + appState.currentSessionId + '-' + Date.now();
     appState.typingSubscription = supabaseClient
-        .channel('typing-channel-' + appState.currentSessionId)
+        .channel(typingChannelName)
         .on(
             'postgres_changes',
             {
@@ -1479,6 +1707,7 @@ function setupRealtimeSubscriptions() {
             },
             (payload) => {
                 if (payload.new && payload.new.typing_user && payload.new.typing_user !== appState.userName) {
+                    console.log('✍️ Typing detected from:', payload.new.typing_user);
                     typingUser.textContent = payload.new.typing_user;
                     typingIndicator.classList.add('show');
                     
@@ -1488,11 +1717,15 @@ function setupRealtimeSubscriptions() {
                 }
             }
         )
-        .subscribe((status) => {
-            console.log('Typing subscription status:', status);
+        .subscribe((status, err) => {
+            console.log('📡 Typing subscription status:', status);
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ SUCCESS: Subscribed to typing');
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || err) {
+                console.error('❌ ERROR subscribing to typing:', err || status);
+            }
         });
 }
-
 // Handle typing
 async function handleTyping() {
     if (appState.currentSessionId && !appState.isViewingHistory && appState.isConnected) {
