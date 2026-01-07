@@ -1850,7 +1850,6 @@ async function showPendingGuests() {
     }
 }
 
-// Approve a guest
 // Approve a guest by guest record ID
 async function approveGuest(guestRecordId) {
     try {
@@ -1884,6 +1883,29 @@ async function approveGuest(guestRecordId) {
                 pendingGuestsBtn.style.display = 'none';
             }
         }
+        // Add this function after the approveGuest function
+async function updateActiveGuestsCount() {
+    if (!appState.isHost || !appState.currentSessionId) return;
+    
+    try {
+        const { data: approvedGuests, error } = await supabaseClient
+            .from('session_guests')
+            .select('guest_name')
+            .eq('session_id', appState.currentSessionId)
+            .eq('status', 'approved');
+        
+        if (error) {
+            console.error("Error fetching active guests:", error);
+            return;
+        }
+        
+        console.log("Active guests count updated:", approvedGuests?.length || 0);
+        // You can update UI here if needed, like showing active guest count
+        
+    } catch (error) {
+        console.error("Error in updateActiveGuestsCount:", error);
+    }
+}
         
         // Refresh the modal display
         showPendingGuests();
