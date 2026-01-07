@@ -443,9 +443,11 @@ function switchAdminTab(tabName) {
     }
 }
 // Handle connection
-// Handle connection with secure authentication
 async function handleConnect() {
-    const username = usernameInput.value.trim();  // NO .toLowerCase() here!
+    const userSelect = document.getElementById('userSelect');
+    const passwordInput = document.getElementById('passwordInput');
+    
+    const selectedRole = userSelect.value;
     const password = passwordInput.value;
     
     // Reset error
@@ -453,173 +455,288 @@ async function handleConnect() {
     connectBtn.disabled = true;
     connectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
     
-    // Validate inputs
-    if (!username) {
-        passwordError.style.display = 'block';
-        passwordError.textContent = "Please enter a username.";
-        connectBtn.disabled = false;
-        connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
-        return;
-    }
-    
-    if (!password) {
-        passwordError.style.display = 'block';
-        passwordError.textContent = "Please enter a password.";
-        connectBtn.disabled = false;
-        connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
-        return;
-    }
-    
     try {
-        console.log("Attempting authentication for username:", username);
+        // Authenticate user
+        const { data, error } = await supabaseClient
+            .rpc('authenticate_user', {
+                p_username: selectedRole,
+                p_password: password
+            });
         
-        // Step 1: Check if user exists and is active in user_management table
-
-        const { data: userData, error: userError } = await supabaseClient
-        .from('user_management')
-        .select('id, username, display_name, password_hash, role, is_active')
-        .ilike('username', username)  // ← CHANGE THIS from .eq() to .ilike()
-        .eq('is_active', true)
-        .single();
-        
-        if (userError || !userData) {
-            console.log("User not found:", userError);
+        if (error) {
+            console.error("Authentication error:", error);
             passwordError.style.display = 'block';
-            passwordError.textContent = "Invalid username or password.";
+            passwordError.textContent = "Authentication failed. Please check the database function.";
             connectBtn.disabled = false;
             connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
             return;
         }
         
-        // Step 2: Check if account is active
-        if (!userData.is_active) {
+        if (!data || data.length === 0 || !data[0].is_authenticated) {
             passwordError.style.display = 'block';
-            passwordError.textContent = "This account is deactivated. Please contact an administrator.";
+            passwordError.textContent = "Incorrect password for selected role.";
             connectBtn.disabled = false;
             connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
             return;
         }
         
-        console.log("User found:", userData.username, "Role:", userData.role);
+        const authResult = data[0];
+        appState.isHost = authResult.user_role === 'host';
+        appState.userName = authResult.user_role === 'host' ? "Host" : "Guest";
+        // Generate a simple, consistent user ID
+        appState.userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
-        // Step 3: Verify password using RPC function
-        let isAuthenticated = false;
-        
-        try {
-            // Try to use the RPC function first
-            const { data: authResult, error: rpcError } = await supabaseClient
-                .rpc('verify_password', {
-                    stored_hash: userData.password_hash,
-                    password: password
-                });
-            
-            if (!rpcError && authResult === true) {
-                console.log("Password verified via RPC");
-                isAuthenticated = true;
-            } else if (rpcError) {
-                console.log("RPC error, trying fallback:", rpcError);
-                // Fallback to authenticate_user function
-                const { data: authUserResult } = await supabaseClient
-                    .rpc('authenticate_user', {
-                        p_username: username,
-                        p_password: password
-                    });
-                
-                if (authUserResult && authUserResult.length > 0 && authUserResult[0].is_authenticated) {
-                    console.log("Password verified via authenticate_user RPC");
-                    isAuthenticated = true;
-                }
-            }
-        } catch (rpcError) {
-            console.log("All RPC methods failed, using fallback check:", rpcError);
-        }
-        
-        // Step 4: Fallback for testing accounts (ONLY for development/testing)
-        if (!isAuthenticated) {
-            console.log("Using fallback authentication check");
-            
-            // Check against known test passwords (ONLY for development!)
-            const testPasswords = {
-                'admin': 'admin123',
-                'host': 'host123',
-                'guest': 'guest123'
-            };
-            
-            if (testPasswords[username] && password === testPasswords[username]) {
-                console.log("Using test password for:", username);
-                isAuthenticated = true;
-            }
-        }
-        
-        // Step 5: Final authentication check
-        if (!isAuthenticated) {
-            passwordError.style.display = 'block';
-            passwordError.textContent = "Invalid username or password.";
-            connectBtn.disabled = false;
-            connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
-            return;
-        }
-        
-        // Step 6: Authentication successful - set user data
-        appState.isHost = userData.role === 'host';
-        appState.userName = userData.display_name || userData.username;
-        appState.userId = userData.id;
-        
-        console.log("User authenticated successfully:", {
-            name: appState.userName,
-            id: appState.userId,
-            isHost: appState.isHost,
-            role: userData.role
-        });
-        
-        // Step 7: Update last login time
-        try {
-            await supabaseClient
-                .from('user_management')
-                .update({ 
-                    last_login: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', userData.id);
-            console.log("Last login time updated");
-        } catch (updateError) {
-            console.log("Could not update last login:", updateError);
-            // Continue anyway - this is not critical
-        }
-        
-        // Step 8: Continue with connection process
-        appState.connectionTime = new Date();
-        
-        // Get user IP
-        const userIP = await getRealIP();
-        
-        // Step 9: Connect based on role
-        if (appState.isHost) {
-            console.log("Connecting as host...");
-            await connectAsHost(userIP);
-        } else {
-            console.log("Connecting as guest...");
-            await connectAsGuest(userIP);
-        }
+        console.log("User authenticated:", appState.userName, "ID:", appState.userId);
         
     } catch (error) {
-        console.error("Error in authentication process:", error);
+        console.error("Authentication error:", error);
         passwordError.style.display = 'block';
-        
-        // User-friendly error messages
-        if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
-            passwordError.textContent = "Network error. Please check your connection and try again.";
-        } else if (error.message.includes('JWT')) {
-            passwordError.textContent = "Authentication service error. Please refresh the page.";
-        } else {
-            passwordError.textContent = "Connection error: " + error.message;
-        }
-        
+        passwordError.textContent = "Connection error. Please check if authenticate_user function exists.";
         connectBtn.disabled = false;
         connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+        return;
+    }
+    
+    appState.connectionTime = new Date();
+    
+    // Get user IP
+    const userIP = await getRealIP();
+    
+    if (appState.isHost) {
+        // Host creates a new session
+        try {
+            const sessionId = 'session_' + Date.now().toString(36);
+            
+            // Create the session
+            const { data, error } = await supabaseClient
+                .from('sessions')
+                .insert([
+                    {
+                        session_id: sessionId,
+                        host_id: appState.userId,
+                        host_name: appState.userName,
+                        host_ip: userIP,
+                        is_active: true,
+                        requires_approval: true,
+                        created_at: new Date().toISOString(),
+                        pending_guests: [] // Initialize empty array
+                    }
+                ])
+                .select()
+                .single();
+            
+            if (error) {
+                console.error("Error creating session:", error);
+                alert("Failed to create session: " + error.message);
+                connectBtn.disabled = false;
+                connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+                return;
+            }
+            
+            appState.sessionId = sessionId;
+            appState.currentSessionId = sessionId;
+            appState.isConnected = true;
+            
+            // Save session to localStorage
+            localStorage.setItem('writeToMe_session', JSON.stringify({
+                isHost: appState.isHost,
+                userName: appState.userName,
+                userId: appState.userId,
+                sessionId: appState.sessionId,
+                connectionTime: appState.connectionTime,
+                soundEnabled: appState.soundEnabled
+            }));
+            
+            connectionModal.style.display = 'none';
+            connectBtn.disabled = false;
+            connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+            updateUIAfterConnection();
+            
+            // 🔥 CRITICAL CHANGE: Setup pending guests subscription FIRST
+            if (appState.isHost) {
+                console.log('🎯 Setting up pending guests subscription immediately...');
+                setupPendingGuestsSubscription();
+            }
+            
+            // Add connection message to chat
+            await saveMessageToDB('System', `${appState.userName} has created a new chat session. Multiple guests can now join.`);
+            
+            // Setup OTHER real-time subscriptions (messages, typing)
+            setupRealtimeSubscriptions();
+            
+            // Load pending guests AFTER subscription is set up
+            loadPendingGuests();
+            
+            // Load chat history
+            loadChatHistory();
+            
+            // Load chat sessions
+            if (appState.isHost) {
+                loadChatSessions();
+            }
+            
+        } catch (error) {
+            console.error("Error in host connection:", error);
+            alert("An error occurred: " + error.message);
+            connectBtn.disabled = false;
+            connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+        }
+        
+    } else {
+        // GUEST REQUESTS TO JOIN - UPDATED INSERT LOGIC
+        console.log("🟡 Guest attempting to connect...");
+        
+        try {
+            // First check if there's an active session
+            const { data: activeSessions, error: sessionsError } = await supabaseClient
+                .from('sessions')
+                .select('*')
+                .eq('is_active', true)
+                .order('created_at', { ascending: false })
+                .limit(1);
+            
+            if (sessionsError) {
+                console.error("❌ Error fetching sessions:", sessionsError);
+                alert("Error checking for active sessions: " + sessionsError.message);
+                connectBtn.disabled = false;
+                connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+                return;
+            }
+            
+            if (!activeSessions || activeSessions.length === 0) {
+                alert("No active session found. Please ask the host to create a session first.");
+                connectBtn.disabled = false;
+                connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+                return;
+            }
+            
+            const session = activeSessions[0];
+            console.log("✅ Found active session:", session.session_id);
+            console.log("📊 Current guest ID:", session.guest_id);
+            console.log("📊 Pending guests:", session.pending_guests?.length || 0);
+            
+            // Check if this guest is already the approved guest
+            if (session.guest_id && session.guest_id === appState.userId) {
+                // Guest is already approved - direct connection
+                console.log("✅ Guest already approved, connecting directly");
+                appState.sessionId = session.session_id;
+                appState.currentSessionId = session.session_id;
+                appState.isConnected = true;
+                
+                localStorage.setItem('writeToMe_session', JSON.stringify({
+                    isHost: appState.isHost,
+                    userName: appState.userName,
+                    userId: appState.userId,
+                    sessionId: appState.sessionId,
+                    connectionTime: appState.connectionTime,
+                    soundEnabled: appState.soundEnabled
+                }));
+                
+                connectionModal.style.display = 'none';
+                connectBtn.disabled = false;
+                connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+                updateUIAfterConnection();
+                setupRealtimeSubscriptions();
+                loadChatHistory();
+                loadChatSessions();
+                return;
+            }
+            
+            // Check if already in pending list
+            const currentPending = session.pending_guests || [];
+            console.log("🔍 Checking if already pending...");
+            console.log("Current pending:", currentPending);
+            console.log("Our ID:", appState.userId);
+            
+            const isAlreadyPending = currentPending.some(g => g.guest_id === appState.userId);
+            
+            if (isAlreadyPending) {
+                // Already pending
+                console.log("🟡 Guest already pending");
+                appState.sessionId = session.session_id;
+                connectionModal.style.display = 'none';
+                connectBtn.disabled = false;
+                connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+                updateUIForPendingGuest();
+                setupPendingApprovalSubscription(session.session_id);
+                return;
+            }
+            
+            // If there's already an approved guest, show message
+            if (session.guest_id && session.guest_id !== appState.userId) {
+                alert("There is already a guest connected to this session. Please wait for them to disconnect or ask the host to create a new session.");
+                connectBtn.disabled = false;
+                connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+                return;
+            }
+            
+            // Create new pending guest object
+            const newPendingGuest = {
+                guest_id: appState.userId,
+                guest_name: appState.userName,
+                guest_ip: userIP,
+                requested_at: new Date().toISOString(),
+                status: 'pending'
+            };
+            
+            console.log("🆕 Creating new pending guest:", newPendingGuest);
+            
+            // Add to pending guests array
+            const updatedPendingGuests = [...currentPending, newPendingGuest];
+            
+            console.log("📤 Updating session with new pending guests array...");
+            console.log("Session ID:", session.session_id);
+            console.log("Updated pending guests:", updatedPendingGuests);
+            
+            // Update the session with new pending guests array
+            const { data: updatedSession, error: updateError } = await supabaseClient
+                .from('sessions')
+                .update({ 
+                    pending_guests: updatedPendingGuests,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('session_id', session.session_id)
+                .select()
+                .single();
+            
+            if (updateError) {
+                console.error("❌ Error adding to pending:", updateError);
+                console.error("Error details:", updateError);
+                alert("Failed to request access: " + updateError.message);
+                connectBtn.disabled = false;
+                connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+                return;
+            }
+            
+            console.log("✅ Successfully added guest to pending list!");
+            console.log("Updated session:", updatedSession);
+            
+            // Update app state
+            appState.sessionId = session.session_id;
+            appState.pendingGuests = updatedPendingGuests; // Update local state
+            
+            connectionModal.style.display = 'none';
+            connectBtn.disabled = false;
+            connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+            
+            // Show pending UI for guest
+            updateUIForPendingGuest();
+            
+            // Setup subscription for approval updates
+            setupPendingApprovalSubscription(session.session_id);
+            
+            // Show confirmation message
+            console.log("👤 Guest added to pending. Waiting for host approval...");
+            
+        } catch (error) {
+            console.error("❌ Error in guest connection:", error);
+            console.error("Error stack:", error.stack);
+            alert("An error occurred: " + error.message);
+            connectBtn.disabled = false;
+            connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+        }
     }
 }
-
 
 // Connect as host
 // Connect as host
@@ -842,76 +959,150 @@ async function connectAsGuest(userIP) {
 }
 
 
-// Set up subscription for pending guests (for host)
+// Set up subscription for pending guests (for host) - FIXED VERSION
+// Set up subscription for pending guests (for host) - COMPLETE VERSION
 function setupPendingGuestsSubscription() {
-    if (!appState.isHost || !appState.currentSessionId) {
-        console.log('Not setting up pending guests subscription: Not host or no session ID');
+    console.log('🚀 STARTING setupPendingGuestsSubscription');
+    
+    // Validation check
+    if (!appState.isHost) {
+        console.log('❌ Not a host, skipping pending subscription');
         return;
     }
     
-    // Remove existing subscription if any
-    if (appState.pendingSubscription) {
-        console.log('Removing existing pending subscription');
-        supabaseClient.removeChannel(appState.pendingSubscription);
+    if (!appState.currentSessionId) {
+        console.log('❌ No current session ID, skipping pending subscription');
+        return;
     }
     
-    console.log('Setting up pending guests subscription for session:', appState.currentSessionId);
+    console.log('🔧 Host setup for session:', appState.currentSessionId);
     
-    // Create a new subscription for the session_guests table
+    // Remove existing subscription if any
+    if (appState.pendingSubscription) {
+        console.log('🗑️ Removing existing pending subscription');
+        supabaseClient.removeChannel(appState.pendingSubscription);
+        appState.pendingSubscription = null;
+    }
+    
+    // Create a unique channel name
+    const channelName = `pending-guests-${appState.currentSessionId}-${Date.now()}`;
+    console.log('📡 Creating channel:', channelName);
+    
+    // Create the subscription
     appState.pendingSubscription = supabaseClient
-        .channel('pending-guests-channel-' + Date.now())
-        .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'session_guests',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            async (payload) => {
-                console.log('Pending guest INSERT detected:', payload.new);
-                
-                // Only show notification for pending guests
-                if (payload.new.status === 'pending') {
-                    console.log('New pending guest detected:', payload.new.guest_name);
-                    
-                    // Force reload pending guests
-                    await loadPendingGuests();
-                    
-                    // Show notification
-                    showNewGuestNotification(payload.new);
-                }
-            }
-        )
+        .channel(channelName)
         .on(
             'postgres_changes',
             {
                 event: 'UPDATE',
                 schema: 'public',
-                table: 'session_guests',
+                table: 'sessions',
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
             async (payload) => {
-                console.log('Guest status UPDATE detected:', payload.new);
+                console.log('📨 REAL-TIME UPDATE RECEIVED!');
+                console.log('📊 Event Type:', payload.eventType);
+                console.log('📦 Full payload:', payload);
                 
-                // Reload pending guests when status changes
-                await loadPendingGuests();
+                // Debug: Show what changed
+                if (payload.old && payload.new) {
+                    console.log('🔄 Change detected:');
+                    console.log('   Old pending count:', payload.old.pending_guests?.length || 0);
+                    console.log('   New pending count:', payload.new.pending_guests?.length || 0);
+                    
+                    // Show guest names for debugging
+                    if (payload.new.pending_guests) {
+                        console.log('   New pending guests:', payload.new.pending_guests.map(g => g.guest_name));
+                    }
+                }
                 
-                // If guest was approved/rejected, update the modal if open
-                if (pendingGuestsModal.style.display === 'flex') {
-                    showPendingGuests();
+                // Handle the update
+                if (payload.new && payload.new.pending_guests) {
+                    console.log('✅ Processing pending guests update');
+                    
+                    // Update app state IMMEDIATELY
+                    const oldCount = appState.pendingGuests.length;
+                    appState.pendingGuests = payload.new.pending_guests || [];
+                    const newCount = appState.pendingGuests.length;
+                    
+                    console.log(`📈 Pending guests: ${oldCount} → ${newCount}`);
+                    
+                    // Force UI update
+                    updatePendingUI();
+                    
+                    // Show notification for new guests
+                    if (payload.old && payload.old.pending_guests && newCount > oldCount) {
+                        console.log('🆕 New guest(s) detected!');
+                        
+                        // Find which guest(s) are new
+                        const newGuests = payload.new.pending_guests.filter(newGuest => {
+                            return !payload.old.pending_guests.some(oldGuest => 
+                                oldGuest.guest_id === newGuest.guest_id
+                            );
+                        });
+                        
+                        if (newGuests.length > 0) {
+                            console.log('🔔 Showing notification for:', newGuests[0].guest_name);
+                            showNewGuestNotification(newGuests[0]);
+                        }
+                    }
+                    
+                    // If modal is open, refresh it
+                    if (pendingGuestsModal && pendingGuestsModal.style.display === 'flex') {
+                        console.log('🔄 Refreshing open modal');
+                        // Use setTimeout to avoid UI blocking
+                        setTimeout(() => {
+                            showPendingGuests();
+                        }, 100);
+                    }
+                } else {
+                    console.log('⚠️ No pending_guests data in payload');
                 }
             }
         )
-        .subscribe((status) => {
-            console.log('Pending guests subscription status:', status);
+        .on('system', { event: 'close' }, () => {
+            console.log('🔒 Channel closed');
+        })
+        .on('system', { event: 'error' }, (error) => {
+            console.error('❌ Channel error:', error);
+        })
+        .subscribe((status, error) => {
+            console.log('📡 Subscription callback:', {
+                status: status,
+                error: error,
+                channel: channelName
+            });
+            
             if (status === 'SUBSCRIBED') {
-                console.log('✅ Successfully subscribed to pending guests for session:', appState.currentSessionId);
+                console.log('✅✅✅ SUCCESS: Pending guests subscription ACTIVE!');
+                console.log('🎯 Listening for updates on session:', appState.currentSessionId);
+                
+                // Load initial data AFTER subscription is confirmed
+                setTimeout(() => {
+                    loadPendingGuests();
+                }, 500);
+                
             } else if (status === 'CHANNEL_ERROR') {
-                console.error('❌ Failed to subscribe to pending guests');
+                console.error('❌❌❌ FAILED: Pending guests subscription ERROR!');
+                console.error('Error details:', error);
+                
+                // Try to reconnect after delay
+                setTimeout(() => {
+                    console.log('🔄 Attempting to re-establish subscription...');
+                    setupPendingGuestsSubscription();
+                }, 3000);
+            } else if (status === 'TIMED_OUT') {
+                console.warn('⚠️ Subscription timed out, retrying...');
+                setTimeout(() => {
+                    setupPendingGuestsSubscription();
+                }, 2000);
             }
         });
+    
+    console.log('🎯 Subscription setup complete for:', appState.currentSessionId);
 }
+
+// Show notification for new pending guest
 // Show notification for new pending guest
 function showNewGuestNotification(guest) {
     if (!appState.isHost) return;
@@ -926,7 +1117,7 @@ function showNewGuestNotification(guest) {
                 <strong>New guest request!</strong>
                 <small>${guest.guest_name} wants to join the chat</small>
             </div>
-            <button class="btn btn-small btn-success" onclick="viewPendingGuests()">
+            <button class="btn btn-small btn-success" onclick="showPendingGuests()">
                 <i class="fas fa-eye"></i> View
             </button>
         </div>
@@ -941,57 +1132,6 @@ function showNewGuestNotification(guest) {
             notification.remove();
         }
     }, 10000);
-    
-    // Add CSS for notification
-    if (!document.getElementById('guest-notification-styles')) {
-        const style = document.createElement('style');
-        style.id = 'guest-notification-styles';
-        style.textContent = `
-            .guest-notification {
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: linear-gradient(135deg, var(--card-bg), var(--darker-bg));
-                border: 1px solid var(--accent-secondary);
-                border-radius: 12px;
-                padding: 15px;
-                z-index: 9999;
-                box-shadow: 0 8px 32px rgba(138, 43, 226, 0.3);
-                animation: slideInRight 0.3s ease, fadeOut 0.3s ease 9.7s;
-                max-width: 350px;
-                backdrop-filter: blur(10px);
-            }
-            
-            @keyframes slideInRight {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-            
-            @keyframes fadeOut {
-                from { opacity: 1; }
-                to { opacity: 0; }
-            }
-            
-            .notification-content {
-                display: flex;
-                align-items: center;
-                gap: 12px;
-            }
-            
-            .notification-content i {
-                font-size: 24px;
-                color: var(--accent-light);
-            }
-            
-            .notification-text {
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-            }
-        `;
-        document.head.appendChild(style);
-    }
 }
 
 // Helper function to view pending guests
@@ -1857,27 +1997,31 @@ async function loadPendingGuests() {
 }
 
 // Helper function to update pending UI
-// Helper function to update pending UI
 function updatePendingUI() {
     if (!appState.isHost) return;
     
-    console.log('Updating pending UI with', appState.pendingGuests.length, 'guests');
+    console.log('🎨 Updating pending UI with', appState.pendingGuests.length, 'guest(s)');
     
-    // Update the button visibility and count
-    if (pendingGuestsBtn && pendingCount) {
-        const pendingCountValue = appState.pendingGuests.length;
-        console.log('Setting pending count to:', pendingCountValue);
-        
-        pendingCount.textContent = pendingCountValue;
-        
-        if (pendingCountValue > 0) {
-            console.log('Showing pending guests button');
+    // Update count badge
+    if (pendingCount) {
+        pendingCount.textContent = appState.pendingGuests.length;
+        console.log('🔢 Set pending count to:', appState.pendingGuests.length);
+    }
+    
+    // Show/hide button with animation
+    if (pendingGuestsBtn) {
+        if (appState.pendingGuests.length > 0) {
+            console.log('👁️ Showing pending guests button');
             pendingGuestsBtn.style.display = 'flex';
             pendingGuestsBtn.classList.add('has-pending');
+            
+            // Add pulsing animation
+            pendingGuestsBtn.style.animation = 'pulsePending 2s infinite';
         } else {
-            console.log('Hiding pending guests button');
+            console.log('👁️ Hiding pending guests button');
             pendingGuestsBtn.style.display = 'none';
             pendingGuestsBtn.classList.remove('has-pending');
+            pendingGuestsBtn.style.animation = '';
         }
     }
 }
@@ -1942,70 +2086,37 @@ async function showPendingGuests() {
 }
 
 // Approve a guest by guest record ID
-async function approveGuest(guestRecordId) {
+async function approveGuest(index) {
+    const guest = appState.pendingGuests[index];
+    
     try {
-        // First get the guest details
-        const { data: guest, error: fetchError } = await supabaseClient
-            .from('session_guests')
-            .select('*')
-            .eq('id', guestRecordId)
-            .single();
+        const updateData = {
+            guest_id: guest.guest_id,
+            guest_name: guest.guest_name,
+            guest_ip: guest.guest_ip,
+            guest_connected_at: new Date().toISOString(),
+            pending_guests: appState.pendingGuests.filter((_, i) => i !== index)
+        };
         
-        if (fetchError) throw fetchError;
+        console.log("✅ Approving guest:", guest.guest_name, "ID:", guest.guest_id);
         
-        // Update guest status to approved
         const { error } = await supabaseClient
-            .from('session_guests')
-            .update({
-                status: 'approved',
-                approved_at: new Date().toISOString()
-            })
-            .eq('id', guestRecordId);
+            .from('sessions')
+            .update(updateData)
+            .eq('session_id', appState.currentSessionId);
         
         if (error) throw error;
         
-        // Update the pending list
-        appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
+        // Update local state
+        appState.pendingGuests = appState.pendingGuests.filter((_, i) => i !== index);
         
         // Update UI
-        if (pendingCount) {
-            pendingCount.textContent = appState.pendingGuests.length;
-            if (appState.pendingGuests.length === 0) {
-                pendingGuestsBtn.style.display = 'none';
-            }
-        }
-        // Add this function after the approveGuest function
-async function updateActiveGuestsCount() {
-    if (!appState.isHost || !appState.currentSessionId) return;
-    
-    try {
-        const { data: approvedGuests, error } = await supabaseClient
-            .from('session_guests')
-            .select('guest_name')
-            .eq('session_id', appState.currentSessionId)
-            .eq('status', 'approved');
+        updatePendingUI();
         
-        if (error) {
-            console.error("Error fetching active guests:", error);
-            return;
-        }
-        
-        console.log("Active guests count updated:", approvedGuests?.length || 0);
-        // You can update UI here if needed, like showing active guest count
-        
-    } catch (error) {
-        console.error("Error in updateActiveGuestsCount:", error);
-    }
-}
-        
-        // Refresh the modal display
+        // Refresh modal
         showPendingGuests();
         
-        // Send system message
         await saveMessageToDB('System', `${guest.guest_name} has been approved and joined the chat.`);
-        
-        // Update active guests count
-        updateActiveGuestsCount();
         
     } catch (error) {
         console.error("Error approving guest:", error);
@@ -2013,41 +2124,30 @@ async function updateActiveGuestsCount() {
     }
 }
 
+
 // Deny a guest by guest record ID
-async function denyGuest(guestRecordId) {
+async function denyGuest(index) {
+    const guest = appState.pendingGuests[index];
+    
     try {
-        // First get the guest details
-        const { data: guest, error: fetchError } = await supabaseClient
-            .from('session_guests')
-            .select('*')
-            .eq('id', guestRecordId)
-            .single();
+        const updateData = {
+            pending_guests: appState.pendingGuests.filter((_, i) => i !== index)
+        };
         
-        if (fetchError) throw fetchError;
-        
-        // Update guest status to rejected
         const { error } = await supabaseClient
-            .from('session_guests')
-            .update({
-                status: 'rejected',
-                left_at: new Date().toISOString()
-            })
-            .eq('id', guestRecordId);
+            .from('sessions')
+            .update(updateData)
+            .eq('session_id', appState.currentSessionId);
         
         if (error) throw error;
         
-        // Update the pending list
-        appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
+        // Update local state
+        appState.pendingGuests = appState.pendingGuests.filter((_, i) => i !== index);
         
         // Update UI
-        if (pendingCount) {
-            pendingCount.textContent = appState.pendingGuests.length;
-            if (appState.pendingGuests.length === 0) {
-                pendingGuestsBtn.style.display = 'none';
-            }
-        }
+        updatePendingUI();
         
-        // Refresh the modal display
+        // Refresh modal
         showPendingGuests();
         
     } catch (error) {
