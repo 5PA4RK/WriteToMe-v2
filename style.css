@@ -1466,3 +1466,115 @@ input:focus, button:focus, textarea:focus {
     background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary));
     border-radius: 10px;
 }
+/* Add these styles to your CSS */
+.status-pending {
+    color: var(--warning-yellow);
+    font-weight: bold;
+}
+
+@keyframes pulsePending {
+    0% { box-shadow: 0 0 0 0 rgba(138, 43, 226, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(138, 43, 226, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(138, 43, 226, 0); }
+}
+
+.guest-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, var(--card-bg), var(--darker-bg));
+    border: 1px solid var(--accent-secondary);
+    border-radius: 12px;
+    padding: 15px;
+    z-index: 9999;
+    box-shadow: 0 8px 32px rgba(138, 43, 226, 0.3);
+    animation: slideInRight 0.3s ease, fadeOut 0.3s ease 9.7s;
+    max-width: 350px;
+    backdrop-filter: blur(10px);
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.notification-content i {
+    font-size: 24px;
+    color: var(--accent-light);
+}
+
+.notification-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+/* Add to your style.css */
+@keyframes pulsePending {
+    0% { box-shadow: 0 0 0 0 rgba(138, 43, 226, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(138, 43, 226, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(138, 43, 226, 0); }
+}
+
+.has-pending {
+    animation: pulsePending 2s infinite !important;
+}
+
+.status-pending {
+    color: var(--warning-yellow);
+    font-weight: bold;
+}
+
+.guest-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, var(--card-bg), var(--darker-bg));
+    border: 1px solid var(--accent-secondary);
+    border-radius: 12px;
+    padding: 15px;
+    z-index: 9999;
+    box-shadow: 0 8px 32px rgba(138, 43, 226, 0.3);
+    animation: slideInRight 0.3s ease, fadeOut 0.3s ease 9.7s;
+    max-width: 350px;
+    backdrop-filter: blur(10px);
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.notification-content i {
+    font-size: 24px;
+    color: var(--accent-light);
+}
+
+.notification-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
