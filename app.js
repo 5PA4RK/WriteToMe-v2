@@ -842,125 +842,84 @@ async function connectAsGuest(userIP) {
 
 
 // Set up subscription for pending guests (for host)
+// Set up subscription for pending guests (for host) - ENHANCED VERSION
 function setupPendingGuestsSubscription() {
+    if (!appState.isHost || !appState.currentSessionId) return;
+    
     if (appState.pendingSubscription) {
         supabaseClient.removeChannel(appState.pendingSubscription);
     }
+    
+    console.log("Setting up pending guests subscription for session:", appState.currentSessionId);
     
     appState.pendingSubscription = supabaseClient
         .channel('pending-guests-channel-' + appState.currentSessionId)
         .on(
             'postgres_changes',
             {
-                event: '*',
+                event: 'UPDATE',
                 schema: 'public',
-                table: 'session_guests',
-                filter: 'session_id=eq.' + appState.currentSessionId + 'AND status=eq.pending'
+                table: 'sessions',
+                filter: `session_id=eq.${appState.currentSessionId}`
             },
-            async (payload) => {
-                console.log('Pending guests update received:', payload);
+            (payload) => {
+                console.log("Pending guests subscription triggered:", payload);
                 
-                // Reload pending guests
-                await loadPendingGuests();
-                
-                // If modal is open, refresh it
-                if (pendingGuestsModal.style.display === 'flex') {
-                    showPendingGuests();
-                }
-                
-                // Show notification for new pending guests
-                if (payload.eventType === 'INSERT') {
-                    showNewGuestNotification(payload.new);
+                if (payload.new) {
+                    const newPending = payload.new.pending_guests || [];
+                    const oldPending = appState.pendingGuests || [];
+                    
+                    // Check if there's actually a change
+                    if (JSON.stringify(newPending) !== JSON.stringify(oldPending)) {
+                        appState.pendingGuests = newPending;
+                        updatePendingGuestsUI();
+                        
+                        // Show notification for new pending guests
+                        if (newPending.length > oldPending.length) {
+                            showNotification(`New guest waiting for approval!`);
+                        }
+                    }
                 }
             }
         )
         .subscribe((status) => {
             console.log('Pending guests subscription status:', status);
             if (status === 'SUBSCRIBED') {
-                console.log('Successfully subscribed to pending guests');
+                console.log('Pending guests subscription active');
             }
         });
 }
-// Show notification for new pending guest
-function showNewGuestNotification(guest) {
-    if (!appState.isHost) return;
-    
-    // Create notification
-    const notification = document.createElement('div');
-    notification.className = 'guest-notification';
-    notification.innerHTML = `
-        <div class="notification-content">
-            <i class="fas fa-user-plus"></i>
-            <div class="notification-text">
-                <strong>New guest request!</strong>
-                <small>${guest.guest_name} wants to join the chat</small>
-            </div>
-            <button class="btn btn-small btn-success" onclick="viewPendingGuests()">
-                <i class="fas fa-eye"></i> View
-            </button>
-        </div>
-    `;
-    
-    // Add to page
-    document.body.appendChild(notification);
-    
-    // Auto-remove after 10 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.remove();
-        }
-    }, 10000);
-    
-    // Add CSS for notification
-    if (!document.getElementById('guest-notification-styles')) {
-        const style = document.createElement('style');
-        style.id = 'guest-notification-styles';
-        style.textContent = `
-            .guest-notification {
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: linear-gradient(135deg, var(--card-bg), var(--darker-bg));
-                border: 1px solid var(--accent-secondary);
-                border-radius: 12px;
-                padding: 15px;
-                z-index: 9999;
-                box-shadow: 0 8px 32px rgba(138, 43, 226, 0.3);
-                animation: slideInRight 0.3s ease, fadeOut 0.3s ease 9.7s;
-                max-width: 350px;
-                backdrop-filter: blur(10px);
-            }
-            
-            @keyframes slideInRight {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-            
-            @keyframes fadeOut {
-                from { opacity: 1; }
-                to { opacity: 0; }
-            }
-            
-            .notification-content {
-                display: flex;
-                align-items: center;
-                gap: 12px;
-            }
-            
-            .notification-content i {
-                font-size: 24px;
-                color: var(--accent-light);
-            }
-            
-            .notification-text {
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-            }
+
+// Add notification function
+function showNotification(message) {
+    // Create notification element if it doesn't exist
+    let notification = document.getElementById('global-notification');
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.id = 'global-notification';
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--primary-color);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+            max-width: 300px;
         `;
-        document.head.appendChild(style);
+        document.body.appendChild(notification);
     }
+    
+    notification.textContent = message;
+    notification.style.display = 'block';
+    
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+        notification.style.display = 'none';
+    }, 3000);
 }
 
 // Helper function to view pending guests
@@ -1750,38 +1709,37 @@ function addSystemMessage(text) {
 
 // Load pending guests
 async function loadPendingGuests() {
-    if (!appState.isHost || !appState.currentSessionId) {
-        console.log('Not loading pending guests: isHost=', appState.isHost, 'sessionId=', appState.currentSessionId);
-        return;
-    }
+    if (!appState.isHost || !appState.currentSessionId) return;
     
     try {
-        console.log('🔄 Loading pending guests for session:', appState.currentSessionId);
-        
-        // Get pending guests from session_guests table
-        const { data: guests, error } = await supabaseClient
-            .from('session_guests')
-            .select('*')
+        const { data: session, error } = await supabaseClient
+            .from('sessions')
+            .select('pending_guests')
             .eq('session_id', appState.currentSessionId)
-            .eq('status', 'pending')
-            .order('requested_at', { ascending: true });
+            .single();
         
-        if (error) {
-            console.error("❌ Error loading pending guests:", error);
-            appState.pendingGuests = [];
-            updatePendingUI();
-            return;
-        }
+        if (error) throw error;
         
-        appState.pendingGuests = guests || [];
-        console.log('✅ Loaded pending guests:', appState.pendingGuests.length, 'guests');
+        appState.pendingGuests = session.pending_guests || [];
+        pendingCount.textContent = appState.pendingGuests.length;
+        pendingGuestsBtn.style.display = appState.pendingGuests.length > 0 ? 'flex' : 'none';
         
-        updatePendingUI();
+        // Force UI update
+        updatePendingGuestsUI();
         
     } catch (error) {
-        console.error("❌ Error in loadPendingGuests:", error);
-        appState.pendingGuests = [];
-        updatePendingUI();
+        console.error("Error loading pending guests:", error);
+    }
+}
+
+// Add this helper function
+function updatePendingGuestsUI() {
+    pendingCount.textContent = appState.pendingGuests.length;
+    pendingGuestsBtn.style.display = appState.pendingGuests.length > 0 ? 'flex' : 'none';
+    
+    // Update the modal if it's open
+    if (pendingGuestsModal.style.display === 'flex') {
+        showPendingGuests();
     }
 }
 
