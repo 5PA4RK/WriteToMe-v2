@@ -1302,16 +1302,24 @@ if (appState.isHost) {
 
 // Setup real-time subscriptions
 function setupRealtimeSubscriptions() {
+    console.log('Setting up real-time subscriptions for session:', appState.currentSessionId);
+    console.log('Is host?', appState.isHost);
+    
+    // Remove existing subscriptions
     if (appState.realtimeSubscription) {
+        console.log('Removing existing realtime subscription');
         supabaseClient.removeChannel(appState.realtimeSubscription);
+        appState.realtimeSubscription = null;
     }
+    
     if (appState.typingSubscription) {
         supabaseClient.removeChannel(appState.typingSubscription);
+        appState.typingSubscription = null;
     }
     
     // Messages subscription
     appState.realtimeSubscription = supabaseClient
-        .channel('messages-channel-' + appState.currentSessionId)
+        .channel('messages-channel-' + Date.now())
         .on(
             'postgres_changes',
             {
@@ -1321,6 +1329,7 @@ function setupRealtimeSubscriptions() {
                 filter: 'session_id=eq.' + appState.currentSessionId
             },
             (payload) => {
+                console.log('New message received:', payload);
                 if (payload.new.sender_id !== appState.userId) {
                     displayMessage({
                         id: payload.new.id,
@@ -1343,54 +1352,58 @@ function setupRealtimeSubscriptions() {
             console.log('Messages subscription status:', status);
         });
     
-    // Pending guests subscription - FIXED FILTER
-    supabaseClient
-        .channel('pending-guests-channel-' + appState.currentSessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: '*',
-                schema: 'public',
-                table: 'session_guests',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            async (payload) => {
-                console.log('Session guests update:', payload);
-                console.log('Filtered session:', appState.currentSessionId);
-                console.log('New guest status:', payload.new?.status);
-                
-                if (appState.isHost) {
-                    // Check if this is a pending guest update
+    // Pending guests subscription - ONLY FOR HOST
+    if (appState.isHost && appState.currentSessionId) {
+        console.log('Setting up pending guests subscription for host');
+        
+        // Create a separate channel for pending guests
+        const pendingChannel = supabaseClient
+            .channel('pending-guests-channel-' + Date.now())
+            .on(
+                'postgres_changes',
+                {
+                    event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+                    schema: 'public',
+                    table: 'session_guests',
+                    filter: 'session_id=eq.' + appState.currentSessionId
+                },
+                async (payload) => {
+                    console.log('Session guests update detected:', payload);
+                    console.log('Event type:', payload.eventType);
+                    console.log('New data:', payload.new);
+                    console.log('Old data:', payload.old);
+                    
+                    // Only handle pending guests
                     if (payload.new && payload.new.status === 'pending') {
-                        console.log('New pending guest detected!', payload.new.guest_name);
+                        console.log('NEW PENDING GUEST DETECTED:', payload.new.guest_name);
                         
-                        // Load pending guests
+                        // Force reload pending guests
                         await loadPendingGuests();
                         
                         // Show notification
                         showNewGuestNotification(payload.new);
-                        
-                        // Update UI
-                        if (pendingCount && pendingGuestsBtn) {
-                            pendingCount.textContent = appState.pendingGuests.length;
-                            pendingGuestsBtn.style.display = 'flex';
-                            pendingGuestsBtn.classList.add('has-pending');
-                        }
-                    } else if (payload.new && (payload.new.status === 'approved' || payload.new.status === 'rejected')) {
-                        // Guest was approved or rejected
-                        console.log('Guest status updated:', payload.new.status);
+                    } else if (payload.new && payload.new.status !== 'pending') {
+                        // Guest was approved/rejected - update the list
+                        console.log('Guest status changed:', payload.new.status);
                         await loadPendingGuests();
                     }
                 }
-            }
-        )
-        .subscribe((status) => {
-            console.log('Pending guests subscription status:', status);
-        });
+            )
+            .subscribe((status) => {
+                console.log('Pending guests subscription status:', status);
+                if (status === 'SUBSCRIBED') {
+                    console.log('✅ Pending guests subscription ACTIVE');
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error('❌ Pending guests subscription ERROR');
+                }
+            });
+        
+        appState.pendingSubscription = pendingChannel;
+    }
     
     // Typing indicator subscription
     appState.typingSubscription = supabaseClient
-        .channel('typing-channel-' + appState.currentSessionId)
+        .channel('typing-channel-' + Date.now())
         .on(
             'postgres_changes',
             {
@@ -1410,9 +1423,7 @@ function setupRealtimeSubscriptions() {
                 }
             }
         )
-        .subscribe((status) => {
-            console.log('Typing subscription status:', status);
-        });
+        .subscribe();
 }
 
 // Handle typing
@@ -1745,7 +1756,7 @@ async function loadPendingGuests() {
     }
     
     try {
-        console.log('Loading pending guests for session:', appState.currentSessionId);
+        console.log('🔄 Loading pending guests for session:', appState.currentSessionId);
         
         // Get pending guests from session_guests table
         const { data: guests, error } = await supabaseClient
@@ -1756,19 +1767,19 @@ async function loadPendingGuests() {
             .order('requested_at', { ascending: true });
         
         if (error) {
-            console.error("Error loading pending guests:", error);
+            console.error("❌ Error loading pending guests:", error);
             appState.pendingGuests = [];
             updatePendingUI();
             return;
         }
         
         appState.pendingGuests = guests || [];
-        console.log('Loaded pending guests:', appState.pendingGuests.length, 'guests');
+        console.log('✅ Loaded pending guests:', appState.pendingGuests.length, 'guests');
         
         updatePendingUI();
         
     } catch (error) {
-        console.error("Error in loadPendingGuests:", error);
+        console.error("❌ Error in loadPendingGuests:", error);
         appState.pendingGuests = [];
         updatePendingUI();
     }
@@ -1778,20 +1789,27 @@ async function loadPendingGuests() {
 function updatePendingUI() {
     if (!appState.isHost) return;
     
+    console.log('Updating pending UI, count:', appState.pendingGuests.length);
+    
     // Update the button visibility and count
     if (pendingGuestsBtn && pendingCount) {
         pendingCount.textContent = appState.pendingGuests.length;
         if (appState.pendingGuests.length > 0) {
+            console.log('Showing pending guests button');
             pendingGuestsBtn.style.display = 'flex';
             pendingGuestsBtn.classList.add('has-pending');
+            
+            // Add pulsing animation
+            pendingGuestsBtn.style.animation = 'pulsePending 2s infinite';
         } else {
+            console.log('Hiding pending guests button');
             pendingGuestsBtn.style.display = 'none';
             pendingGuestsBtn.classList.remove('has-pending');
+            pendingGuestsBtn.style.animation = 'none';
         }
     }
 }
 
-// Show pending guests modal
 // Show pending guests modal
 async function showPendingGuests() {
     if (!pendingGuestsList) return;
