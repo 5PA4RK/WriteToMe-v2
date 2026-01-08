@@ -1293,35 +1293,51 @@ async function sendMessage() {
 // Send message to database
 async function sendMessageToDB(text, imageUrl) {
     try {
-        console.log('💾 Saving message to DB. Text:', text?.substring(0, 50), 'Has image:', !!imageUrl);
+        console.log('=== DEBUG sendMessageToDB ===');
+        console.log('Text:', text);
+        console.log('Has image:', !!imageUrl);
+        console.log('Image length:', imageUrl?.length || 0);
+        console.log('Session ID:', appState.currentSessionId);
+        console.log('User ID:', appState.userId);
         
-        const messageData = {
+        // Try with minimal data first
+        const testData = {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
             sender_name: appState.userName,
-            message: text || '',
+            message: text || ' ',
             created_at: new Date().toISOString()
         };
         
+        // Only add image_url if we have one
         if (imageUrl) {
-            console.log('📸 Adding image to message, size:', imageUrl.length);
-            messageData.image_url = imageUrl;
+            // Trim image if too large for debugging
+            if (imageUrl.length > 10000) {
+                console.log('Large image, trimming for test...');
+                testData.image_url = imageUrl.substring(0, 10000) + '...[trimmed]';
+            } else {
+                testData.image_url = imageUrl;
+            }
         }
+        
+        console.log('Sending data:', testData);
         
         const { data, error } = await supabaseClient
             .from('messages')
-            .insert([messageData])
+            .insert([testData])
             .select()
             .single();
         
         if (error) {
-            console.error("❌ Error sending message:", error);
+            console.error('❌ SUPABASE ERROR:', error);
+            console.error('Error details:', error.details, error.hint, error.message);
             throw error;
         }
         
-        console.log('✅ Message saved to DB:', data.id);
+        console.log('✅ SUCCESS! Inserted message ID:', data.id);
+        console.log('Returned data:', data);
         
-        // Display the sent message immediately
+        // Display the message
         displayMessage({
             id: data.id,
             sender: appState.userName,
@@ -1335,8 +1351,27 @@ async function sendMessageToDB(text, imageUrl) {
         return { success: true, data };
         
     } catch (error) {
-        console.error("❌ Error in sendMessageToDB:", error);
-        alert("Failed to send message: " + error.message);
+        console.error('=== ERROR DETAILS ===');
+        console.error('Full error:', error);
+        console.error('Error message:', error.message);
+        console.error('Error code:', error.code);
+        
+        // Try alternative insert method
+        console.log('Trying alternative insert method...');
+        try {
+            const altResult = await supabaseClient.rpc('insert_message', {
+                p_session_id: appState.currentSessionId,
+                p_sender_id: appState.userId,
+                p_sender_name: appState.userName,
+                p_message: text || ' ',
+                p_image_url: imageUrl
+            });
+            console.log('Alternative result:', altResult);
+        } catch (altError) {
+            console.error('Alternative also failed:', altError);
+        }
+        
+        alert("Failed to send message. Check console for details.");
         return null;
     }
 }
@@ -1730,132 +1765,56 @@ function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
-    console.log('📸 Image selected for auto-upload:', file.name, file.size, file.type);
+    console.log('🔄 Auto-upload starting...');
     
-    // Validate
-    if (file.size > 5 * 1024 * 1024) {
-        alert("❌ Image too large (max 5MB)");
+    // Quick validation
+    if (file.size > 2000000) { // 2MB max
+        alert("Image too large (max 2MB)");
         imageUpload.value = '';
         return;
     }
     
-    if (!file.type.startsWith('image/')) {
-        alert("❌ Please select an image file");
-        imageUpload.value = '';
-        return;
-    }
-    
-    // Show loading state
-    const originalSendHTML = sendMessageBtn.innerHTML;
+    // Show uploading state
+    messageInput.placeholder = "Uploading image...";
+    messageInput.disabled = true;
     sendMessageBtn.disabled = true;
-    sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
     
-    // Read file
     const reader = new FileReader();
     
-    reader.onload = async function(event) {
-        console.log('📸 Image loaded, size in chars:', event.target.result.length);
-        
+    reader.onload = async function(e) {
         try {
-            // Create message data
-            const messageData = {
-                session_id: appState.currentSessionId,
-                sender_id: appState.userId,
-                sender_name: appState.userName,
-                message: `📸 ${file.name}`,
-                image_url: event.target.result,
-                created_at: new Date().toISOString()
-            };
+            console.log('📤 Sending image data, size:', e.target.result.length);
             
-            console.log('📤 Inserting into database...');
+            // Use the debug send function
+            const result = await sendMessageToDB(`📸 ${file.name}`, e.target.result);
             
-            // Insert into database
-            const { data, error } = await supabaseClient
-                .from('messages')
-                .insert([messageData])
-                .select()
-                .single();
-            
-            if (error) {
-                console.error('❌ Database error:', error);
-                throw error;
+            if (result && result.success) {
+                console.log('✅ Image sent successfully!');
+                imageUpload.value = ''; // Clear input
+            } else {
+                throw new Error('Send failed');
             }
-            
-            console.log('✅ Database insert successful:', data.id);
-            
-            // Display the message locally
-            const messageObj = {
-                id: data.id,
-                sender: appState.userName,
-                text: `📸 ${file.name}`,
-                image: event.target.result,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_historical: false
-            };
-            
-            // Create and append message element
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message sent';
-            messageDiv.id = `msg-${data.id}`;
-            
-            messageDiv.innerHTML = `
-                <div class="message-sender">${appState.userName}</div>
-                <div class="message-content">
-                    <div class="message-text">
-                        📸 ${file.name}
-                        <img src="${event.target.result}" class="message-image" onclick="showFullImage('${event.target.result.replace(/'/g, "\\'")}')">
-                    </div>
-                    <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                </div>
-                <div class="message-actions">
-                    <button class="message-action-btn" onclick="editMessage('${data.id}')">
-                        <i class="fas fa-edit"></i> Edit
-                    </button>
-                    <button class="message-action-btn" onclick="deleteMessage('${data.id}')">
-                        <i class="fas fa-trash"></i> Delete
-                    </button>
-                    <button class="message-action-btn" onclick="replyToMessage('${data.id}')">
-                        <i class="fas fa-reply"></i> Reply
-                    </button>
-                </div>
-            `;
-            
-            chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-            
-            // Play sound
-            if (appState.soundEnabled) {
-                try {
-                    messageSound.currentTime = 0;
-                    messageSound.play().catch(e => console.log("Sound error:", e));
-                } catch (e) {}
-            }
-            
-            // Clear file input
-            imageUpload.value = '';
-            
-            console.log('✅ Image auto-uploaded successfully!');
             
         } catch (error) {
-            console.error('❌ Auto-upload failed:', error);
-            alert("Failed to upload image: " + error.message);
+            console.error('Upload failed:', error);
+            alert("Couldn't upload image. See console for details.");
         } finally {
-            // Restore button
+            // Reset UI
+            messageInput.placeholder = "Type your message here...";
+            messageInput.disabled = false;
             sendMessageBtn.disabled = false;
-            sendMessageBtn.innerHTML = originalSendHTML;
+            messageInput.focus();
         }
     };
     
-    reader.onerror = function(error) {
-        console.error('❌ FileReader error:', error);
-        alert("Error reading image file");
-        imageUpload.value = '';
+    reader.onerror = function() {
+        alert("Error reading file");
+        messageInput.placeholder = "Type your message here...";
+        messageInput.disabled = false;
         sendMessageBtn.disabled = false;
-        sendMessageBtn.innerHTML = originalSendHTML;
+        imageUpload.value = '';
     };
     
-    // Start reading
     reader.readAsDataURL(file);
 }
 // Helper function to send image message
