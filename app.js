@@ -1034,49 +1034,58 @@ function setupPendingApprovalSubscription(sessionId) {
         appState.pendingSubscription = null;
     }
     
-    const channelName = `guest-approval-${sessionId}-${appState.userId}`;
-    
+    // Subscribe to session_guests for THIS GUEST specifically
     appState.pendingSubscription = supabaseClient
-        .channel(channelName)
+        .channel('guest_approval_' + appState.userId)
         .on(
             'postgres_changes',
             {
-                event: 'UPDATE',
+                event: '*',
                 schema: 'public',
                 table: 'session_guests',
-                filter: `session_id=eq.${sessionId} AND guest_id=eq.${appState.userId}`
+                filter: `guest_id=eq.${appState.userId}`
             },
             async (payload) => {
-                console.log('Guest approval update:', payload.new);
+                console.log('👤 Guest approval update:', payload.new?.status);
                 
-                if (payload.new.status === 'approved') {
-                    console.log("🎉 Guest has been APPROVED!");
-                    
-                    appState.currentSessionId = sessionId;
-                    appState.isConnected = true;
-                    saveSessionToStorage();
-                    
-                    if (appState.pendingSubscription) {
-                        supabaseClient.removeChannel(appState.pendingSubscription);
-                        appState.pendingSubscription = null;
+                if (payload.new && payload.new.session_id === sessionId) {
+                    if (payload.new.status === 'approved') {
+                        console.log("🎉 Guest has been APPROVED!");
+                        
+                        appState.currentSessionId = sessionId;
+                        appState.isConnected = true;
+                        saveSessionToStorage();
+                        
+                        // Remove pending subscription
+                        if (appState.pendingSubscription) {
+                            supabaseClient.removeChannel(appState.pendingSubscription);
+                            appState.pendingSubscription = null;
+                        }
+                        
+                        // Update UI and setup chat
+                        updateUIAfterConnection();
+                        setupRealtimeSubscriptions();
+                        await loadChatHistory();
+                        await saveMessageToDB('System', `${appState.userName} has joined the chat.`);
+                        
+                        // Alert the user
+                        alert("🎉 You have been approved! Welcome to the chat.");
+                        
+                    } else if (payload.new.status === 'rejected') {
+                        console.log("❌ Guest has been REJECTED");
+                        alert("Your access request was rejected by the host.");
+                        location.reload();
                     }
-                    
-                    updateUIAfterConnection();
-                    setupRealtimeSubscriptions();
-                    await loadChatHistory();
-                    await saveMessageToDB('System', `${appState.userName} has joined the chat.`);
-                    
-                } else if (payload.new.status === 'rejected') {
-                    console.log("❌ Guest has been REJECTED");
-                    alert("Your access request was rejected by the host.");
-                    location.reload();
                 }
             }
         )
-        .subscribe((status) => {
+        .subscribe((status, err) => {
             console.log('Guest approval subscription status:', status);
             if (status === 'SUBSCRIBED') {
                 console.log('✅ Guest approval subscription active');
+            }
+            if (err) {
+                console.error('Guest approval subscription error:', err);
             }
         });
 }
@@ -1155,31 +1164,36 @@ function setupRealtimeSubscriptions() {
         });
     
     // Typing indicator subscription
-    appState.typingSubscription = supabaseClient
-        .channel('public:sessions')
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'sessions'
-            },
-            (payload) => {
-                console.log('⌨️ Typing update:', payload.new?.typing_user);
-                if (payload.new && payload.new.typing_user && payload.new.typing_user !== appState.userName) {
-                    typingUser.textContent = payload.new.typing_user;
-                    typingIndicator.classList.add('show');
-                    
-                    setTimeout(() => {
+// In setupRealtimeSubscriptions(), update the typing subscription:
+appState.typingSubscription = supabaseClient
+    .channel('typing_updates_' + appState.currentSessionId)
+    .on(
+        'postgres_changes',
+        {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'sessions',
+            filter: `session_id=eq.${appState.currentSessionId}`
+        },
+        (payload) => {
+            console.log('⌨️ Typing update for session:', payload.new?.typing_user);
+            if (payload.new && payload.new.typing_user && payload.new.typing_user !== appState.userName) {
+                typingUser.textContent = payload.new.typing_user;
+                typingIndicator.classList.add('show');
+                
+                // Clear after 3 seconds
+                setTimeout(() => {
+                    if (typingUser.textContent === payload.new.typing_user) {
                         typingIndicator.classList.remove('show');
-                    }, 3000);
-                }
+                    }
+                }, 3000);
             }
-        )
-        .subscribe((status, err) => {
-            console.log('⌨️ TYPING Subscription status:', status);
-            if (err) console.error('Typing subscription error:', err);
-        });
+        }
+    )
+    .subscribe((status, err) => {
+        console.log('⌨️ TYPING Subscription status:', status);
+        if (err) console.error('Typing subscription error:', err);
+    });
     
     // Pending guests subscription (host only)
     if (appState.isHost) {
@@ -1216,11 +1230,17 @@ async function handleTyping() {
     if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) return;
     
     try {
+        console.log('⌨️ User typing:', appState.userName);
+        
         await supabaseClient
             .from('sessions')
-            .update({ typing_user: appState.userName })
+            .update({ 
+                typing_user: appState.userName,
+                updated_at: new Date().toISOString()
+            })
             .eq('session_id', appState.currentSessionId);
         
+        // Clear typing indicator after 1 second
         if (appState.typingTimeout) {
             clearTimeout(appState.typingTimeout);
         }
@@ -1228,7 +1248,10 @@ async function handleTyping() {
         appState.typingTimeout = setTimeout(() => {
             supabaseClient
                 .from('sessions')
-                .update({ typing_user: null })
+                .update({ 
+                    typing_user: null,
+                    updated_at: new Date().toISOString()
+                })
                 .eq('session_id', appState.currentSessionId)
                 .catch(e => console.log("Error clearing typing:", e));
         }, 1000);
@@ -1270,6 +1293,8 @@ async function sendMessage() {
 // Send message to database
 async function sendMessageToDB(text, imageUrl) {
     try {
+        console.log('💾 Saving message to DB. Text:', text?.substring(0, 50), 'Has image:', !!imageUrl);
+        
         const messageData = {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
@@ -1279,17 +1304,26 @@ async function sendMessageToDB(text, imageUrl) {
         };
         
         if (imageUrl) {
+            console.log('📸 Adding image to message, size:', imageUrl.length);
             messageData.image_url = imageUrl;
         }
         
-        const { error } = await supabaseClient
+        const { data, error } = await supabaseClient
             .from('messages')
-            .insert([messageData]);
+            .insert([messageData])
+            .select()
+            .single();
         
-        if (error) throw error;
+        if (error) {
+            console.error("❌ Error sending message:", error);
+            throw error;
+        }
         
+        console.log('✅ Message saved to DB:', data.id);
+        
+        // Display the sent message immediately
         displayMessage({
-            id: 'temp_' + Date.now(),
+            id: data.id,
             sender: appState.userName,
             text: text,
             image: imageUrl,
@@ -1298,14 +1332,30 @@ async function sendMessageToDB(text, imageUrl) {
             is_historical: false
         });
         
-        return { success: true };
+        return { success: true, data };
         
     } catch (error) {
-        console.error("Error sending message:", error);
+        console.error("❌ Error in sendMessageToDB:", error);
         alert("Failed to send message: " + error.message);
         return null;
     }
 }
+function debugImageUpload() {
+    console.log("=== IMAGE UPLOAD DEBUG ===");
+    console.log("imageUpload element:", imageUpload);
+    console.log("Current files:", imageUpload.files);
+    
+    // Test if file input is working
+    const testFile = new File(['test'], 'test.png', { type: 'image/png' });
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(testFile);
+    imageUpload.files = dataTransfer.files;
+    
+    console.log("After setting test file:", imageUpload.files);
+    console.log("=== END DEBUG ===");
+}
+
+// Call in console: debugImageUpload()
 
 // Display message
 function displayMessage(message) {
@@ -1578,21 +1628,46 @@ function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
+    console.log('📸 Image selected:', file.name, file.size, file.type);
+    
+    // Validate file
     if (file.size > 5 * 1024 * 1024) {
-        alert("Image size should be less than 5MB.");
+        alert("❌ Image size should be less than 5MB.");
+        imageUpload.value = '';
         return;
     }
     
     if (!file.type.startsWith('image/')) {
-        alert("Please select an image file.");
+        alert("❌ Please select an image file (JPEG, PNG, GIF, etc.).");
+        imageUpload.value = '';
         return;
     }
     
+    // Create preview and prepare for upload
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
+        console.log('📸 Image loaded, size:', e.target.result.length, 'chars');
+        
+        // Show preview in message input
         messageInput.value = `[Image: ${file.name}]`;
-        sendMessage();
+        
+        // Auto-send the image
+        await sendMessageToDB(`[Image: ${file.name}]`, e.target.result);
+        
+        // Clear file input
+        imageUpload.value = '';
+        
+        // Clear message input
+        messageInput.value = '';
+        messageInput.style.height = 'auto';
     };
+    
+    reader.onerror = function(e) {
+        console.error('❌ Error reading image:', e);
+        alert("Error reading image file. Please try another image.");
+        imageUpload.value = '';
+    };
+    
     reader.readAsDataURL(file);
 }
 
