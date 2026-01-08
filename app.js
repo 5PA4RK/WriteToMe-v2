@@ -1628,47 +1628,172 @@ function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
-    console.log('📸 Image selected:', file.name, file.size, file.type);
+    console.log('📸 Image selected:', {
+        name: file.name,
+        size: (file.size / 1024).toFixed(2) + ' KB',
+        type: file.type,
+        lastModified: new Date(file.lastModified).toLocaleString()
+    });
     
     // Validate file
-    if (file.size > 5 * 1024 * 1024) {
-        alert("❌ Image size should be less than 5MB.");
+    const maxSizeMB = 2; // Reduced from 5MB to 2MB for safety
+    if (file.size > maxSizeMB * 1024 * 1024) {
+        alert(`❌ Image size should be less than ${maxSizeMB}MB. Your file is ${(file.size / 1024 / 1024).toFixed(2)}MB.`);
         imageUpload.value = '';
         return;
     }
     
     if (!file.type.startsWith('image/')) {
-        alert("❌ Please select an image file (JPEG, PNG, GIF, etc.).");
+        alert("❌ Please select an image file (JPEG, PNG, GIF, WebP, etc.).");
         imageUpload.value = '';
         return;
     }
     
+    // Allowed image types
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+    if (!allowedTypes.includes(file.type)) {
+        alert("❌ Unsupported image type. Please use JPEG, PNG, GIF, WebP, or SVG.");
+        imageUpload.value = '';
+        return;
+    }
+    
+    // Show loading indicator
+    const originalButtonText = sendMessageBtn.innerHTML;
+    sendMessageBtn.disabled = true;
+    sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    
     // Create preview and prepare for upload
     const reader = new FileReader();
+    
+    reader.onloadstart = function() {
+        console.log('📸 Starting to read image file...');
+    };
+    
+    reader.onprogress = function(e) {
+        if (e.lengthComputable) {
+            const percentLoaded = Math.round((e.loaded / e.total) * 100);
+            console.log(`📸 Loading image: ${percentLoaded}%`);
+        }
+    };
+    
     reader.onload = async function(e) {
-        console.log('📸 Image loaded, size:', e.target.result.length, 'chars');
+        console.log('📸 Image loaded as data URL. Length:', e.target.result.length, 'characters');
         
-        // Show preview in message input
-        messageInput.value = `[Image: ${file.name}]`;
+        // Check if data URL is too long (PostgreSQL TEXT limit is ~1GB, but practical limit is smaller)
+        if (e.target.result.length > 1000000) { // ~1MB as text
+            console.warn('⚠️ Large image data URL:', e.target.result.length);
+            
+            // Try to compress image before sending
+            const compressedImage = await compressImage(file);
+            if (compressedImage) {
+                await sendImageMessage(compressedImage, file.name);
+            } else {
+                // Send original but warn
+                await sendImageMessage(e.target.result, file.name);
+            }
+        } else {
+            // Image is small enough
+            await sendImageMessage(e.target.result, file.name);
+        }
         
-        // Auto-send the image
-        await sendMessageToDB(`[Image: ${file.name}]`, e.target.result);
-        
-        // Clear file input
+        // Reset UI
         imageUpload.value = '';
-        
-        // Clear message input
-        messageInput.value = '';
-        messageInput.style.height = 'auto';
+        sendMessageBtn.disabled = false;
+        sendMessageBtn.innerHTML = originalButtonText;
     };
     
     reader.onerror = function(e) {
         console.error('❌ Error reading image:', e);
         alert("Error reading image file. Please try another image.");
         imageUpload.value = '';
+        sendMessageBtn.disabled = false;
+        sendMessageBtn.innerHTML = originalButtonText;
     };
     
+    reader.onabort = function() {
+        console.log('Image reading aborted');
+        sendMessageBtn.disabled = false;
+        sendMessageBtn.innerHTML = originalButtonText;
+    };
+    
+    // Start reading the file
     reader.readAsDataURL(file);
+}
+
+// Helper function to send image message
+async function sendImageMessage(imageData, fileName) {
+    try {
+        console.log('📤 Sending image message...');
+        
+        // Create message with image
+        const messageText = `[Image: ${fileName}]`;
+        
+        const result = await sendMessageToDB(messageText, imageData);
+        
+        if (result && result.success) {
+            console.log('✅ Image sent successfully!');
+        } else {
+            console.error('❌ Failed to send image');
+            alert("Failed to upload image. Please try again.");
+        }
+    } catch (error) {
+        console.error('❌ Error in sendImageMessage:', error);
+        alert("Error uploading image: " + error.message);
+    }
+}
+
+// Image compression function (optional)
+async function compressImage(file, maxWidth = 800, quality = 0.7) {
+    return new Promise((resolve) => {
+        // Skip compression for small files
+        if (file.size < 500000) { // Less than 500KB
+            console.log('📸 Image is small, skipping compression');
+            resolve(null);
+            return;
+        }
+        
+        console.log('📸 Attempting to compress image...');
+        
+        const img = new Image();
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        img.onload = function() {
+            // Calculate new dimensions
+            let width = img.width;
+            let height = img.height;
+            
+            if (width > maxWidth) {
+                height = (height * maxWidth) / width;
+                width = maxWidth;
+            }
+            
+            // Set canvas dimensions
+            canvas.width = width;
+            canvas.height = height;
+            
+            // Draw and compress image
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Convert to data URL with compression
+            const compressedDataUrl = canvas.toDataURL(file.type, quality);
+            
+            console.log('📸 Image compressed:', {
+                original: (file.size / 1024).toFixed(2) + ' KB',
+                compressed: (compressedDataUrl.length / 1024).toFixed(2) + ' KB',
+                reduction: ((1 - compressedDataUrl.length / (file.size * 1.333)) * 100).toFixed(1) + '%' // *1.333 for base64 overhead
+            });
+            
+            resolve(compressedDataUrl);
+        };
+        
+        img.onerror = function() {
+            console.warn('⚠️ Could not compress image, using original');
+            resolve(null);
+        };
+        
+        img.src = URL.createObjectURL(file);
+    });
 }
 
 // Toggle emoji picker
