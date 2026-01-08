@@ -1628,95 +1628,21 @@ function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
-    console.log('📸 Image selected:', {
-        name: file.name,
-        size: (file.size / 1024).toFixed(2) + ' KB',
-        type: file.type,
-        lastModified: new Date(file.lastModified).toLocaleString()
-    });
-    
-    // Validate file
-    const maxSizeMB = 2; // Reduced from 5MB to 2MB for safety
-    if (file.size > maxSizeMB * 1024 * 1024) {
-        alert(`❌ Image size should be less than ${maxSizeMB}MB. Your file is ${(file.size / 1024 / 1024).toFixed(2)}MB.`);
-        imageUpload.value = '';
+    // Simple validation
+    if (file.size > 1 * 1024 * 1024) { // 1MB max
+        alert("Image too large. Max 1MB.");
         return;
     }
     
-    if (!file.type.startsWith('image/')) {
-        alert("❌ Please select an image file (JPEG, PNG, GIF, WebP, etc.).");
-        imageUpload.value = '';
-        return;
-    }
-    
-    // Allowed image types
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
-    if (!allowedTypes.includes(file.type)) {
-        alert("❌ Unsupported image type. Please use JPEG, PNG, GIF, WebP, or SVG.");
-        imageUpload.value = '';
-        return;
-    }
-    
-    // Show loading indicator
-    const originalButtonText = sendMessageBtn.innerHTML;
-    sendMessageBtn.disabled = true;
-    sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-    
-    // Create preview and prepare for upload
     const reader = new FileReader();
-    
-    reader.onloadstart = function() {
-        console.log('📸 Starting to read image file...');
-    };
-    
-    reader.onprogress = function(e) {
-        if (e.lengthComputable) {
-            const percentLoaded = Math.round((e.loaded / e.total) * 100);
-            console.log(`📸 Loading image: ${percentLoaded}%`);
-        }
-    };
-    
     reader.onload = async function(e) {
-        console.log('📸 Image loaded as data URL. Length:', e.target.result.length, 'characters');
+        // Try WITHOUT the image first
+        await sendMessageToDB(`[Image: ${file.name}]`, null);
         
-        // Check if data URL is too long (PostgreSQL TEXT limit is ~1GB, but practical limit is smaller)
-        if (e.target.result.length > 1000000) { // ~1MB as text
-            console.warn('⚠️ Large image data URL:', e.target.result.length);
-            
-            // Try to compress image before sending
-            const compressedImage = await compressImage(file);
-            if (compressedImage) {
-                await sendImageMessage(compressedImage, file.name);
-            } else {
-                // Send original but warn
-                await sendImageMessage(e.target.result, file.name);
-            }
-        } else {
-            // Image is small enough
-            await sendImageMessage(e.target.result, file.name);
-        }
-        
-        // Reset UI
-        imageUpload.value = '';
-        sendMessageBtn.disabled = false;
-        sendMessageBtn.innerHTML = originalButtonText;
+        // Then try with a SMALL test
+        const smallTest = e.target.result.substring(0, 1000); // First 1000 chars only
+        console.log('Testing with small data:', smallTest.length);
     };
-    
-    reader.onerror = function(e) {
-        console.error('❌ Error reading image:', e);
-        alert("Error reading image file. Please try another image.");
-        imageUpload.value = '';
-        sendMessageBtn.disabled = false;
-        sendMessageBtn.innerHTML = originalButtonText;
-    };
-    
-    reader.onabort = function() {
-        console.log('Image reading aborted');
-        sendMessageBtn.disabled = false;
-        sendMessageBtn.innerHTML = originalButtonText;
-    };
-    
-    // Start reading the file
     reader.readAsDataURL(file);
 }
 
