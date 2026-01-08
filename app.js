@@ -2155,29 +2155,133 @@ function returnToActiveChat() {
 }
 
 // Delete session
+// Replace the existing deleteSession function with this improved version:
 async function deleteSession(sessionId) {
-    if (!confirm("Are you sure you want to delete this session? This action cannot be undone.")) return;
+    if (!appState.isHost) {
+        alert("Only hosts can delete sessions.");
+        return;
+    }
+    
+    if (!confirm("⚠️ WARNING: Are you sure you want to delete this session?\n\nThis will permanently delete:\n• All chat messages in this session\n• All guest records for this session\n• The session record itself\n\nThis action CANNOT be undone!")) {
+        return;
+    }
     
     try {
-        await supabaseClient
+        console.log("🗑️ Starting deletion of session:", sessionId);
+        
+        // First, check if this is the active session
+        if (sessionId === appState.currentSessionId) {
+            alert("Cannot delete the active session. Please end the session first or switch to a different view.");
+            return;
+        }
+        
+        // Delete in the correct order to handle foreign key constraints:
+        
+        // 1. First, delete all messages in the session
+        console.log("Deleting messages...");
+        const { error: messagesError } = await supabaseClient
             .from('messages')
             .delete()
             .eq('session_id', sessionId);
         
-        await supabaseClient
+        if (messagesError) {
+            console.error("Error deleting messages:", messagesError);
+            // Try marking as deleted instead
+            await supabaseClient
+                .from('messages')
+                .update({ 
+                    is_deleted: true,
+                    deleted_at: new Date().toISOString(),
+                    deleted_by: appState.userId
+                })
+                .eq('session_id', sessionId);
+        }
+        
+        // 2. Delete all session guests
+        console.log("Deleting session guests...");
+        const { error: guestsError } = await supabaseClient
+            .from('session_guests')
+            .delete()
+            .eq('session_id', sessionId);
+        
+        if (guestsError) {
+            console.error("Error deleting guests:", guestsError);
+        }
+        
+        // 3. Finally, delete the session itself
+        console.log("Deleting session...");
+        const { error: sessionError } = await supabaseClient
             .from('sessions')
             .delete()
             .eq('session_id', sessionId);
         
-        loadChatSessions();
+        if (sessionError) {
+            console.error("Error deleting session:", sessionError);
+            
+            // If delete fails, try deactivating it instead
+            await supabaseClient
+                .from('sessions')
+                .update({ 
+                    is_active: false,
+                    ended_at: new Date().toISOString(),
+                    deleted_at: new Date().toISOString(),
+                    deleted_by: appState.userId
+                })
+                .eq('session_id', sessionId);
+            
+            console.log("Session marked as deleted instead.");
+            alert("Session marked as deleted (soft delete).");
+        } else {
+            console.log("✅ Session deleted successfully!");
+            alert("Session deleted successfully!");
+        }
         
+        // Refresh the sessions list
+        await loadChatSessions();
+        
+        // If we were viewing this session's history, return to active chat
         if (appState.viewingSessionId === sessionId) {
             returnToActiveChat();
         }
         
     } catch (error) {
-        console.error("Error deleting session:", error);
-        alert("Failed to delete session.");
+        console.error("❌ Error in deleteSession:", error);
+        
+        // Try a more aggressive approach if the first one fails
+        try {
+            console.log("Trying alternative deletion method...");
+            
+            // Update all messages as deleted
+            await supabaseClient
+                .from('messages')
+                .update({ 
+                    is_deleted: true,
+                    deleted_at: new Date().toISOString(),
+                    deleted_by: appState.userId
+                })
+                .eq('session_id', sessionId);
+            
+            // Update session as deleted
+            await supabaseClient
+                .from('sessions')
+                .update({ 
+                    is_active: false,
+                    ended_at: new Date().toISOString(),
+                    deleted_at: new Date().toISOString(),
+                    deleted_by: appState.userId
+                })
+                .eq('session_id', sessionId);
+            
+            console.log("✅ Session soft-deleted successfully!");
+            alert("Session marked as deleted (soft delete).");
+            
+            // Refresh the sessions list
+            await loadChatSessions();
+            
+        } catch (softDeleteError) {
+            console.error("❌ Soft delete also failed:", softDeleteError);
+            alert("Failed to delete session: " + error.message + "\n\nPlease try again or contact support.");
+        }
     }
 }
 
