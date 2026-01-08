@@ -1628,61 +1628,41 @@ function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
-    console.log('📸 Image selected:', file.name);
-    
-    // Validate file
+    // Quick validation
     if (file.size > 5 * 1024 * 1024) {
-        alert("Image size should be less than 5MB.");
-        imageUpload.value = '';
+        alert("Image too large (max 5MB)");
         return;
     }
     
     if (!file.type.startsWith('image/')) {
-        alert("Please select an image file.");
-        imageUpload.value = '';
+        alert("Please select an image file");
         return;
     }
     
-    // Show "Uploading..." state
-    const originalButtonHTML = sendMessageBtn.innerHTML;
+    // Show loading
+    const originalText = sendMessageBtn.innerHTML;
     sendMessageBtn.disabled = true;
-    sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     
-    // Read and send image immediately
     const reader = new FileReader();
-    
     reader.onload = async function(e) {
-        console.log('📸 Image loaded, sending...');
+        // Auto-send immediately
+        await sendMessageToDB(`📸 ${file.name}`, e.target.result);
         
-        try {
-            // Auto-send the image with a caption
-            await sendMessageToDB(`📸 ${file.name}`, e.target.result);
-            
-            // Clear file input for next upload
-            imageUpload.value = '';
-            
-            console.log('✅ Image sent successfully!');
-        } catch (error) {
-            console.error('❌ Failed to send image:', error);
-            alert("Failed to upload image: " + error.message);
-        } finally {
-            // Restore button state
-            sendMessageBtn.disabled = false;
-            sendMessageBtn.innerHTML = originalButtonHTML;
-        }
-    };
-    
-    reader.onerror = function(e) {
-        console.error('Error reading image:', e);
-        alert("Error reading image file.");
+        // Reset
         imageUpload.value = '';
         sendMessageBtn.disabled = false;
-        sendMessageBtn.innerHTML = originalButtonHTML;
+        sendMessageBtn.innerHTML = originalText;
+    };
+    
+    reader.onerror = function() {
+        alert("Error reading image");
+        sendMessageBtn.disabled = false;
+        sendMessageBtn.innerHTML = originalText;
     };
     
     reader.readAsDataURL(file);
 }
-
 // Helper function to send image message
 async function sendImageMessage(imageData, fileName) {
     try {
