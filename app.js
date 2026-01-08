@@ -1370,9 +1370,18 @@ function displayMessage(message) {
     }
     messageDiv.id = `msg-${message.id}`;
     
+    // Process message content for URLs
     let messageContent = message.text || '';
+    
+    // 1. Check for uploaded image
     if (message.image) {
         messageContent += `<img src="${message.image}" class="message-image" onclick="showFullImage('${message.image}')">`;
+    }
+    
+    // 2. Check for image URLs in text
+    else if (message.text) {
+        // Find image URLs and embed them
+        messageContent = embedMediaInText(message.text);
     }
     
     messageDiv.innerHTML = `
@@ -1400,6 +1409,75 @@ function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// NEW FUNCTION: Embed media from URLs
+function embedMediaInText(text) {
+    if (!text) return text;
+    
+    // Find URLs in text
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    let processedText = text;
+    
+    // Replace each URL with appropriate embed
+    processedText = processedText.replace(urlRegex, function(url) {
+        // Check if it's an image
+        if (url.match(/\.(jpeg|jpg|gif|png|webp|bmp|svg)(\?.*)?$/i)) {
+            return `<div class="embedded-media">
+                <img src="${url}" class="embedded-image" onclick="showFullImage('${url}')" 
+                     onerror="this.style.display='none'; this.parentElement.innerHTML='<a href=\'${url}\' target=\'_blank\'>${url}</a>';">
+                <div class="media-source"><small>Source: <a href="${url}" target="_blank">${url}</a></small></div>
+            </div>`;
+        }
+        
+        // Check if it's a video
+        else if (url.match(/\.(mp4|webm|ogg|mov|avi|wmv|flv)(\?.*)?$/i)) {
+            return `<div class="embedded-media">
+                <video class="embedded-video" controls>
+                    <source src="${url}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+                <div class="media-source"><small>Source: <a href="${url}" target="_blank">${url}</a></small></div>
+            </div>`;
+        }
+        
+        // Check if it's YouTube
+        else if (url.match(/(youtube\.com|youtu\.be)/i)) {
+            const videoId = extractYouTubeId(url);
+            if (videoId) {
+                return `<div class="embedded-media youtube-embed">
+                    <iframe src="https://www.youtube.com/embed/${videoId}" 
+                            frameborder="0" 
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                            allowfullscreen>
+                    </iframe>
+                    <div class="media-source"><small>Source: <a href="${url}" target="_blank">${url}</a></small></div>
+                </div>`;
+            }
+        }
+        
+        // Check if it's audio
+        else if (url.match(/\.(mp3|wav|ogg|flac|m4a)(\?.*)?$/i)) {
+            return `<div class="embedded-media">
+                <audio class="embedded-audio" controls>
+                    <source src="${url}" type="audio/mpeg">
+                    Your browser does not support the audio element.
+                </audio>
+                <div class="media-source"><small>Source: <a href="${url}" target="_blank">${url}</a></small></div>
+            </div>`;
+        }
+        
+        // Otherwise, just return as link
+        return `<a href="${url}" target="_blank" class="message-link">${url}</a>`;
+    });
+    
+    return processedText;
+}
+
+// Helper: Extract YouTube video ID
+function extractYouTubeId(url) {
+    const regex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+    const match = url.match(regex);
+    return match ? match[1] : null;
+}
 // Load chat history
 async function loadChatHistory(sessionId = null) {
     const targetSessionId = sessionId || appState.currentSessionId;
@@ -1628,39 +1706,103 @@ function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
+    console.log('📸 Auto-uploading image:', file.name);
+    
     // Quick validation
     if (file.size > 5 * 1024 * 1024) {
         alert("Image too large (max 5MB)");
+        imageUpload.value = '';
         return;
     }
     
     if (!file.type.startsWith('image/')) {
         alert("Please select an image file");
+        imageUpload.value = '';
         return;
     }
     
-    // Show loading
-    const originalText = sendMessageBtn.innerHTML;
+    // Disable UI during upload
+    const originalBtnHTML = sendMessageBtn.innerHTML;
     sendMessageBtn.disabled = true;
     sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    messageInput.disabled = true;
     
+    // Read and send immediately
     const reader = new FileReader();
+    
     reader.onload = async function(e) {
-        // Auto-send immediately
-        await sendMessageToDB(`📸 ${file.name}`, e.target.result);
+        console.log('📸 Image loaded, size:', e.target.result.length);
         
-        // Reset
+        try {
+            // AUTO-SEND: Create and send message immediately
+            const messageData = {
+                session_id: appState.currentSessionId,
+                sender_id: appState.userId,
+                sender_name: appState.userName,
+                message: `📸 ${file.name}`,
+                image_url: e.target.result, // This is the image data
+                created_at: new Date().toISOString()
+            };
+            
+            console.log('📤 Sending to database...');
+            
+            const { data, error } = await supabaseClient
+                .from('messages')
+                .insert([messageData])
+                .select()
+                .single();
+            
+            if (error) {
+                console.error('❌ Database error:', error);
+                throw error;
+            }
+            
+            console.log('✅ Image saved to DB:', data.id);
+            
+            // Display the sent message immediately
+            displayMessage({
+                id: data.id,
+                sender: appState.userName,
+                text: `📸 ${file.name}`,
+                image: e.target.result,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false
+            });
+            
+            // Play sound if enabled
+            if (appState.soundEnabled) {
+                try {
+                    messageSound.currentTime = 0;
+                    messageSound.play().catch(e => console.log("Sound error:", e));
+                } catch (e) {}
+            }
+            
+            // Clear file input
+            imageUpload.value = '';
+            
+        } catch (error) {
+            console.error('❌ Failed to send image:', error);
+            alert("Failed to upload image: " + error.message);
+        } finally {
+            // Re-enable UI
+            sendMessageBtn.disabled = false;
+            sendMessageBtn.innerHTML = originalBtnHTML;
+            messageInput.disabled = false;
+            messageInput.focus();
+        }
+    };
+    
+    reader.onerror = function(error) {
+        console.error('❌ FileReader error:', error);
+        alert("Error reading image file");
         imageUpload.value = '';
         sendMessageBtn.disabled = false;
-        sendMessageBtn.innerHTML = originalText;
+        sendMessageBtn.innerHTML = originalBtnHTML;
+        messageInput.disabled = false;
     };
     
-    reader.onerror = function() {
-        alert("Error reading image");
-        sendMessageBtn.disabled = false;
-        sendMessageBtn.innerHTML = originalText;
-    };
-    
+    // Start reading
     reader.readAsDataURL(file);
 }
 // Helper function to send image message
