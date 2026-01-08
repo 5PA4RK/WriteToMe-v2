@@ -1410,6 +1410,7 @@ async function sendMessage() {
 }
 
 // Send message to database
+// In app.js, update the sendMessageToDB function:
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB. Text:', text?.substring(0, 50), 'Has image:', !!imageUrl);
@@ -1418,13 +1419,19 @@ async function sendMessageToDB(text, imageUrl) {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
             sender_name: appState.userName,
-            message: text || '',
+            message: text || '', // Keep text if provided
             created_at: new Date().toISOString()
         };
         
         if (imageUrl) {
-            console.log('📸 Adding image to message, size:', imageUrl.length);
+            console.log('📸 Adding image to message');
             messageData.image_url = imageUrl;
+            
+            // Don't add filename to text if it's just an image
+            if (!text || text.trim() === '') {
+                // Optional: You can set empty text or a simple indicator
+                messageData.message = ''; // Or "[Image]" if you want a placeholder
+            }
         }
         
         const { data, error } = await supabaseClient
@@ -1444,7 +1451,7 @@ async function sendMessageToDB(text, imageUrl) {
         displayMessage({
             id: data.id,
             sender: appState.userName,
-            text: text,
+            text: text, // Keep original text
             image: imageUrl,
             time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             type: 'sent',
@@ -1493,6 +1500,7 @@ function displayMessage(message) {
     if (message.image) {
         messageContent += `<img src="${message.image}" class="message-image" onclick="showFullImage('${message.image}')">`;
     }
+    
     
     messageDiv.innerHTML = `
         <div class="message-sender">${message.sender}</div>
@@ -1775,39 +1783,40 @@ async function handleImageUpload(e) {
     
     const reader = new FileReader();
     
-    reader.onload = async function(e) {
-        console.log('📸 Image loaded, size:', e.target.result.length, 'chars');
+// Update the handleImageUpload function (inside the reader.onload):
+reader.onload = async function(e) {
+    console.log('📸 Image loaded, size:', e.target.result.length, 'chars');
+    
+    try {
+        // Auto-send the image WITHOUT filename in text
+        const result = await sendMessageToDB('', e.target.result); // Empty string instead of filename
         
-        try {
-            // Auto-send the image with a caption
-            const result = await sendMessageToDB(`[Image: ${file.name}]`, e.target.result);
+        if (result && result.success) {
+            console.log('✅ Image sent successfully');
             
-            if (result && result.success) {
-                console.log('✅ Image sent successfully');
-                
-                // Clear file input
-                imageUpload.value = '';
-                
-                // Reset send button
-                if (sendMessageBtn) {
-                    sendMessageBtn.disabled = false;
-                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
-                }
-            } else {
-                throw new Error("Failed to send image");
-            }
-            
-        } catch (error) {
-            console.error("❌ Error sending image:", error);
-            alert("Failed to send image: " + error.message);
+            // Clear file input
+            imageUpload.value = '';
             
             // Reset send button
             if (sendMessageBtn) {
                 sendMessageBtn.disabled = false;
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
+        } else {
+            throw new Error("Failed to send image");
         }
-    };
+        
+    } catch (error) {
+        console.error("❌ Error sending image:", error);
+        alert("Failed to send image: " + error.message);
+        
+        // Reset send button
+        if (sendMessageBtn) {
+            sendMessageBtn.disabled = false;
+            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+        }
+    }
+};
     
     reader.onerror = function(e) {
         console.error('❌ Error reading image:', e);
@@ -2423,6 +2432,88 @@ function searchUsers(searchTerm) {
     
     renderUsers(filteredUsers);
 }
+
+// Add this helper function at the top of your functions section:
+function cleanUsername(username) {
+    if (!username) return username;
+    // Remove parentheses and anything inside them at the end
+    // This removes "(Guest)", "(Host)", "(Admin)", etc.
+    return username.replace(/\s*\([^)]*\)$/g, '').trim();
+}
+
+// Then update all displayMessage calls to use cleanUsername:
+function displayMessage(message) {
+    if (appState.isViewingHistory && message.is_historical === false) {
+        return;
+    }
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${message.type}`;
+    if (message.is_historical) {
+        messageDiv.classList.add('historical');
+    }
+    messageDiv.id = `msg-${message.id}`;
+    
+    // Build message content
+    let messageContent = '';
+    let hasImage = false;
+    
+    if (message.image) {
+        messageContent += `<img src="${message.image}" class="message-image" onclick="showFullImage('${message.image}')">`;
+        hasImage = true;
+    }
+    
+    if (message.text && message.text.trim() !== '' && !message.text.startsWith('[Image:')) {
+        messageContent += `<div class="message-text">${message.text}</div>`;
+    }
+    
+    messageDiv.innerHTML = `
+        <div class="message-sender">${cleanUsername(message.sender)}</div>
+        <div class="message-content">
+            ${messageContent}
+            <div class="message-time">${message.time}</div>
+        </div>
+        ${message.type === 'sent' && !message.is_historical ? `
+        <div class="message-actions">
+            <button class="message-action-btn" onclick="editMessage('${message.id}')">
+                <i class="fas fa-edit"></i> Edit
+            </button>
+            <button class="message-action-btn" onclick="deleteMessage('${message.id}')">
+                <i class="fas fa-trash"></i> Delete
+            </button>
+            <button class="message-action-btn" onclick="replyToMessage('${message.id}')">
+                <i class="fas fa-reply"></i> Reply
+            </button>
+        </div>
+        ` : ''}
+    `;
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Also update the updateUIForPendingGuest function:
+function updateUIForPendingGuest() {
+    if (statusIndicator) statusIndicator.className = 'status-indicator offline';
+    // Remove role from display
+    if (userRoleDisplay) userRoleDisplay.textContent = `${cleanUsername(appState.userName)} (Pending Approval)`;
+    if (logoutBtn) logoutBtn.style.display = 'flex';
+    if (pendingGuestsBtn) pendingGuestsBtn.style.display = 'none';
+    // ... rest of the function
+}
+
+// Update updateUIAfterConnection function:
+function updateUIAfterConnection() {
+    if (!statusIndicator || !userRoleDisplay || !logoutBtn) return;
+    
+    statusIndicator.className = 'status-indicator';
+    statusIndicator.classList.add('online');
+    // Remove role from display
+    userRoleDisplay.textContent = `${cleanUsername(appState.userName)} (Connected)`;
+    logoutBtn.style.display = 'flex';
+    // ... rest of the function
+}
+
 
 // ============================================
 // GLOBAL FUNCTIONS
