@@ -1293,51 +1293,35 @@ async function sendMessage() {
 // Send message to database
 async function sendMessageToDB(text, imageUrl) {
     try {
-        console.log('=== DEBUG sendMessageToDB ===');
-        console.log('Text:', text);
-        console.log('Has image:', !!imageUrl);
-        console.log('Image length:', imageUrl?.length || 0);
-        console.log('Session ID:', appState.currentSessionId);
-        console.log('User ID:', appState.userId);
+        console.log('💾 Saving message to DB. Text:', text?.substring(0, 50), 'Has image:', !!imageUrl);
         
-        // Try with minimal data first
-        const testData = {
+        const messageData = {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
             sender_name: appState.userName,
-            message: text || ' ',
+            message: text || '',
             created_at: new Date().toISOString()
         };
         
-        // Only add image_url if we have one
         if (imageUrl) {
-            // Trim image if too large for debugging
-            if (imageUrl.length > 10000) {
-                console.log('Large image, trimming for test...');
-                testData.image_url = imageUrl.substring(0, 10000) + '...[trimmed]';
-            } else {
-                testData.image_url = imageUrl;
-            }
+            console.log('📸 Adding image to message, size:', imageUrl.length);
+            messageData.image_url = imageUrl;
         }
-        
-        console.log('Sending data:', testData);
         
         const { data, error } = await supabaseClient
             .from('messages')
-            .insert([testData])
+            .insert([messageData])
             .select()
             .single();
         
         if (error) {
-            console.error('❌ SUPABASE ERROR:', error);
-            console.error('Error details:', error.details, error.hint, error.message);
+            console.error("❌ Error sending message:", error);
             throw error;
         }
         
-        console.log('✅ SUCCESS! Inserted message ID:', data.id);
-        console.log('Returned data:', data);
+        console.log('✅ Message saved to DB:', data.id);
         
-        // Display the message
+        // Display the sent message immediately
         displayMessage({
             id: data.id,
             sender: appState.userName,
@@ -1351,27 +1335,8 @@ async function sendMessageToDB(text, imageUrl) {
         return { success: true, data };
         
     } catch (error) {
-        console.error('=== ERROR DETAILS ===');
-        console.error('Full error:', error);
-        console.error('Error message:', error.message);
-        console.error('Error code:', error.code);
-        
-        // Try alternative insert method
-        console.log('Trying alternative insert method...');
-        try {
-            const altResult = await supabaseClient.rpc('insert_message', {
-                p_session_id: appState.currentSessionId,
-                p_sender_id: appState.userId,
-                p_sender_name: appState.userName,
-                p_message: text || ' ',
-                p_image_url: imageUrl
-            });
-            console.log('Alternative result:', altResult);
-        } catch (altError) {
-            console.error('Alternative also failed:', altError);
-        }
-        
-        alert("Failed to send message. Check console for details.");
+        console.error("❌ Error in sendMessageToDB:", error);
+        alert("Failed to send message: " + error.message);
         return null;
     }
 }
@@ -1406,18 +1371,8 @@ function displayMessage(message) {
     messageDiv.id = `msg-${message.id}`;
     
     let messageContent = message.text || '';
-    
-    // 1. Check for uploaded image (BASE64)
-    if (message.image && message.image.startsWith('data:image/')) {
-        // For base64 images, use directly
-        messageContent += `<img src="${message.image}" class="message-image" 
-            onclick="showFullImage('${message.image.replace(/'/g, "\\'")}')"
-            loading="lazy">`;
-    }
-    
-    // 2. Check for external image URLs
-    else if (message.text) {
-        messageContent = embedMediaInText(message.text);
+    if (message.image) {
+        messageContent += `<img src="${message.image}" class="message-image" onclick="showFullImage('${message.image}')">`;
     }
     
     messageDiv.innerHTML = `
@@ -1445,99 +1400,6 @@ function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// NEW FUNCTION: Embed media from URLs
-function embedMediaInText(text) {
-    if (!text) return text;
-    
-    console.log('🔗 Processing text for media:', text.substring(0, 50) + '...');
-    
-    // Improved URL regex that catches more patterns
-    const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/gi;
-    let result = text;
-    
-    // Find and replace each URL
-    result = result.replace(urlRegex, function(url) {
-        console.log('🔗 Found URL:', url);
-        
-        // Clean URL (remove trailing punctuation)
-        let cleanUrl = url.replace(/[.,;!?)]+$/, '');
-        
-        // Check for image extensions
-        const imageExtensions = /\.(jpe?g|png|gif|bmp|webp|svg|tiff?)(\?[^<\s]*)?$/i;
-        if (imageExtensions.test(cleanUrl)) {
-            console.log('🖼️ Detected image URL:', cleanUrl);
-            return `<div class="embedded-media">
-                <img src="${cleanUrl}" class="embedded-image" 
-                     onerror="this.onerror=null; this.parentElement.innerHTML='<a href=\'${cleanUrl}\' target=\'_blank\' class=\'message-link\'>${cleanUrl}</a>';"
-                     onclick="showFullImage('${cleanUrl.replace(/'/g, "\\'")}')">
-                <div class="media-source">
-                    <small><a href="${cleanUrl}" target="_blank">View original</a></small>
-                </div>
-            </div>`;
-        }
-        
-        // Check for video extensions
-        const videoExtensions = /\.(mp4|webm|ogg|mov|avi|wmv|flv|mkv|m4v)(\?[^<\s]*)?$/i;
-        if (videoExtensions.test(cleanUrl)) {
-            console.log('🎬 Detected video URL:', cleanUrl);
-            return `<div class="embedded-media">
-                <video class="embedded-video" controls preload="metadata">
-                    <source src="${cleanUrl}" type="video/mp4">
-                    Your browser does not support HTML5 video.
-                </video>
-                <div class="media-source">
-                    <small><a href="${cleanUrl}" target="_blank">Download video</a></small>
-                </div>
-            </div>`;
-        }
-        
-        // Check for YouTube
-        const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i;
-        const youtubeMatch = cleanUrl.match(youtubeRegex);
-        if (youtubeMatch) {
-            const videoId = youtubeMatch[1];
-            console.log('📺 Detected YouTube URL:', videoId);
-            return `<div class="embedded-media youtube-embed">
-                <iframe src="https://www.youtube.com/embed/${videoId}" 
-                        frameborder="0" 
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                        allowfullscreen>
-                </iframe>
-                <div class="media-source">
-                    <small><a href="${cleanUrl}" target="_blank">Watch on YouTube</a></small>
-                </div>
-            </div>`;
-        }
-        
-        // Check for audio
-        const audioExtensions = /\.(mp3|wav|ogg|flac|m4a|aac|wma)(\?[^<\s]*)?$/i;
-        if (audioExtensions.test(cleanUrl)) {
-            console.log('🎵 Detected audio URL:', cleanUrl);
-            return `<div class="embedded-media">
-                <audio class="embedded-audio" controls preload="metadata">
-                    <source src="${cleanUrl}" type="audio/mpeg">
-                    Your browser does not support HTML5 audio.
-                </audio>
-                <div class="media-source">
-                    <small><a href="${cleanUrl}" target="_blank">Download audio</a></small>
-                </div>
-            </div>`;
-        }
-        
-        // Default: just a link
-        console.log('🔗 Plain URL (no embedding):', cleanUrl);
-        return `<a href="${cleanUrl}" target="_blank" class="message-link">${cleanUrl}</a>`;
-    });
-    
-    return result;
-}
-
-// Helper: Extract YouTube video ID
-function extractYouTubeId(url) {
-    const regex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
-    const match = url.match(regex);
-    return match ? match[1] : null;
-}
 // Load chat history
 async function loadChatHistory(sessionId = null) {
     const targetSessionId = sessionId || appState.currentSessionId;
@@ -1766,187 +1628,47 @@ function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
-    console.log('📸 Image selected for auto-upload:', file.name, (file.size / 1024).toFixed(1) + 'KB');
+    console.log('📸 Image selected:', file.name, file.size, file.type);
     
-    // Validate
-    if (file.size > 2 * 1024 * 1024) { // 2MB max
-        alert("Image too large (max 2MB)");
+    // Validate file
+    if (file.size > 5 * 1024 * 1024) {
+        alert("❌ Image size should be less than 5MB.");
         imageUpload.value = '';
         return;
     }
     
     if (!file.type.startsWith('image/')) {
-        alert("Please select an image file");
+        alert("❌ Please select an image file (JPEG, PNG, GIF, etc.).");
         imageUpload.value = '';
         return;
     }
     
-    // Show uploading state
-    const originalBtnHTML = sendMessageBtn.innerHTML;
-    const originalPlaceholder = messageInput.placeholder;
-    
-    sendMessageBtn.disabled = true;
-    sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    messageInput.placeholder = "Uploading image...";
-    messageInput.disabled = true;
-    
-    // Read file
+    // Create preview and prepare for upload
     const reader = new FileReader();
-    
     reader.onload = async function(e) {
         console.log('📸 Image loaded, size:', e.target.result.length, 'chars');
         
-        try {
-            // Create message data - SIMPLE VERSION
-            const messageData = {
-                session_id: appState.currentSessionId,
-                sender_id: appState.userId,
-                sender_name: appState.userName,
-                message: `📸 ${file.name}`,
-                image_url: e.target.result,
-                created_at: new Date().toISOString()
-            };
-            
-            console.log('📤 Inserting into database...');
-            
-            // Insert directly
-            const { data, error } = await supabaseClient
-                .from('messages')
-                .insert([messageData])
-                .select()
-                .single();
-            
-            if (error) {
-                console.error('❌ Database error:', error);
-                throw error;
-            }
-            
-            console.log('✅ Image saved! ID:', data.id);
-            
-            // Display immediately
-            displayMessage({
-                id: data.id,
-                sender: appState.userName,
-                text: `📸 ${file.name}`,
-                image: e.target.result,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_historical: false
-            });
-            
-            // Play sound
-            if (appState.soundEnabled) {
-                try {
-                    messageSound.currentTime = 0;
-                    messageSound.play();
-                } catch (e) {}
-            }
-            
-            // Clear file input
-            imageUpload.value = '';
-            
-        } catch (error) {
-            console.error('❌ Upload failed:', error);
-            alert("Failed to upload image: " + error.message);
-        } finally {
-            // Reset UI
-            sendMessageBtn.disabled = false;
-            sendMessageBtn.innerHTML = originalBtnHTML;
-            messageInput.placeholder = originalPlaceholder;
-            messageInput.disabled = false;
-            messageInput.focus();
-        }
+        // Show preview in message input
+        messageInput.value = `[Image: ${file.name}]`;
+        
+        // Auto-send the image
+        await sendMessageToDB(`[Image: ${file.name}]`, e.target.result);
+        
+        // Clear file input
+        imageUpload.value = '';
+        
+        // Clear message input
+        messageInput.value = '';
+        messageInput.style.height = 'auto';
     };
     
-    reader.onerror = function() {
-        console.error('❌ FileReader error');
-        alert("Error reading image file");
-        
-        // Reset UI
-        sendMessageBtn.disabled = false;
-        sendMessageBtn.innerHTML = originalBtnHTML;
-        messageInput.placeholder = originalPlaceholder;
-        messageInput.disabled = false;
+    reader.onerror = function(e) {
+        console.error('❌ Error reading image:', e);
+        alert("Error reading image file. Please try another image.");
         imageUpload.value = '';
     };
     
-    // Start reading
     reader.readAsDataURL(file);
-}
-// Helper function to send image message
-async function sendImageMessage(imageData, fileName) {
-    try {
-        console.log('📤 Sending image message...');
-        
-        // Create message with image
-        const messageText = `[Image: ${fileName}]`;
-        
-        const result = await sendMessageToDB(messageText, imageData);
-        
-        if (result && result.success) {
-            console.log('✅ Image sent successfully!');
-        } else {
-            console.error('❌ Failed to send image');
-            alert("Failed to upload image. Please try again.");
-        }
-    } catch (error) {
-        console.error('❌ Error in sendImageMessage:', error);
-        alert("Error uploading image: " + error.message);
-    }
-}
-
-// Image compression function (optional)
-async function compressImage(file, maxWidth = 800, quality = 0.7) {
-    return new Promise((resolve) => {
-        // Skip compression for small files
-        if (file.size < 500000) { // Less than 500KB
-            console.log('📸 Image is small, skipping compression');
-            resolve(null);
-            return;
-        }
-        
-        console.log('📸 Attempting to compress image...');
-        
-        const img = new Image();
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        img.onload = function() {
-            // Calculate new dimensions
-            let width = img.width;
-            let height = img.height;
-            
-            if (width > maxWidth) {
-                height = (height * maxWidth) / width;
-                width = maxWidth;
-            }
-            
-            // Set canvas dimensions
-            canvas.width = width;
-            canvas.height = height;
-            
-            // Draw and compress image
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            // Convert to data URL with compression
-            const compressedDataUrl = canvas.toDataURL(file.type, quality);
-            
-            console.log('📸 Image compressed:', {
-                original: (file.size / 1024).toFixed(2) + ' KB',
-                compressed: (compressedDataUrl.length / 1024).toFixed(2) + ' KB',
-                reduction: ((1 - compressedDataUrl.length / (file.size * 1.333)) * 100).toFixed(1) + '%' // *1.333 for base64 overhead
-            });
-            
-            resolve(compressedDataUrl);
-        };
-        
-        img.onerror = function() {
-            console.warn('⚠️ Could not compress image, using original');
-            resolve(null);
-        };
-        
-        img.src = URL.createObjectURL(file);
-    });
 }
 
 // Toggle emoji picker
@@ -2554,25 +2276,8 @@ function searchUsers(searchTerm) {
 // ============================================
 
 window.showFullImage = function(src) {
-    console.log('🔍 showFullImage called with:', src ? src.substring(0, 100) : 'null');
-    
-    if (!src) {
-        console.error('No image source provided');
-        return;
-    }
-    
-    if (src.startsWith('data:image/')) {
-        // It's a base64 image, use directly
-        fullSizeImage.src = src;
-        imageModal.style.display = 'flex';
-    } else if (src.startsWith('http')) {
-        // It's a URL, use it
-        fullSizeImage.src = src;
-        imageModal.style.display = 'flex';
-    } else {
-        console.error('Invalid image source:', src.substring(0, 100));
-        alert('Cannot display image: invalid format');
-    }
+    fullSizeImage.src = src;
+    imageModal.style.display = 'flex';
 };
 
 window.editMessage = async function(messageId) {
