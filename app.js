@@ -1413,63 +1413,87 @@ function displayMessage(message) {
 function embedMediaInText(text) {
     if (!text) return text;
     
-    // Find URLs in text
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    let processedText = text;
+    console.log('🔗 Processing text for media:', text.substring(0, 50) + '...');
     
-    // Replace each URL with appropriate embed
-    processedText = processedText.replace(urlRegex, function(url) {
-        // Check if it's an image
-        if (url.match(/\.(jpeg|jpg|gif|png|webp|bmp|svg)(\?.*)?$/i)) {
+    // Improved URL regex that catches more patterns
+    const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/gi;
+    let result = text;
+    
+    // Find and replace each URL
+    result = result.replace(urlRegex, function(url) {
+        console.log('🔗 Found URL:', url);
+        
+        // Clean URL (remove trailing punctuation)
+        let cleanUrl = url.replace(/[.,;!?)]+$/, '');
+        
+        // Check for image extensions
+        const imageExtensions = /\.(jpe?g|png|gif|bmp|webp|svg|tiff?)(\?[^<\s]*)?$/i;
+        if (imageExtensions.test(cleanUrl)) {
+            console.log('🖼️ Detected image URL:', cleanUrl);
             return `<div class="embedded-media">
-                <img src="${url}" class="embedded-image" onclick="showFullImage('${url}')" 
-                     onerror="this.style.display='none'; this.parentElement.innerHTML='<a href=\'${url}\' target=\'_blank\'>${url}</a>';">
-                <div class="media-source"><small>Source: <a href="${url}" target="_blank">${url}</a></small></div>
+                <img src="${cleanUrl}" class="embedded-image" 
+                     onerror="this.onerror=null; this.parentElement.innerHTML='<a href=\'${cleanUrl}\' target=\'_blank\' class=\'message-link\'>${cleanUrl}</a>';"
+                     onclick="showFullImage('${cleanUrl.replace(/'/g, "\\'")}')">
+                <div class="media-source">
+                    <small><a href="${cleanUrl}" target="_blank">View original</a></small>
+                </div>
             </div>`;
         }
         
-        // Check if it's a video
-        else if (url.match(/\.(mp4|webm|ogg|mov|avi|wmv|flv)(\?.*)?$/i)) {
+        // Check for video extensions
+        const videoExtensions = /\.(mp4|webm|ogg|mov|avi|wmv|flv|mkv|m4v)(\?[^<\s]*)?$/i;
+        if (videoExtensions.test(cleanUrl)) {
+            console.log('🎬 Detected video URL:', cleanUrl);
             return `<div class="embedded-media">
-                <video class="embedded-video" controls>
-                    <source src="${url}" type="video/mp4">
-                    Your browser does not support the video tag.
+                <video class="embedded-video" controls preload="metadata">
+                    <source src="${cleanUrl}" type="video/mp4">
+                    Your browser does not support HTML5 video.
                 </video>
-                <div class="media-source"><small>Source: <a href="${url}" target="_blank">${url}</a></small></div>
+                <div class="media-source">
+                    <small><a href="${cleanUrl}" target="_blank">Download video</a></small>
+                </div>
             </div>`;
         }
         
-        // Check if it's YouTube
-        else if (url.match(/(youtube\.com|youtu\.be)/i)) {
-            const videoId = extractYouTubeId(url);
-            if (videoId) {
-                return `<div class="embedded-media youtube-embed">
-                    <iframe src="https://www.youtube.com/embed/${videoId}" 
-                            frameborder="0" 
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                            allowfullscreen>
-                    </iframe>
-                    <div class="media-source"><small>Source: <a href="${url}" target="_blank">${url}</a></small></div>
-                </div>`;
-            }
+        // Check for YouTube
+        const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i;
+        const youtubeMatch = cleanUrl.match(youtubeRegex);
+        if (youtubeMatch) {
+            const videoId = youtubeMatch[1];
+            console.log('📺 Detected YouTube URL:', videoId);
+            return `<div class="embedded-media youtube-embed">
+                <iframe src="https://www.youtube.com/embed/${videoId}" 
+                        frameborder="0" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowfullscreen>
+                </iframe>
+                <div class="media-source">
+                    <small><a href="${cleanUrl}" target="_blank">Watch on YouTube</a></small>
+                </div>
+            </div>`;
         }
         
-        // Check if it's audio
-        else if (url.match(/\.(mp3|wav|ogg|flac|m4a)(\?.*)?$/i)) {
+        // Check for audio
+        const audioExtensions = /\.(mp3|wav|ogg|flac|m4a|aac|wma)(\?[^<\s]*)?$/i;
+        if (audioExtensions.test(cleanUrl)) {
+            console.log('🎵 Detected audio URL:', cleanUrl);
             return `<div class="embedded-media">
-                <audio class="embedded-audio" controls>
-                    <source src="${url}" type="audio/mpeg">
-                    Your browser does not support the audio element.
+                <audio class="embedded-audio" controls preload="metadata">
+                    <source src="${cleanUrl}" type="audio/mpeg">
+                    Your browser does not support HTML5 audio.
                 </audio>
-                <div class="media-source"><small>Source: <a href="${url}" target="_blank">${url}</a></small></div>
+                <div class="media-source">
+                    <small><a href="${cleanUrl}" target="_blank">Download audio</a></small>
+                </div>
             </div>`;
         }
         
-        // Otherwise, just return as link
-        return `<a href="${url}" target="_blank" class="message-link">${url}</a>`;
+        // Default: just a link
+        console.log('🔗 Plain URL (no embedding):', cleanUrl);
+        return `<a href="${cleanUrl}" target="_blank" class="message-link">${cleanUrl}</a>`;
     });
     
-    return processedText;
+    return result;
 }
 
 // Helper: Extract YouTube video ID
@@ -1706,46 +1730,46 @@ function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
-    console.log('📸 Auto-uploading image:', file.name);
+    console.log('📸 Image selected for auto-upload:', file.name, file.size, file.type);
     
-    // Quick validation
+    // Validate
     if (file.size > 5 * 1024 * 1024) {
-        alert("Image too large (max 5MB)");
+        alert("❌ Image too large (max 5MB)");
         imageUpload.value = '';
         return;
     }
     
     if (!file.type.startsWith('image/')) {
-        alert("Please select an image file");
+        alert("❌ Please select an image file");
         imageUpload.value = '';
         return;
     }
     
-    // Disable UI during upload
-    const originalBtnHTML = sendMessageBtn.innerHTML;
+    // Show loading state
+    const originalSendHTML = sendMessageBtn.innerHTML;
     sendMessageBtn.disabled = true;
-    sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    messageInput.disabled = true;
+    sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
     
-    // Read and send immediately
+    // Read file
     const reader = new FileReader();
     
-    reader.onload = async function(e) {
-        console.log('📸 Image loaded, size:', e.target.result.length);
+    reader.onload = async function(event) {
+        console.log('📸 Image loaded, size in chars:', event.target.result.length);
         
         try {
-            // AUTO-SEND: Create and send message immediately
+            // Create message data
             const messageData = {
                 session_id: appState.currentSessionId,
                 sender_id: appState.userId,
                 sender_name: appState.userName,
                 message: `📸 ${file.name}`,
-                image_url: e.target.result, // This is the image data
+                image_url: event.target.result,
                 created_at: new Date().toISOString()
             };
             
-            console.log('📤 Sending to database...');
+            console.log('📤 Inserting into database...');
             
+            // Insert into database
             const { data, error } = await supabaseClient
                 .from('messages')
                 .insert([messageData])
@@ -1757,20 +1781,50 @@ function handleImageUpload(e) {
                 throw error;
             }
             
-            console.log('✅ Image saved to DB:', data.id);
+            console.log('✅ Database insert successful:', data.id);
             
-            // Display the sent message immediately
-            displayMessage({
+            // Display the message locally
+            const messageObj = {
                 id: data.id,
                 sender: appState.userName,
                 text: `📸 ${file.name}`,
-                image: e.target.result,
+                image: event.target.result,
                 time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                 type: 'sent',
                 is_historical: false
-            });
+            };
             
-            // Play sound if enabled
+            // Create and append message element
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message sent';
+            messageDiv.id = `msg-${data.id}`;
+            
+            messageDiv.innerHTML = `
+                <div class="message-sender">${appState.userName}</div>
+                <div class="message-content">
+                    <div class="message-text">
+                        📸 ${file.name}
+                        <img src="${event.target.result}" class="message-image" onclick="showFullImage('${event.target.result.replace(/'/g, "\\'")}')">
+                    </div>
+                    <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                </div>
+                <div class="message-actions">
+                    <button class="message-action-btn" onclick="editMessage('${data.id}')">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button class="message-action-btn" onclick="deleteMessage('${data.id}')">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                    <button class="message-action-btn" onclick="replyToMessage('${data.id}')">
+                        <i class="fas fa-reply"></i> Reply
+                    </button>
+                </div>
+            `;
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            // Play sound
             if (appState.soundEnabled) {
                 try {
                     messageSound.currentTime = 0;
@@ -1781,15 +1835,15 @@ function handleImageUpload(e) {
             // Clear file input
             imageUpload.value = '';
             
+            console.log('✅ Image auto-uploaded successfully!');
+            
         } catch (error) {
-            console.error('❌ Failed to send image:', error);
+            console.error('❌ Auto-upload failed:', error);
             alert("Failed to upload image: " + error.message);
         } finally {
-            // Re-enable UI
+            // Restore button
             sendMessageBtn.disabled = false;
-            sendMessageBtn.innerHTML = originalBtnHTML;
-            messageInput.disabled = false;
-            messageInput.focus();
+            sendMessageBtn.innerHTML = originalSendHTML;
         }
     };
     
@@ -1798,8 +1852,7 @@ function handleImageUpload(e) {
         alert("Error reading image file");
         imageUpload.value = '';
         sendMessageBtn.disabled = false;
-        sendMessageBtn.innerHTML = originalBtnHTML;
-        messageInput.disabled = false;
+        sendMessageBtn.innerHTML = originalSendHTML;
     };
     
     // Start reading
