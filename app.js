@@ -1628,21 +1628,58 @@ function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
-    // Simple validation
-    if (file.size > 1 * 1024 * 1024) { // 1MB max
-        alert("Image too large. Max 1MB.");
+    console.log('📸 Image selected:', file.name);
+    
+    // Validate file
+    if (file.size > 5 * 1024 * 1024) {
+        alert("Image size should be less than 5MB.");
+        imageUpload.value = '';
         return;
     }
     
+    if (!file.type.startsWith('image/')) {
+        alert("Please select an image file.");
+        imageUpload.value = '';
+        return;
+    }
+    
+    // Show "Uploading..." state
+    const originalButtonHTML = sendMessageBtn.innerHTML;
+    sendMessageBtn.disabled = true;
+    sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    
+    // Read and send image immediately
     const reader = new FileReader();
+    
     reader.onload = async function(e) {
-        // Try WITHOUT the image first
-        await sendMessageToDB(`[Image: ${file.name}]`, null);
+        console.log('📸 Image loaded, sending...');
         
-        // Then try with a SMALL test
-        const smallTest = e.target.result.substring(0, 1000); // First 1000 chars only
-        console.log('Testing with small data:', smallTest.length);
+        try {
+            // Auto-send the image with a caption
+            await sendMessageToDB(`📸 ${file.name}`, e.target.result);
+            
+            // Clear file input for next upload
+            imageUpload.value = '';
+            
+            console.log('✅ Image sent successfully!');
+        } catch (error) {
+            console.error('❌ Failed to send image:', error);
+            alert("Failed to upload image: " + error.message);
+        } finally {
+            // Restore button state
+            sendMessageBtn.disabled = false;
+            sendMessageBtn.innerHTML = originalButtonHTML;
+        }
     };
+    
+    reader.onerror = function(e) {
+        console.error('Error reading image:', e);
+        alert("Error reading image file.");
+        imageUpload.value = '';
+        sendMessageBtn.disabled = false;
+        sendMessageBtn.innerHTML = originalButtonHTML;
+    };
+    
     reader.readAsDataURL(file);
 }
 
