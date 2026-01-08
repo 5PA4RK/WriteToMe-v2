@@ -294,7 +294,14 @@ function setupEventListeners() {
             updatePasswordHint(this.value);
         });
     }
-    
+    if (usersTabBtn) {
+        usersTabBtn.addEventListener('click', () => {
+            console.log("User management tab clicked");
+            switchAdminTab('users');
+            loadUsers();
+        });
+    }
+
     if (passwordInput) {
         passwordInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') handleConnect();
@@ -367,11 +374,35 @@ function setupEventListeners() {
     }
     
     // Image modal
-    if (imageModal) {
-        imageModal.addEventListener('click', () => {
+// In setupEventListeners(), update the image modal event listener:
+if (imageModal) {
+    imageModal.addEventListener('click', (e) => {
+        // Close only if clicking on the overlay, not the image
+        if (e.target === imageModal || e.target.classList.contains('image-modal-overlay')) {
             imageModal.style.display = 'none';
-        });
+        }
+    });
+    
+    // Also add escape key to close
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && imageModal.style.display === 'flex') {
+            imageModal.style.display = 'none';
+        }
+    });
+}
+
+// Update the showFullImage function to prevent propagation:
+window.showFullImage = function(src) {
+    fullSizeImage.src = src;
+    imageModal.style.display = 'flex';
+    
+    // Stop propagation on image click
+    if (fullSizeImage) {
+        fullSizeImage.onclick = (e) => {
+            e.stopPropagation();
+        };
     }
+};
     
     // Click outside emoji picker to close
     document.addEventListener('click', (e) => {
@@ -392,29 +423,117 @@ function setupEventListeners() {
 
 // Tab switching function
 function switchAdminTab(tabName) {
-    if (!appState.isHost) return;
+    console.log("Switching to tab:", tabName);
     
+    // Reset all tabs
     if (historyTabBtn && usersTabBtn) {
         historyTabBtn.classList.remove('active');
         usersTabBtn.classList.remove('active');
     }
     
     if (historyTabContent && usersTabContent) {
+        historyTabContent.style.display = 'none';
+        usersTabContent.style.display = 'none';
         historyTabContent.classList.remove('active');
         usersTabContent.classList.remove('active');
     }
     
+    // Activate selected tab
     if (tabName === 'history') {
-        if (historyTabBtn) historyTabBtn.classList.add('active');
-        if (historyTabContent) historyTabContent.classList.add('active');
+        if (historyTabBtn) {
+            historyTabBtn.classList.add('active');
+        }
+        if (historyTabContent) {
+            historyTabContent.style.display = 'block';
+            historyTabContent.classList.add('active');
+        }
         loadChatSessions();
     } else if (tabName === 'users') {
-        if (usersTabBtn) usersTabBtn.classList.add('active');
-        if (usersTabContent) usersTabContent.classList.add('active');
+        if (usersTabBtn) {
+            usersTabBtn.classList.add('active');
+        }
+        if (usersTabContent) {
+            usersTabContent.style.display = 'block';
+            usersTabContent.classList.add('active');
+        }
         loadUsers();
     }
 }
-
+// Replace the clearChat function with this:
+async function clearChat() {
+    if (!appState.isConnected || !appState.currentSessionId) {
+        alert("You must be connected to clear chat.");
+        return;
+    }
+    
+    if (!confirm("Are you sure you want to clear all messages? This cannot be undone!")) {
+        return;
+    }
+    
+    try {
+        if (appState.isHost) {
+            // Host can delete all messages
+            const { error } = await supabaseClient
+                .from('messages')
+                .update({
+                    is_deleted: true,
+                    deleted_at: new Date().toISOString(),
+                    deleted_by: appState.userId
+                })
+                .eq('session_id', appState.currentSessionId);
+            
+            if (error) throw error;
+            
+            // Clear local messages
+            chatMessages.innerHTML = '';
+            appState.messages = [];
+            
+            // Add system message
+            const systemMsg = document.createElement('div');
+            systemMsg.className = 'message received';
+            systemMsg.innerHTML = `
+                <div class="message-sender">System</div>
+                <div class="message-content">
+                    <div class="message-text">Chat cleared by ${appState.userName}</div>
+                    <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                </div>
+            `;
+            chatMessages.appendChild(systemMsg);
+            
+        } else {
+            // Guest can only delete their own messages
+            const { error } = await supabaseClient
+                .from('messages')
+                .update({
+                    is_deleted: true,
+                    deleted_at: new Date().toISOString(),
+                    deleted_by: appState.userId
+                })
+                .eq('session_id', appState.currentSessionId)
+                .eq('sender_id', appState.userId);
+            
+            if (error) throw error;
+            
+            // Remove guest's messages from view
+            const guestMessages = document.querySelectorAll(`.message.sent`);
+            guestMessages.forEach(msg => {
+                msg.innerHTML = `
+                    <div class="message-sender">${appState.userName}</div>
+                    <div class="message-content">
+                        <div class="message-text"><i>Message deleted</i></div>
+                        <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                    </div>
+                `;
+            });
+            
+            alert("Your messages have been deleted.");
+        }
+        
+    } catch (error) {
+        console.error("Error clearing chat:", error);
+        alert("Failed to clear chat: " + error.message);
+    }
+}
 // Handle connection
 async function handleConnect() {
     const username = usernameInput.value.trim();
@@ -1506,7 +1625,11 @@ function updateUIAfterConnection() {
     
     if (adminSection) {
         adminSection.style.display = appState.isHost ? 'block' : 'none';
-        if (appState.isHost) switchAdminTab('history');
+        if (appState.isHost) {
+            // Force show history tab by default
+            switchAdminTab('history');
+            loadChatSessions();
+        }
     }
     
     if (pendingGuestsBtn) {
@@ -1624,7 +1747,8 @@ async function getRealIP() {
 }
 
 // Handle image upload
-function handleImageUpload(e) {
+// Replace the handleImageUpload function with this:
+async function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
@@ -1643,29 +1767,58 @@ function handleImageUpload(e) {
         return;
     }
     
-    // Create preview and prepare for upload
+    // Disable send button and show loading
+    if (sendMessageBtn) {
+        sendMessageBtn.disabled = true;
+        sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    }
+    
     const reader = new FileReader();
+    
     reader.onload = async function(e) {
         console.log('📸 Image loaded, size:', e.target.result.length, 'chars');
         
-        // Show preview in message input
-        messageInput.value = `[Image: ${file.name}]`;
-        
-        // Auto-send the image
-        await sendMessageToDB(`[Image: ${file.name}]`, e.target.result);
-        
-        // Clear file input
-        imageUpload.value = '';
-        
-        // Clear message input
-        messageInput.value = '';
-        messageInput.style.height = 'auto';
+        try {
+            // Auto-send the image with a caption
+            const result = await sendMessageToDB(`[Image: ${file.name}]`, e.target.result);
+            
+            if (result && result.success) {
+                console.log('✅ Image sent successfully');
+                
+                // Clear file input
+                imageUpload.value = '';
+                
+                // Reset send button
+                if (sendMessageBtn) {
+                    sendMessageBtn.disabled = false;
+                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+                }
+            } else {
+                throw new Error("Failed to send image");
+            }
+            
+        } catch (error) {
+            console.error("❌ Error sending image:", error);
+            alert("Failed to send image: " + error.message);
+            
+            // Reset send button
+            if (sendMessageBtn) {
+                sendMessageBtn.disabled = false;
+                sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+            }
+        }
     };
     
     reader.onerror = function(e) {
         console.error('❌ Error reading image:', e);
         alert("Error reading image file. Please try another image.");
         imageUpload.value = '';
+        
+        // Reset send button
+        if (sendMessageBtn) {
+            sendMessageBtn.disabled = false;
+            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+        }
     };
     
     reader.readAsDataURL(file);
