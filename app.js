@@ -1984,86 +1984,102 @@ async function loadChatSessions() {
             card.className = 'session-card';
             if (isActive) card.classList.add('active');
             
-            card.innerHTML = `
-                <div class="session-card-header">
-                    <div class="session-header-left">
-                        <div class="session-id">${session.session_id.substring(0, 12)}...</div>
-                        <div class="session-stats">
-                            <span class="guest-count">
-                                <i class="fas fa-users"></i> ${guestCount}
-                            </span>
-                        </div>
-                    </div>
-                    ${isActive ? '<div class="session-active-badge">Active Now</div>' : ''}
-                </div>
-                
-                <div class="session-info">
-                    <div class="session-info-section">
-                        <div class="session-info-row">
-                            <span class="session-info-label">Host:</span>
-                            <span class="session-info-value">${session.host_name || 'Unknown'}</span>
-                        </div>
-                        <div class="session-info-row">
-                            <span class="session-info-label">Host IP:</span>
-                            <span class="session-info-value">${hostIP}</span>
-                        </div>
-                    </div>
-                    
-                    <div class="session-info-section">
-                        <div class="session-info-row">
-                            <span class="session-info-label">Guests:</span>
-                            <span class="session-info-value" title="${guests ? guests.map(g => g.guest_name).join(', ') : 'None'}">
-                                ${guestNames}
-                            </span>
-                        </div>
-                        <div class="session-info-row">
-                            <span class="session-info-label">Max Guests:</span>
-                            <span class="session-info-value">${session.max_guests || 10}</span>
-                        </div>
-                    </div>
-                    
-                    <div class="session-info-section">
-                        <div class="session-info-row">
-                            <span class="session-info-label">Started:</span>
-                            <span class="session-info-value">${startDate.toLocaleDateString()} ${startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                        </div>
-                        <div class="session-info-row">
-                            <span class="session-info-label">${endDate ? 'Ended:' : 'Status:'}</span>
-                            <span class="session-info-value">
-                                ${endDate ? 
-                                    `${endDate.toLocaleDateString()} ${endDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 
-                                    'Active'
-                                }
-                            </span>
-                        </div>
-                    </div>
-                    
-                    <div class="session-info-section">
-                        <div class="session-info-row">
-                            <span class="session-info-label">Duration:</span>
-                            <span class="session-info-value">${duration}</span>
-                        </div>
-                        <div class="session-info-row">
-                            <span class="session-info-label">Requires Approval:</span>
-                            <span class="session-info-value">${session.requires_approval ? 'Yes' : 'No'}</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="session-actions">
-                    <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')">
-                        <i class="fas fa-eye"></i> View Chat
-                    </button>
-                    <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')">
-                        <i class="fas fa-users"></i> Guests
-                    </button>
-                    ${appState.isHost ? `
-                    <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')">
-                        <i class="fas fa-trash"></i> Delete
-                    </button>
-                    ` : ''}
-                </div>
-            `;
+// In the loadChatSessions function, update the card HTML generation:
+// Replace the card.innerHTML section with this:
+
+card.innerHTML = `
+    <div class="session-card-header">
+        <div class="session-header-left">
+            <div class="session-id" title="${session.session_id}">
+                <i class="fas fa-hashtag"></i> ${session.session_id.substring(0, 15)}...
+            </div>
+            <div class="session-stats">
+                <span class="guest-count" title="Approved guests">
+                    <i class="fas fa-users"></i> ${guestCount} / ${session.max_guests || 10}
+                </span>
+            </div>
+        </div>
+        ${isActive ? '<div class="session-active-badge">Active Now</div>' : ''}
+    </div>
+    
+    <div class="session-info">
+        <div class="session-info-section">
+            <div class="session-info-row">
+                <span class="session-info-label">Host:</span>
+                <span class="session-info-value" title="${session.host_name || 'Unknown'}">${session.host_name || 'Unknown'}</span>
+            </div>
+            <div class="session-info-row">
+                <span class="session-info-label">Host IP:</span>
+                <span class="session-info-value" title="${hostIP}">${hostIP}</span>
+            </div>
+        </div>
+        
+        <div class="session-info-section">
+            <div class="session-info-row">
+                <span class="session-info-label">Guests:</span>
+                <span class="session-info-value" title="${guests ? guests.map(g => g.guest_name).join(', ') : 'None'}">
+                    ${guestNames}
+                </span>
+            </div>
+            <div class="session-info-row">
+                <span class="session-info-label">Status:</span>
+                <span class="session-info-value" style="color: ${session.is_active ? 'var(--success-green)' : 'var(--text-secondary)'}">
+                    ${session.is_active ? 'Active' : 'Ended'}
+                </span>
+            </div>
+        </div>
+        
+        <div class="session-info-section">
+            <div class="session-info-row">
+                <span class="session-info-label">Started:</span>
+                <span class="session-info-value" title="${startDate.toLocaleString()}">
+                    ${startDate.toLocaleDateString()} ${startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                </span>
+            </div>
+            <div class="session-info-row">
+                <span class="session-info-label">${endDate ? 'Ended:' : 'Duration:'}</span>
+                <span class="session-info-value">
+                    ${endDate ? 
+                        `${endDate.toLocaleDateString()} ${endDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 
+                        duration
+                    }
+                </span>
+            </div>
+        </div>
+        
+        <div class="session-info-section">
+            <div class="session-info-row">
+                <span class="session-info-label">Requires Approval:</span>
+                <span class="session-info-value">
+                    ${session.requires_approval ? 
+                        '<i class="fas fa-check-circle" style="color: var(--success-green);"></i> Yes' : 
+                        '<i class="fas fa-times-circle" style="color: var(--danger-red);"></i> No'
+                    }
+                </span>
+            </div>
+            <div class="session-info-row">
+                <span class="session-info-label">Messages:</span>
+                <span class="session-info-value">
+                    <i class="fas fa-comment"></i> View Chat
+                </span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="session-actions">
+        <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')">
+            <i class="fas fa-eye"></i> View Chat
+        </button>
+        <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')">
+            <i class="fas fa-users"></i> Guests
+        </button>
+        ${appState.isHost && !isActive ? `
+        <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')">
+            <i class="fas fa-trash"></i> Delete
+        </button>
+        ` : ''}
+    </div>
+`;
             
             historyCards.appendChild(card);
         }
