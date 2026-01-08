@@ -1765,56 +1765,111 @@ function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
-    console.log('🔄 Auto-upload starting...');
+    console.log('📸 Image selected for auto-upload:', file.name, (file.size / 1024).toFixed(1) + 'KB');
     
-    // Quick validation
-    if (file.size > 2000000) { // 2MB max
+    // Validate
+    if (file.size > 2 * 1024 * 1024) { // 2MB max
         alert("Image too large (max 2MB)");
         imageUpload.value = '';
         return;
     }
     
+    if (!file.type.startsWith('image/')) {
+        alert("Please select an image file");
+        imageUpload.value = '';
+        return;
+    }
+    
     // Show uploading state
+    const originalBtnHTML = sendMessageBtn.innerHTML;
+    const originalPlaceholder = messageInput.placeholder;
+    
+    sendMessageBtn.disabled = true;
+    sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     messageInput.placeholder = "Uploading image...";
     messageInput.disabled = true;
-    sendMessageBtn.disabled = true;
     
+    // Read file
     const reader = new FileReader();
     
     reader.onload = async function(e) {
+        console.log('📸 Image loaded, size:', e.target.result.length, 'chars');
+        
         try {
-            console.log('📤 Sending image data, size:', e.target.result.length);
+            // Create message data - SIMPLE VERSION
+            const messageData = {
+                session_id: appState.currentSessionId,
+                sender_id: appState.userId,
+                sender_name: appState.userName,
+                message: `📸 ${file.name}`,
+                image_url: e.target.result,
+                created_at: new Date().toISOString()
+            };
             
-            // Use the debug send function
-            const result = await sendMessageToDB(`📸 ${file.name}`, e.target.result);
+            console.log('📤 Inserting into database...');
             
-            if (result && result.success) {
-                console.log('✅ Image sent successfully!');
-                imageUpload.value = ''; // Clear input
-            } else {
-                throw new Error('Send failed');
+            // Insert directly
+            const { data, error } = await supabaseClient
+                .from('messages')
+                .insert([messageData])
+                .select()
+                .single();
+            
+            if (error) {
+                console.error('❌ Database error:', error);
+                throw error;
             }
             
+            console.log('✅ Image saved! ID:', data.id);
+            
+            // Display immediately
+            displayMessage({
+                id: data.id,
+                sender: appState.userName,
+                text: `📸 ${file.name}`,
+                image: e.target.result,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false
+            });
+            
+            // Play sound
+            if (appState.soundEnabled) {
+                try {
+                    messageSound.currentTime = 0;
+                    messageSound.play();
+                } catch (e) {}
+            }
+            
+            // Clear file input
+            imageUpload.value = '';
+            
         } catch (error) {
-            console.error('Upload failed:', error);
-            alert("Couldn't upload image. See console for details.");
+            console.error('❌ Upload failed:', error);
+            alert("Failed to upload image: " + error.message);
         } finally {
             // Reset UI
-            messageInput.placeholder = "Type your message here...";
-            messageInput.disabled = false;
             sendMessageBtn.disabled = false;
+            sendMessageBtn.innerHTML = originalBtnHTML;
+            messageInput.placeholder = originalPlaceholder;
+            messageInput.disabled = false;
             messageInput.focus();
         }
     };
     
     reader.onerror = function() {
-        alert("Error reading file");
-        messageInput.placeholder = "Type your message here...";
-        messageInput.disabled = false;
+        console.error('❌ FileReader error');
+        alert("Error reading image file");
+        
+        // Reset UI
         sendMessageBtn.disabled = false;
+        sendMessageBtn.innerHTML = originalBtnHTML;
+        messageInput.placeholder = originalPlaceholder;
+        messageInput.disabled = false;
         imageUpload.value = '';
     };
     
+    // Start reading
     reader.readAsDataURL(file);
 }
 // Helper function to send image message
