@@ -750,44 +750,38 @@ function setupPendingGuestsSubscription() {
         return;
     }
     
-    // Create a new channel with a unique name
-    const channelName = `pending-guests-${appState.currentSessionId}-${Date.now()}`;
-    
+    // Create subscription for session_guests
     appState.pendingSubscription = supabaseClient
-        .channel(channelName)
+        .channel('public:session_guests')
         .on(
             'postgres_changes',
             {
-                event: '*', // Listen to ALL events (INSERT, UPDATE, DELETE)
+                event: '*', // Listen to ALL events
                 schema: 'public',
-                table: 'session_guests',
-                filter: `session_id=eq.${appState.currentSessionId} AND status=eq.pending`
+                table: 'session_guests'
             },
-            async (payload) => {
-                console.log('📡 Pending guest change detected:', payload.eventType, payload.new || payload.old);
+            (payload) => {
+                console.log('📡 Pending guest change:', payload.eventType, payload.new?.guest_name);
                 
-                // Force refresh the pending guests list
-                await loadPendingGuests();
-                
-                // Show notification for new guests
-                if (payload.eventType === 'INSERT' && payload.new) {
-                    showNewGuestNotification(payload.new);
-                }
-                
-                // Update modal if open
-                if (pendingGuestsModal.style.display === 'flex') {
-                    showPendingGuests();
+                // Check if this guest belongs to current session
+                if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                    // Refresh pending guests list
+                    loadPendingGuests();
+                    
+                    // Show notification for new pending guests
+                    if (payload.eventType === 'INSERT' && payload.new.status === 'pending') {
+                        showNewGuestNotification(payload.new);
+                    }
                 }
             }
         )
         .subscribe((status, err) => {
-            console.log('📡 Pending subscription status:', status);
+            console.log('📡 PENDING GUESTS Subscription status:', status);
             if (status === 'SUBSCRIBED') {
-                console.log('✅ SUCCESS: Pending guests subscription active');
-            } else if (err) {
-                console.error('❌ Pending subscription error:', err);
-                // Try to reconnect after 3 seconds
-                setTimeout(setupPendingGuestsSubscription, 3000);
+                console.log('✅ SUCCESS: Pending guests subscription active!');
+            }
+            if (err) {
+                console.error('❌ Pending guests subscription error:', err);
             }
         });
 }
@@ -1097,10 +1091,11 @@ function setupRealtimeSubscriptions() {
         return;
     }
     
-    console.log("📡 Setting up real-time subscriptions...");
+    console.log("📡 Setting up real-time subscriptions for session:", appState.currentSessionId);
     
     // Remove existing subscriptions
     if (appState.realtimeSubscription) {
+        console.log("Removing old subscription");
         supabaseClient.removeChannel(appState.realtimeSubscription);
         appState.realtimeSubscription = null;
     }
@@ -1110,57 +1105,67 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-    // Messages subscription
+    // Create NEW subscription with simpler configuration
     appState.realtimeSubscription = supabaseClient
-        .channel(`messages-${appState.currentSessionId}`)
+        .channel('public:messages')  // Simpler channel name
         .on(
             'postgres_changes',
             {
                 event: 'INSERT',
                 schema: 'public',
-                table: 'messages',
-                filter: `session_id=eq.${appState.currentSessionId}`
+                table: 'messages'
             },
             (payload) => {
-                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                    displayMessage({
-                        id: payload.new.id,
-                        sender: payload.new.sender_name,
-                        text: payload.new.message,
-                        image: payload.new.image_url,
-                        time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                        type: 'received',
-                        is_historical: false
-                    });
-                    
-                    if (appState.soundEnabled) {
-                        try {
-                            messageSound.currentTime = 0;
-                            messageSound.play().catch(e => console.log("Audio play failed:", e));
-                        } catch (e) {
-                            console.log("Audio error:", e);
+                console.log('📦 Realtime message received:', payload.new?.sender_name, payload.new?.message);
+                
+                // Filter by session_id in JavaScript instead of SQL filter
+                if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                    if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                        console.log('✅ Displaying new message from:', payload.new.sender_name);
+                        displayMessage({
+                            id: payload.new.id,
+                            sender: payload.new.sender_name,
+                            text: payload.new.message,
+                            image: payload.new.image_url,
+                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                            type: 'received',
+                            is_historical: false
+                        });
+                        
+                        if (appState.soundEnabled) {
+                            try {
+                                messageSound.currentTime = 0;
+                                messageSound.play().catch(e => console.log("Audio play failed:", e));
+                            } catch (e) {
+                                console.log("Audio error:", e);
+                            }
                         }
                     }
                 }
             }
         )
         .subscribe((status, err) => {
-            console.log('Messages subscription:', status);
-            if (err) console.error('Messages subscription error:', err);
+            console.log('📡 MESSAGES Subscription status:', status);
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ SUCCESS: Subscribed to realtime messages!');
+            }
+            if (err) {
+                console.error('❌ Messages subscription error:', err);
+            }
         });
     
-    // Typing subscription
+    // Typing indicator subscription
     appState.typingSubscription = supabaseClient
-        .channel(`typing-${appState.currentSessionId}`)
+        .channel('public:sessions')
         .on(
             'postgres_changes',
             {
                 event: 'UPDATE',
                 schema: 'public',
-                table: 'sessions',
-                filter: `session_id=eq.${appState.currentSessionId}`
+                table: 'sessions'
             },
             (payload) => {
+                console.log('⌨️ Typing update:', payload.new?.typing_user);
                 if (payload.new && payload.new.typing_user && payload.new.typing_user !== appState.userName) {
                     typingUser.textContent = payload.new.typing_user;
                     typingIndicator.classList.add('show');
@@ -1172,9 +1177,15 @@ function setupRealtimeSubscriptions() {
             }
         )
         .subscribe((status, err) => {
-            console.log('Typing subscription:', status);
+            console.log('⌨️ TYPING Subscription status:', status);
             if (err) console.error('Typing subscription error:', err);
         });
+    
+    // Pending guests subscription (host only)
+    if (appState.isHost) {
+        console.log("👑 Setting up pending guests subscription for host");
+        setupPendingGuestsSubscription();
+    }
 }
 
 // Check and reconnect subscriptions
