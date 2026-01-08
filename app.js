@@ -1989,8 +1989,7 @@ async function loadChatSessions() {
 
 // In the loadChatSessions function, replace the entire card.innerHTML section with:
 
-// In the loadChatSessions function, update the card HTML generation:
-// Replace the card.innerHTML section with this:
+// In the loadChatSessions function, replace the card generation with this HTML structure:
 
 card.innerHTML = `
     <div class="session-card-header">
@@ -2011,7 +2010,7 @@ card.innerHTML = `
                 </div>
                 <div class="stat-item approval-badge">
                     <i class="fas fa-${session.requires_approval ? 'check-circle' : 'times-circle'}"></i>
-                    <span>Approval: ${session.requires_approval ? 'Yes' : 'No'}</span>
+                    <span>${session.requires_approval ? 'Approval' : 'No Approval'}</span>
                 </div>
             </div>
         </div>
@@ -2026,7 +2025,7 @@ card.innerHTML = `
             <div class="session-info-rows">
                 <div class="session-info-row">
                     <span class="session-info-label">
-                        <i class="fas fa-user"></i> Host Name:
+                        <i class="fas fa-user"></i> Host:
                     </span>
                     <span class="session-info-value full-width" title="${session.host_name || 'Unknown'}">
                         ${session.host_name || 'Unknown'}
@@ -2058,7 +2057,7 @@ card.innerHTML = `
             <div class="session-info-rows">
                 <div class="session-info-row">
                     <span class="session-info-label">
-                        <i class="fas fa-user-friends"></i> Guest List:
+                        <i class="fas fa-user-friends"></i> Guests:
                     </span>
                     <span class="session-info-value full-width" title="${guests ? guests.map(g => g.guest_name).join(', ') : 'None'}">
                         ${guestNames}
@@ -2077,9 +2076,9 @@ card.innerHTML = `
                         <i class="fas fa-chart-line"></i> Capacity:
                     </span>
                     <span class="session-info-value">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div style="width: 100px; height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden;">
-                                <div style="width: ${Math.min(100, (guestCount / (session.max_guests || 10)) * 100)}%; height: 100%; background: linear-gradient(90deg, var(--accent-secondary), var(--accent-primary));"></div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div class="capacity-bar">
+                                <div class="capacity-fill" style="width: ${Math.min(100, (guestCount / (session.max_guests || 10)) * 100)}%"></div>
                             </div>
                             <span>${Math.round((guestCount / (session.max_guests || 10)) * 100)}%</span>
                         </div>
@@ -2099,8 +2098,8 @@ card.innerHTML = `
                     </span>
                     <span class="session-info-value" style="color: ${session.is_active ? 'var(--success-green)' : 'var(--text-secondary)'}">
                         ${session.is_active ? 
-                            '<i class="fas fa-circle" style="font-size: 10px; margin-right: 5px;"></i> Active' : 
-                            '<i class="fas fa-circle" style="font-size: 10px; margin-right: 5px; color: var(--text-secondary);"></i> Ended'
+                            '<i class="fas fa-circle" style="font-size: 10px; margin-right: 8px;"></i> Active' : 
+                            '<i class="fas fa-circle" style="font-size: 10px; margin-right: 8px; color: var(--text-secondary);"></i> Ended'
                         }
                     </span>
                 </div>
@@ -2119,7 +2118,7 @@ card.innerHTML = `
                         <i class="fas fa-tag"></i> Session ID:
                     </span>
                     <span class="session-info-value" title="${session.session_id}">
-                        ${session.session_id.substring(0, 20)}...
+                        ${session.session_id.substring(0, 25)}...
                     </span>
                 </div>
             </div>
