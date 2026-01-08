@@ -1405,17 +1405,18 @@ function displayMessage(message) {
     }
     messageDiv.id = `msg-${message.id}`;
     
-    // Process message content for URLs
     let messageContent = message.text || '';
     
-    // 1. Check for uploaded image
-    if (message.image) {
-        messageContent += `<img src="${message.image}" class="message-image" onclick="showFullImage('${message.image}')">`;
+    // 1. Check for uploaded image (BASE64)
+    if (message.image && message.image.startsWith('data:image/')) {
+        // For base64 images, use directly
+        messageContent += `<img src="${message.image}" class="message-image" 
+            onclick="showFullImage('${message.image.replace(/'/g, "\\'")}')"
+            loading="lazy">`;
     }
     
-    // 2. Check for image URLs in text
+    // 2. Check for external image URLs
     else if (message.text) {
-        // Find image URLs and embed them
         messageContent = embedMediaInText(message.text);
     }
     
@@ -2553,8 +2554,25 @@ function searchUsers(searchTerm) {
 // ============================================
 
 window.showFullImage = function(src) {
-    fullSizeImage.src = src;
-    imageModal.style.display = 'flex';
+    console.log('🔍 showFullImage called with:', src ? src.substring(0, 100) : 'null');
+    
+    if (!src) {
+        console.error('No image source provided');
+        return;
+    }
+    
+    if (src.startsWith('data:image/')) {
+        // It's a base64 image, use directly
+        fullSizeImage.src = src;
+        imageModal.style.display = 'flex';
+    } else if (src.startsWith('http')) {
+        // It's a URL, use it
+        fullSizeImage.src = src;
+        imageModal.style.display = 'flex';
+    } else {
+        console.error('Invalid image source:', src.substring(0, 100));
+        alert('Cannot display image: invalid format');
+    }
 };
 
 window.editMessage = async function(messageId) {
