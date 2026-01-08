@@ -1578,3 +1578,62 @@ input:focus, button:focus, textarea:focus {
     flex-direction: column;
     gap: 4px;
 }
+
+/* Embedded media styles */
+.embedded-media {
+    margin: 10px 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    background: rgba(21, 33, 62, 0.5);
+}
+
+.embedded-image {
+    max-width: 300px;
+    max-height: 300px;
+    width: auto;
+    height: auto;
+    display: block;
+    cursor: pointer;
+    transition: transform 0.3s;
+}
+
+.embedded-image:hover {
+    transform: scale(1.02);
+}
+
+.embedded-video {
+    max-width: 300px;
+    max-height: 200px;
+    width: auto;
+    height: auto;
+    display: block;
+}
+
+.youtube-embed iframe {
+    width: 300px;
+    height: 169px; /* 16:9 ratio */
+    border: none;
+}
+
+.embedded-audio {
+    width: 300px;
+    height: 40px;
+}
+
+.media-source {
+    padding: 5px 10px;
+    background: rgba(0, 0, 0, 0.3);
+    font-size: 11px;
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border-color);
+}
+
+.media-source a {
+    color: var(--accent-light);
+    text-decoration: none;
+}
+
+.media-source a:hover {
+    text-decoration: underline;
+}
