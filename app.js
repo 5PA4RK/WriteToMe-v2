@@ -1989,162 +1989,120 @@ async function loadChatSessions() {
 
 // In the loadChatSessions function, replace the entire card.innerHTML section with:
 
+// In the loadChatSessions function, update the card HTML generation:
+// Replace with guest-focused information only:
+
 card.innerHTML = `
     <div class="session-card-header">
         <div class="session-header-left">
-            <div class="session-id-container">
-                <div class="session-id" title="${session.session_id}">
-                    <i class="fas fa-hashtag"></i> ${session.session_id}
-                </div>
+            <div class="session-id" title="${session.session_id}">
+                <i class="fas fa-hashtag"></i> ${session.session_id.substring(0, 15)}...
             </div>
-            <div class="session-stats-container">
-                <div class="session-stat guest-count" title="Approved guests">
+            <div class="session-stats">
+                <div class="stat-item guest-count" title="Approved guests">
                     <i class="fas fa-users"></i>
-                    <span>${guestCount} / ${session.max_guests || 10} Guests</span>
+                    <span>${guestCount} Approved</span>
                 </div>
-                <div class="session-stat duration-badge" title="Session duration">
+                <div class="stat-item duration-badge" title="Session duration">
                     <i class="fas fa-clock"></i>
                     <span>${duration}</span>
                 </div>
-                <div class="session-stat approval-badge">
-                    <i class="fas ${session.requires_approval ? 'fa-shield-alt' : 'fa-unlock-alt'}"></i>
-                    <span>${session.requires_approval ? 'Approval Required' : 'Open Access'}</span>
+                <div class="stat-item status-badge">
+                    <i class="fas fa-${session.is_active ? 'play-circle' : 'stop-circle'}"></i>
+                    <span>${session.is_active ? 'Active' : 'Ended'}</span>
                 </div>
             </div>
         </div>
-        ${isActive ? '<div class="session-active-badge"><i class="fas fa-bolt"></i> Active Now</div>' : ''}
+        ${isActive ? '<div class="session-active-badge"><i class="fas fa-circle"></i> Live</div>' : ''}
     </div>
     
-    <div class="session-body">
-        <div class="session-info-grid">
-            <div class="session-info-column">
-                <h4><i class="fas fa-user-shield"></i> Host Information</h4>
-                <div class="info-row">
-                    <div class="info-label">
-                        <i class="fas fa-user"></i>
-                        <span>Host Name:</span>
-                    </div>
-                    <div class="info-value">${session.host_name || 'Unknown'}</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">
-                        <i class="fas fa-network-wired"></i>
-                        <span>Host IP:</span>
-                    </div>
-                    <div class="info-value host-ip" title="${hostIP}">${hostIP}</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">
-                        <i class="fas fa-calendar-alt"></i>
-                        <span>Created:</span>
-                    </div>
-                    <div class="info-value">${startDate.toLocaleString()}</div>
-                </div>
+    <div class="session-info">
+        <div class="session-info-section">
+            <div class="session-info-section-title">
+                <i class="fas fa-users"></i> Guest Information
             </div>
             
-            <div class="session-info-column">
-                <h4><i class="fas fa-users"></i> Guest Information</h4>
-                <div class="info-row">
-                    <div class="info-label">
-                        <i class="fas fa-user-friends"></i>
-                        <span>Guests:</span>
-                    </div>
-                    <div class="info-value guest-list">
-                        ${guestCount > 0 ? 
-                            guests.slice(0, 3).map(g => 
-                                `<div class="guest-item">
-                                    <i class="fas fa-user-check"></i>
-                                    <span>${g.guest_name}</span>
-                                </div>`
-                            ).join('') + 
-                            (guestCount > 3 ? 
-                                `<div class="guest-item">
-                                    <i class="fas fa-ellipsis-h"></i>
-                                    <span>+ ${guestCount - 3} more</span>
-                                </div>` : '')
-                            : 
-                            `<div class="guest-item">
-                                <i class="fas fa-user-times"></i>
-                                <span>No guests yet</span>
-                            </div>`
-                        }
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">
-                        <i class="fas fa-plug"></i>
-                        <span>Status:</span>
-                    </div>
-                    <div class="info-value" style="color: ${session.is_active ? 'var(--success-green)' : 'var(--danger-red)'}">
-                        <i class="fas fa-circle" style="font-size: 10px;"></i>
-                        ${session.is_active ? 'Active' : 'Ended'}
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">
-                        <i class="fas fa-door-open"></i>
-                        <span>Access:</span>
-                    </div>
-                    <div class="info-value">
-                        ${session.requires_approval ? 
-                            '<i class="fas fa-shield-alt"></i> Approval Required' : 
-                            '<i class="fas fa-unlock"></i> Free Access'
-                        }
-                    </div>
+            ${guests && guests.length > 0 ? `
+            <div class="guest-list-container">
+                <div class="guest-list">
+                    ${guests.slice(0, 3).map(guest => `
+                        <div class="guest-item">
+                            <div class="guest-item-info">
+                                <div class="guest-name">
+                                    <i class="fas fa-user"></i>
+                                    ${guest.guest_name}
+                                </div>
+                                <div class="guest-meta">
+                                    <span title="Joined at: ${new Date(guest.approved_at || guest.requested_at).toLocaleString()}">
+                                        <i class="fas fa-calendar"></i> ${new Date(guest.approved_at || guest.requested_at).toLocaleDateString()}
+                                    </span>
+                                    <span title="IP: ${guest.guest_ip || 'Unknown'}">
+                                        <i class="fas fa-network-wired"></i> ${guest.guest_ip ? guest.guest_ip.substring(0, 10) + '...' : 'Unknown'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="guest-status ${guest.status}">
+                                ${guest.status === 'approved' ? 'Approved' : guest.status === 'pending' ? 'Pending' : 'Rejected'}
+                            </div>
+                        </div>
+                    `).join('')}
+                    
+                    ${guests.length > 3 ? `
+                        <div class="guest-item" style="justify-content: center; background: rgba(138, 43, 226, 0.1);">
+                            <div class="guest-name">
+                                <i class="fas fa-ellipsis-h"></i>
+                                ${guests.length - 3} more guests...
+                            </div>
+                        </div>
+                    ` : ''}
                 </div>
             </div>
+            ` : `
+            <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
+                <i class="fas fa-user-slash" style="font-size: 24px; margin-bottom: 10px;"></i>
+                <div>No guests in this session</div>
+            </div>
+            `}
             
-            <div class="session-info-column">
-                <h4><i class="fas fa-info-circle"></i> Session Details</h4>
-                <div class="info-row">
-                    <div class="info-label">
-                        <i class="fas fa-play-circle"></i>
-                        <span>Started:</span>
-                    </div>
-                    <div class="info-value">${startDate.toLocaleDateString()}<br>
-                    <small>${startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</small></div>
+            <div class="guest-info-rows">
+                <div class="guest-info-row">
+                    <span class="guest-info-label">
+                        <i class="fas fa-user-plus"></i> Total Guests:
+                    </span>
+                    <span class="guest-info-value">
+                        ${guestCount} / ${session.max_guests || 10}
+                    </span>
                 </div>
-                <div class="info-row">
-                    <div class="info-label">
-                        <i class="fas ${endDate ? 'fa-stop-circle' : 'fa-spinner'}"></i>
-                        <span>${endDate ? 'Ended:' : 'Duration:'}</span>
-                    </div>
-                    <div class="info-value">
-                        ${endDate ? 
-                            `${endDate.toLocaleDateString()}<br>
-                            <small>${endDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</small>` : 
-                            duration
-                        }
-                    </div>
+                <div class="guest-info-row">
+                    <span class="guest-info-label">
+                        <i class="fas fa-check-circle"></i> Approval Required:
+                    </span>
+                    <span class="guest-info-value">
+                        ${session.requires_approval ? 'Yes' : 'No'}
+                    </span>
                 </div>
-                <div class="info-row">
-                    <div class="info-label">
-                        <i class="fas fa-id-card"></i>
-                        <span>Session ID:</span>
-                    </div>
-                    <div class="info-value" style="font-size: 12px; font-family: 'Courier New';">
-                        ${session.session_id.substring(0, 20)}...
-                    </div>
+                <div class="guest-info-row">
+                    <span class="guest-info-label">
+                        <i class="fas fa-calendar-alt"></i> Session Date:
+                    </span>
+                    <span class="guest-info-value" title="${startDate.toLocaleString()}">
+                        ${startDate.toLocaleDateString()}
+                    </span>
                 </div>
             </div>
         </div>
     </div>
     
     <div class="session-actions">
-        <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')" 
-                title="View chat messages">
-            <i class="fas fa-comments"></i> View Chat
+        <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')" title="View chat history">
+            <i class="fas fa-eye"></i> View Chat
         </button>
-        <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')" 
-                title="View all guests">
-            <i class="fas fa-user-friends"></i> All Guests
+        <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')" title="View all guest details">
+            <i class="fas fa-users"></i> All Guests
         </button>
-        ${appState.isHost ? `
-        <button class="btn ${isActive ? 'btn-warning' : 'btn-danger'} btn-small" 
-                onclick="${isActive ? 'endSession' : 'deleteSession'}('${session.session_id}')" 
-                title="${isActive ? 'End this session' : 'Delete session permanently'}">
-            <i class="fas ${isActive ? 'fa-stop' : 'fa-trash'}"></i> 
-            ${isActive ? 'End Session' : 'Delete'}
+        ${appState.isHost && !isActive ? `
+        <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')" title="Delete this session">
+            <i class="fas fa-trash"></i> Delete
         </button>
         ` : ''}
     </div>
