@@ -1924,3 +1924,165 @@ input:focus, button:focus, textarea:focus {
     border: 2px solid var(--accent-primary);
     box-shadow: 0 25px 50px rgba(138, 43, 226, 0.5);
 }
+/* Fix for admin panel display */
+.admin-panel {
+    margin-top: 25px;
+    background-color: var(--card-bg);
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+    display: block !important;
+}
+
+.admin-tabs {
+    display: flex;
+    background: linear-gradient(90deg, var(--darker-bg), var(--card-bg));
+    border-bottom: 1px solid var(--accent-secondary);
+    overflow-x: auto;
+    padding: 0;
+    margin: 0;
+}
+
+.admin-tab {
+    padding: 15px 25px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s;
+    white-space: nowrap;
+    border-bottom: 3px solid transparent;
+}
+
+.admin-tab:hover {
+    color: var(--accent-light);
+    background: rgba(138, 43, 226, 0.1);
+}
+
+.admin-tab.active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+    background: linear-gradient(135deg, rgba(138, 43, 226, 0.15), rgba(106, 90, 205, 0.15));
+}
+
+.admin-tab-content {
+    min-height: 400px;
+    width: 100%;
+    display: block;
+}
+
+.tab-pane {
+    display: none;
+    width: 100%;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-pane.active {
+    display: block !important;
+}
+
+/* Ensure history cards are visible */
+.history-cards {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+/* Ensure users list is visible */
+.users-list {
+    padding: 20px;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+/* Make sure the history section inside admin panel is visible */
+.admin-panel .history-section {
+    background: none;
+    border: none;
+    box-shadow: none;
+    margin: 0;
+    border-radius: 0;
+    display: block;
+    width: 100%;
+}
+
+.admin-panel .section-header {
+    background: linear-gradient(90deg, var(--darker-bg), var(--card-bg));
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--accent-secondary);
+}
+
+/* Fix for session cards */
+.session-card {
+    background: linear-gradient(135deg, rgba(21, 33, 62, 0.95), rgba(15, 52, 96, 0.95));
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    overflow: visible;
+    backdrop-filter: blur(10px);
+    margin-bottom: 20px;
+    display: block;
+    width: 100%;
+}
+
+/* Fix for user cards */
+.user-card {
+    background: linear-gradient(135deg, rgba(21, 33, 62, 0.9), rgba(15, 52, 96, 0.9));
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-left: 4px solid var(--accent-secondary);
+    transition: all 0.3s;
+    backdrop-filter: blur(5px);
+    display: block;
+    width: 100%;
+}
+
+/* Ensure proper spacing */
+.user-management-controls {
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    background: rgba(21, 33, 62, 0.8);
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Search box styling */
+.search-box {
+    position: relative;
+    flex: 1;
+    max-width: 300px;
+}
+
+.search-box input {
+    width: 100%;
+    padding: 10px 15px 10px 40px;
+    background: rgba(15, 52, 96, 0.8);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.search-box i {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent-light);
+}
