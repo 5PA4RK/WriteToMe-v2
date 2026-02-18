@@ -2086,3 +2086,24 @@ input:focus, button:focus, textarea:focus {
     transform: translateY(-50%);
     color: var(--accent-light);
 }
+/* CRITICAL SECURITY FIX - Admin panel should NEVER be visible to guests */
+#adminSection {
+    display: none !important;
+}
+
+/* Only allow display when host-mode class is on body AND adminSection has style="display: block" */
+body.host-mode #adminSection[style*="display: block"] {
+    display: block !important;
+}
+
+/* Ensure admin tabs are never visible to guests */
+.admin-tabs, .admin-tab-content, .history-section, .user-management-section {
+    display: none;
+}
+
+body.host-mode .admin-tabs,
+body.host-mode .admin-tab-content,
+body.host-mode .history-section,
+body.host-mode .user-management-section {
+    display: block;
+}
