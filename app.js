@@ -606,25 +606,16 @@ async function handleConnect() {
         }
         
         // Authentication successful
-// Authentication successful
-appState.isHost = userData.role === 'host'; // This MUST be set correctly
-appState.userName = userData.display_name || userData.username;
-appState.userId = userData.id;
-appState.connectionTime = new Date();
-
-console.log("✅ Authentication successful:", {
-    name: appState.userName,
-    id: appState.userId,
-    isHost: appState.isHost, // Verify this shows true for host, false for guest
-    role: userData.role
-});
-
-// CRITICAL: Immediately set body class based on role
-if (appState.isHost) {
-    document.body.classList.add('host-mode');
-} else {
-    document.body.classList.remove('host-mode');
-}
+        appState.isHost = userData.role === 'host';
+        appState.userName = userData.display_name || userData.username;
+        appState.userId = userData.id;
+        appState.connectionTime = new Date();
+        
+        console.log("✅ Authentication successful:", {
+            name: appState.userName,
+            id: appState.userId,
+            isHost: appState.isHost
+        });
         
         // Update last login
         try {
@@ -739,10 +730,10 @@ async function connectAsHost(userIP) {
 
 // Connect as guest
 // Connect as guest - FIXED IP STORAGE
-// Connect as guest - IMPROVED IP HANDLING
 async function connectAsGuest(userIP) {
     try {
-        console.log("👤 Connecting as guest with IP:", userIP);
+        console.log("👤 Connecting as guest...");
+        console.log("Guest IP:", userIP); // Debug log
         
         // Find active session
         const { data: activeSessions, error: sessionsError } = await supabaseClient
@@ -767,51 +758,55 @@ async function connectAsGuest(userIP) {
             .select('*')
             .eq('session_id', session.session_id)
             .eq('guest_id', appState.userId)
+            .eq('status', 'approved')
             .single();
         
         if (existingGuest) {
-            console.log("Guest already exists with status:", existingGuest.status);
-            
-            if (existingGuest.status === 'approved') {
-                console.log("Guest already approved, connecting directly");
-                completeGuestConnection(session.session_id);
-                return;
-            } else if (existingGuest.status === 'pending') {
-                console.log("Guest already pending");
-                appState.sessionId = session.session_id;
-                connectionModal.style.display = 'none';
-                resetConnectButton();
-                updateUIForPendingGuest();
-                setupPendingApprovalSubscription(session.session_id);
-                return;
-            }
+            console.log("Guest already approved, connecting directly");
+            completeGuestConnection(session.session_id);
+            return;
         }
         
-        // Add to pending guests - ENSURE IP IS STORED
-        const guestData = {
-            session_id: session.session_id,
-            guest_id: appState.userId,
-            guest_name: appState.userName,
-            guest_ip: userIP || "Unknown", // Store whatever we have
-            status: 'pending',
-            requested_at: new Date().toISOString()
-        };
-        
-        console.log("📝 Inserting guest with data:", guestData);
-        
-        const { data: insertedData, error: insertError } = await supabaseClient
+        // Check if already pending
+        const { data: pendingGuest } = await supabaseClient
             .from('session_guests')
-            .insert([guestData])
-            .select();
+            .select('*')
+            .eq('session_id', session.session_id)
+            .eq('guest_id', appState.userId)
+            .eq('status', 'pending')
+            .single();
+        
+        if (pendingGuest) {
+            console.log("Guest already pending");
+            appState.sessionId = session.session_id;
+            connectionModal.style.display = 'none';
+            resetConnectButton();
+            updateUIForPendingGuest();
+            setupPendingApprovalSubscription(session.session_id);
+            return;
+        }
+        
+        // Add to pending guests - MAKE SURE IP IS STORED
+        console.log("Adding guest with IP:", userIP);
+        const { error: insertError } = await supabaseClient
+            .from('session_guests')
+            .insert([{
+                session_id: session.session_id,
+                guest_id: appState.userId,
+                guest_name: appState.userName,
+                guest_ip: userIP, // This must be stored
+                status: 'pending',
+                requested_at: new Date().toISOString()
+            }]);
         
         if (insertError) {
-            console.error("❌ Error adding to pending:", insertError);
+            console.error("Error adding to pending:", insertError);
             alert("Failed to request access: " + insertError.message);
             resetConnectButton();
             return;
         }
         
-        console.log("✅ Guest added successfully:", insertedData);
+        console.log("✅ Guest added to pending list with IP:", userIP);
         appState.sessionId = session.session_id;
         connectionModal.style.display = 'none';
         resetConnectButton();
@@ -1615,7 +1610,7 @@ function updateUIForPendingGuest() {
     }
 }
 
-// Update UI after connection - SECURITY FIXED
+// Update UI after connection
 function updateUIAfterConnection() {
     if (!statusIndicator || !userRoleDisplay || !logoutBtn) return;
     
@@ -1632,22 +1627,12 @@ function updateUIAfterConnection() {
     
     if (sendMessageBtn) sendMessageBtn.disabled = false;
     
-    // CRITICAL SECURITY: Set body class based on role
-    if (appState.isHost) {
-        document.body.classList.add('host-mode');
-        console.log("👑 Host mode enabled - admin panel visible");
-    } else {
-        document.body.classList.remove('host-mode');
-        console.log("👤 Guest mode - admin panel hidden");
-    }
-    
-    // Force hide/show admin section
+    // Show admin panel for hosts
     if (adminSection) {
         if (appState.isHost) {
             adminSection.style.display = 'block';
-            console.log("👑 Admin panel set to BLOCK for host");
             
-            // Initialize tabs
+            // Make sure history tab is active by default
             if (historyTabBtn && usersTabBtn && historyTabContent && usersTabContent) {
                 historyTabBtn.classList.add('active');
                 usersTabBtn.classList.remove('active');
@@ -1657,22 +1642,16 @@ function updateUIAfterConnection() {
                 usersTabContent.classList.remove('active');
             }
             
+            // Load sessions
             loadChatSessions();
         } else {
             adminSection.style.display = 'none';
-            adminSection.removeAttribute('style'); // Remove any inline styles
-            console.log("👤 Admin panel set to NONE for guest");
         }
     }
     
-    // Force hide/show pending guests button
     if (pendingGuestsBtn) {
-        if (appState.isHost && appState.currentSessionId) {
-            pendingGuestsBtn.style.display = 'flex';
-            setupPendingGuestsSubscription();
-        } else {
-            pendingGuestsBtn.style.display = 'none';
-        }
+        pendingGuestsBtn.style.display = appState.isHost && appState.currentSessionId ? 'flex' : 'none';
+        if (appState.isHost) setupPendingGuestsSubscription();
     }
     
     if (appState.isViewingHistory) returnToActiveChat();
@@ -1772,62 +1751,16 @@ async function handleLogout() {
 // HELPER FUNCTIONS
 // ============================================
 
-// Get real IP address - IMPROVED VERSION
+// Get real IP address
 async function getRealIP() {
-    console.log("🔍 Attempting to get real IP...");
-    
-    // Try multiple IP services for redundancy
-    const ipServices = [
-        'https://api.ipify.org?format=json',
-        'https://api.myip.com',
-        'https://ipapi.co/json/',
-        'https://jsonip.com'
-    ];
-    
-    for (const service of ipServices) {
-        try {
-            console.log(`Trying IP service: ${service}`);
-            const response = await fetch(service, { 
-                mode: 'cors',
-                cache: 'no-cache',
-                timeout: 5000 
-            });
-            
-            if (!response.ok) continue;
-            
-            const data = await response.json();
-            console.log(`Response from ${service}:`, data);
-            
-            // Extract IP from different response formats
-            let ip = null;
-            if (data.ip) ip = data.ip;
-            else if (data.address) ip = data.address;
-            else if (data.query) ip = data.query;
-            
-            if (ip) {
-                console.log(`✅ Got IP from ${service}: ${ip}`);
-                return ip;
-            }
-        } catch (e) {
-            console.log(`Service ${service} failed:`, e.message);
-        }
-    }
-    
-    // Fallback to a more reliable service
     try {
-        console.log("Trying fallback IP service...");
-        const response = await fetch('https://ipapi.co/ip/');
-        const ip = await response.text();
-        if (ip && ip.trim()) {
-            console.log(`✅ Got IP from fallback: ${ip.trim()}`);
-            return ip.trim();
-        }
-    } catch (e) {
-        console.log("Fallback service failed:", e.message);
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        return data.ip || "Unknown";
+    } catch (error) {
+        console.error("Error getting IP:", error);
+        return "Unknown";
     }
-    
-    console.warn("⚠️ Could not get real IP, using 'Unknown'");
-    return "Unknown";
 }
 
 // Handle image upload
@@ -2108,14 +2041,12 @@ card.innerHTML = `
                                     <i class="fas fa-user"></i>
                                     ${guest.guest_name}
                                 </div>
-// Replace the guest meta section with this:
 <div class="guest-meta">
     <span title="Joined at: ${new Date(guest.approved_at || guest.requested_at).toLocaleString()}">
-        <i class="fas fa-calendar-alt"></i> ${new Date(guest.approved_at || guest.requested_at).toLocaleDateString()}
+        <i class="fas fa-calendar"></i> ${new Date(guest.approved_at || guest.requested_at).toLocaleDateString()}
     </span>
-    <span title="IP Address: ${guest.guest_ip || 'Not recorded'}" style="color: ${guest.guest_ip ? 'var(--accent-light)' : 'var(--text-secondary)'};">
-        <i class="fas fa-network-wired"></i> 
-        ${guest.guest_ip ? guest.guest_ip : 'No IP'}
+    <span title="IP: ${guest.guest_ip || 'Unknown'}">
+        <i class="fas fa-network-wired"></i> ${guest.guest_ip || 'Unknown'}
     </span>
 </div>
                             </div>
