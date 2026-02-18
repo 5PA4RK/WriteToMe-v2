@@ -1,3 +1,4 @@
+
 // Supabase Configuration
 const SUPABASE_URL = 'https://plqvqenoroacvzwtgoxq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_91IHQ5--y4tDIo8L9X2ZJQ_YeThfdu_';
@@ -104,7 +105,7 @@ const usernameInput = document.getElementById('usernameInput');
 const passwordInput = document.getElementById('passwordInput');
 
 // ============================================
-// CORE FUNCTIONS
+// CORE FUNCTIONS - FIXED VERSION
 // ============================================
 
 // Modal control functions
@@ -373,30 +374,35 @@ function setupEventListeners() {
     }
     
     // Image modal
-    if (imageModal) {
-        imageModal.addEventListener('click', (e) => {
-            if (e.target === imageModal || e.target.classList.contains('image-modal-overlay')) {
-                imageModal.style.display = 'none';
-            }
-        });
-        
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && imageModal.style.display === 'flex') {
-                imageModal.style.display = 'none';
-            }
-        });
-    }
-
-    window.showFullImage = function(src) {
-        fullSizeImage.src = src;
-        imageModal.style.display = 'flex';
-        
-        if (fullSizeImage) {
-            fullSizeImage.onclick = (e) => {
-                e.stopPropagation();
-            };
+// In setupEventListeners(), update the image modal event listener:
+if (imageModal) {
+    imageModal.addEventListener('click', (e) => {
+        // Close only if clicking on the overlay, not the image
+        if (e.target === imageModal || e.target.classList.contains('image-modal-overlay')) {
+            imageModal.style.display = 'none';
         }
-    };
+    });
+    
+    // Also add escape key to close
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && imageModal.style.display === 'flex') {
+            imageModal.style.display = 'none';
+        }
+    });
+}
+
+// Update the showFullImage function to prevent propagation:
+window.showFullImage = function(src) {
+    fullSizeImage.src = src;
+    imageModal.style.display = 'flex';
+    
+    // Stop propagation on image click
+    if (fullSizeImage) {
+        fullSizeImage.onclick = (e) => {
+            e.stopPropagation();
+        };
+    }
+};
     
     // Click outside emoji picker to close
     document.addEventListener('click', (e) => {
@@ -424,6 +430,7 @@ function switchAdminTab(tabName) {
         return;
     }
     
+    // Reset all tabs
     historyTabBtn.classList.remove('active');
     usersTabBtn.classList.remove('active');
     
@@ -432,6 +439,7 @@ function switchAdminTab(tabName) {
     historyTabContent.classList.remove('active');
     usersTabContent.classList.remove('active');
     
+    // Activate selected tab
     if (tabName === 'history') {
         historyTabBtn.classList.add('active');
         historyTabContent.style.display = 'block';
@@ -444,8 +452,7 @@ function switchAdminTab(tabName) {
         loadUsers();
     }
 }
-
-// Clear chat function
+// Replace the clearChat function with this:
 async function clearChat() {
     if (!appState.isConnected || !appState.currentSessionId) {
         alert("You must be connected to clear chat.");
@@ -458,6 +465,7 @@ async function clearChat() {
     
     try {
         if (appState.isHost) {
+            // Host can delete all messages
             const { error } = await supabaseClient
                 .from('messages')
                 .update({
@@ -469,9 +477,11 @@ async function clearChat() {
             
             if (error) throw error;
             
+            // Clear local messages
             chatMessages.innerHTML = '';
             appState.messages = [];
             
+            // Add system message
             const systemMsg = document.createElement('div');
             systemMsg.className = 'message received';
             systemMsg.innerHTML = `
@@ -484,6 +494,7 @@ async function clearChat() {
             chatMessages.appendChild(systemMsg);
             
         } else {
+            // Guest can only delete their own messages
             const { error } = await supabaseClient
                 .from('messages')
                 .update({
@@ -496,6 +507,7 @@ async function clearChat() {
             
             if (error) throw error;
             
+            // Remove guest's messages from view
             const guestMessages = document.querySelectorAll(`.message.sent`);
             guestMessages.forEach(msg => {
                 msg.innerHTML = `
@@ -515,7 +527,6 @@ async function clearChat() {
         alert("Failed to clear chat: " + error.message);
     }
 }
-
 // Handle connection
 async function handleConnect() {
     const username = usernameInput.value.trim();
@@ -542,6 +553,7 @@ async function handleConnect() {
     try {
         console.log("🔐 Attempting authentication for:", username);
         
+        // First check if user exists
         const { data: userData, error: userError } = await supabaseClient
             .from('user_management')
             .select('id, username, display_name, password_hash, role, is_active')
@@ -557,9 +569,11 @@ async function handleConnect() {
         
         console.log("👤 User found:", userData.username, "Role:", userData.role);
         
+        // Authenticate
         let isAuthenticated = false;
         
         try {
+            // Try RPC function first
             const { data: authResult } = await supabaseClient
                 .rpc('verify_password', {
                     stored_hash: userData.password_hash,
@@ -573,6 +587,7 @@ async function handleConnect() {
             console.log("RPC failed, trying test passwords:", rpcError);
         }
         
+        // Fallback for test accounts (development only)
         if (!isAuthenticated) {
             const testPasswords = {
                 'admin': 'admin123',
@@ -590,17 +605,28 @@ async function handleConnect() {
             return;
         }
         
-        appState.isHost = userData.role === 'host';
-        appState.userName = userData.display_name || userData.username;
-        appState.userId = userData.id;
-        appState.connectionTime = new Date();
+        // Authentication successful
+// Authentication successful
+appState.isHost = userData.role === 'host'; // This MUST be set correctly
+appState.userName = userData.display_name || userData.username;
+appState.userId = userData.id;
+appState.connectionTime = new Date();
+
+console.log("✅ Authentication successful:", {
+    name: appState.userName,
+    id: appState.userId,
+    isHost: appState.isHost, // Verify this shows true for host, false for guest
+    role: userData.role
+});
+
+// CRITICAL: Immediately set body class based on role
+if (appState.isHost) {
+    document.body.classList.add('host-mode');
+} else {
+    document.body.classList.remove('host-mode');
+}
         
-        console.log("✅ Authentication successful:", {
-            name: appState.userName,
-            id: appState.userId,
-            isHost: appState.isHost
-        });
-        
+        // Update last login
         try {
             await supabaseClient
                 .from('user_management')
@@ -613,8 +639,10 @@ async function handleConnect() {
             console.log("Could not update last login:", updateError);
         }
         
+        // Get user IP
         const userIP = await getRealIP();
         
+        // Connect based on role
         if (appState.isHost) {
             await connectAsHost(userIP);
         } else {
@@ -643,26 +671,25 @@ function resetConnectButton() {
 // Connect as host
 async function connectAsHost(userIP) {
     try {
-        console.log("👑 Connecting as host with IP:", userIP);
+        console.log("👑 Connecting as host...");
         
-        const sessionId = 'session_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 5);
+        const sessionId = 'session_' + Date.now().toString(36);
         
-        const sessionData = {
-            session_id: sessionId,
-            host_id: appState.userId,
-            host_name: appState.userName,
-            host_ip: userIP || "Unknown",
-            is_active: true,
-            requires_approval: true,
-            created_at: new Date().toISOString(),
-            max_guests: 50
-        };
-        
-        console.log("📝 Creating session with data:", sessionData);
-        
+        // Create session
         const { data, error } = await supabaseClient
             .from('sessions')
-            .insert([sessionData])
+            .insert([
+                {
+                    session_id: sessionId,
+                    host_id: appState.userId,
+                    host_name: appState.userName,
+                    host_ip: userIP,
+                    is_active: true,
+                    requires_approval: true,
+                    created_at: new Date().toISOString(),
+                    max_guests: 50
+                }
+            ])
             .select()
             .single();
         
@@ -673,25 +700,29 @@ async function connectAsHost(userIP) {
             return;
         }
         
-        console.log("✅ Session created:", data);
-        
+        // Update app state
         appState.sessionId = sessionId;
         appState.currentSessionId = sessionId;
         appState.isConnected = true;
         
+        // Save to localStorage
         saveSessionToStorage();
         
+        // Close modal and update UI
         connectionModal.style.display = 'none';
         resetConnectButton();
         updateUIAfterConnection();
         
+        // Set up subscriptions
         setupRealtimeSubscriptions();
         setupPendingGuestsSubscription();
         
+        // Load data
         await loadPendingGuests();
         await loadChatHistory();
         await loadChatSessions();
         
+        // Send welcome message
         await saveMessageToDB('System', `${appState.userName} has created a new chat session.`);
         
         console.log("✅ Host connection completed successfully!");
@@ -707,10 +738,13 @@ async function connectAsHost(userIP) {
 }
 
 // Connect as guest
+// Connect as guest - FIXED IP STORAGE
+// Connect as guest - IMPROVED IP HANDLING
 async function connectAsGuest(userIP) {
     try {
         console.log("👤 Connecting as guest with IP:", userIP);
         
+        // Find active session
         const { data: activeSessions, error: sessionsError } = await supabaseClient
             .from('sessions')
             .select('*')
@@ -727,6 +761,7 @@ async function connectAsGuest(userIP) {
         const session = activeSessions[0];
         console.log("Found active session:", session.session_id);
         
+        // Check if already approved
         const { data: existingGuest } = await supabaseClient
             .from('session_guests')
             .select('*')
@@ -752,11 +787,12 @@ async function connectAsGuest(userIP) {
             }
         }
         
+        // Add to pending guests - ENSURE IP IS STORED
         const guestData = {
             session_id: session.session_id,
             guest_id: appState.userId,
             guest_name: appState.userName,
-            guest_ip: userIP || "Unknown",
+            guest_ip: userIP || "Unknown", // Store whatever we have
             status: 'pending',
             requested_at: new Date().toISOString()
         };
@@ -816,12 +852,14 @@ function saveSessionToStorage() {
 }
 
 // ============================================
-// PENDING GUESTS SYSTEM
+// PENDING GUESTS SYSTEM - FIXED VERSION
 // ============================================
 
+// Setup pending guests subscription - COMPLETELY REWRITTEN
 function setupPendingGuestsSubscription() {
     console.log("🔄 Setting up pending guests subscription...");
     
+    // Remove existing subscription
     if (appState.pendingSubscription) {
         supabaseClient.removeChannel(appState.pendingSubscription);
         appState.pendingSubscription = null;
@@ -832,21 +870,25 @@ function setupPendingGuestsSubscription() {
         return;
     }
     
+    // Create subscription for session_guests
     appState.pendingSubscription = supabaseClient
         .channel('public:session_guests')
         .on(
             'postgres_changes',
             {
-                event: '*',
+                event: '*', // Listen to ALL events
                 schema: 'public',
                 table: 'session_guests'
             },
             (payload) => {
                 console.log('📡 Pending guest change:', payload.eventType, payload.new?.guest_name);
                 
+                // Check if this guest belongs to current session
                 if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                    // Refresh pending guests list
                     loadPendingGuests();
                     
+                    // Show notification for new pending guests
                     if (payload.eventType === 'INSERT' && payload.new.status === 'pending') {
                         showNewGuestNotification(payload.new);
                     }
@@ -864,6 +906,7 @@ function setupPendingGuestsSubscription() {
         });
 }
 
+// Load pending guests - IMPROVED
 async function loadPendingGuests() {
     if (!appState.isHost || !appState.currentSessionId) {
         console.log("Cannot load pending guests: Not host or no session ID");
@@ -900,12 +943,14 @@ async function loadPendingGuests() {
     }
 }
 
+// Show pending guests modal - IMPROVED
 async function showPendingGuests() {
     if (!pendingGuestsList) return;
     
     console.log("Showing pending guests modal...");
     
     try {
+        // Refresh data first
         await loadPendingGuests();
         
         pendingGuestsList.innerHTML = '';
@@ -956,11 +1001,13 @@ async function showPendingGuests() {
     }
 }
 
+// Show notification for new pending guest
 function showNewGuestNotification(guest) {
     if (!appState.isHost) return;
     
     console.log("🔔 New guest notification:", guest.guest_name);
     
+    // Create notification
     const notification = document.createElement('div');
     notification.className = 'guest-notification';
     notification.innerHTML = `
@@ -978,6 +1025,7 @@ function showNewGuestNotification(guest) {
     
     document.body.appendChild(notification);
     
+    // Play sound if enabled
     if (appState.soundEnabled) {
         try {
             messageSound.currentTime = 0;
@@ -987,16 +1035,20 @@ function showNewGuestNotification(guest) {
         }
     }
     
+    // Auto remove after 10 seconds
     setTimeout(() => {
         if (notification.parentNode) notification.remove();
     }, 10000);
 }
 
+// Helper to view pending guests immediately
 function viewPendingGuestsNow() {
     showPendingGuests();
+    // Remove all notifications
     document.querySelectorAll('.guest-notification').forEach(n => n.remove());
 }
 
+// Update pending button UI
 function updatePendingButtonUI() {
     if (!pendingGuestsBtn || !pendingCount) return;
     
@@ -1014,8 +1066,10 @@ function updatePendingButtonUI() {
     }
 }
 
+// Approve a guest
 async function approveGuest(guestRecordId) {
     try {
+        // Get guest details
         const { data: guest } = await supabaseClient
             .from('session_guests')
             .select('*')
@@ -1024,6 +1078,7 @@ async function approveGuest(guestRecordId) {
         
         if (!guest) throw new Error("Guest not found");
         
+        // Update status
         const { error } = await supabaseClient
             .from('session_guests')
             .update({
@@ -1034,13 +1089,16 @@ async function approveGuest(guestRecordId) {
         
         if (error) throw error;
         
+        // Update local state
         appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
         updatePendingButtonUI();
         
+        // Refresh modal if open
         if (pendingGuestsModal.style.display === 'flex') {
             showPendingGuests();
         }
         
+        // Send system message
         await saveMessageToDB('System', `${guest.guest_name} has been approved and joined the chat.`);
         
         console.log(`✅ Approved guest: ${guest.guest_name}`);
@@ -1051,6 +1109,7 @@ async function approveGuest(guestRecordId) {
     }
 }
 
+// Deny a guest
 async function denyGuest(guestRecordId) {
     try {
         const { data: guest } = await supabaseClient
@@ -1086,6 +1145,7 @@ async function denyGuest(guestRecordId) {
     }
 }
 
+// Setup pending approval subscription for guest
 function setupPendingApprovalSubscription(sessionId) {
     console.log("⏳ Setting up pending approval subscription for guest...");
     
@@ -1094,6 +1154,7 @@ function setupPendingApprovalSubscription(sessionId) {
         appState.pendingSubscription = null;
     }
     
+    // Subscribe to session_guests for THIS GUEST specifically
     appState.pendingSubscription = supabaseClient
         .channel('guest_approval_' + appState.userId)
         .on(
@@ -1115,16 +1176,19 @@ function setupPendingApprovalSubscription(sessionId) {
                         appState.isConnected = true;
                         saveSessionToStorage();
                         
+                        // Remove pending subscription
                         if (appState.pendingSubscription) {
                             supabaseClient.removeChannel(appState.pendingSubscription);
                             appState.pendingSubscription = null;
                         }
                         
+                        // Update UI and setup chat
                         updateUIAfterConnection();
                         setupRealtimeSubscriptions();
                         await loadChatHistory();
                         await saveMessageToDB('System', `${appState.userName} has joined the chat.`);
                         
+                        // Alert the user
                         alert("🎉 You have been approved! Welcome to the chat.");
                         
                     } else if (payload.new.status === 'rejected') {
@@ -1158,6 +1222,7 @@ function setupRealtimeSubscriptions() {
     
     console.log("📡 Setting up real-time subscriptions for session:", appState.currentSessionId);
     
+    // Remove existing subscriptions
     if (appState.realtimeSubscription) {
         console.log("Removing old subscription");
         supabaseClient.removeChannel(appState.realtimeSubscription);
@@ -1169,8 +1234,9 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
+    // Create NEW subscription with simpler configuration
     appState.realtimeSubscription = supabaseClient
-        .channel('public:messages')
+        .channel('public:messages')  // Simpler channel name
         .on(
             'postgres_changes',
             {
@@ -1181,6 +1247,7 @@ function setupRealtimeSubscriptions() {
             (payload) => {
                 console.log('📦 Realtime message received:', payload.new?.sender_name, payload.new?.message);
                 
+                // Filter by session_id in JavaScript instead of SQL filter
                 if (payload.new && payload.new.session_id === appState.currentSessionId) {
                     if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
                         console.log('✅ Displaying new message from:', payload.new.sender_name);
@@ -1216,51 +1283,58 @@ function setupRealtimeSubscriptions() {
             }
         });
     
-    appState.typingSubscription = supabaseClient
-        .channel('typing_updates_' + appState.currentSessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'sessions',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            (payload) => {
-                console.log('⌨️ Typing update for session:', payload.new?.typing_user);
-                if (payload.new && payload.new.typing_user && payload.new.typing_user !== appState.userName) {
-                    typingUser.textContent = payload.new.typing_user;
-                    typingIndicator.classList.add('show');
-                    
-                    setTimeout(() => {
-                        if (typingUser.textContent === payload.new.typing_user) {
-                            typingIndicator.classList.remove('show');
-                        }
-                    }, 3000);
-                }
+    // Typing indicator subscription
+// In setupRealtimeSubscriptions(), update the typing subscription:
+appState.typingSubscription = supabaseClient
+    .channel('typing_updates_' + appState.currentSessionId)
+    .on(
+        'postgres_changes',
+        {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'sessions',
+            filter: `session_id=eq.${appState.currentSessionId}`
+        },
+        (payload) => {
+            console.log('⌨️ Typing update for session:', payload.new?.typing_user);
+            if (payload.new && payload.new.typing_user && payload.new.typing_user !== appState.userName) {
+                typingUser.textContent = payload.new.typing_user;
+                typingIndicator.classList.add('show');
+                
+                // Clear after 3 seconds
+                setTimeout(() => {
+                    if (typingUser.textContent === payload.new.typing_user) {
+                        typingIndicator.classList.remove('show');
+                    }
+                }, 3000);
             }
-        )
-        .subscribe((status, err) => {
-            console.log('⌨️ TYPING Subscription status:', status);
-            if (err) console.error('Typing subscription error:', err);
-        });
+        }
+    )
+    .subscribe((status, err) => {
+        console.log('⌨️ TYPING Subscription status:', status);
+        if (err) console.error('Typing subscription error:', err);
+    });
     
+    // Pending guests subscription (host only)
     if (appState.isHost) {
         console.log("👑 Setting up pending guests subscription for host");
         setupPendingGuestsSubscription();
     }
 }
 
+// Check and reconnect subscriptions
 function checkAndReconnectSubscriptions() {
     if (!appState.isConnected || !appState.currentSessionId) return;
     
     console.log("🔍 Checking subscription health...");
     
+    // Reconnect messages if needed
     if (!appState.realtimeSubscription || appState.realtimeSubscription.state !== 'joined') {
         console.log("🔄 Reconnecting messages subscription...");
         setupRealtimeSubscriptions();
     }
     
+    // Reconnect pending guests if host
     if (appState.isHost && (!appState.pendingSubscription || appState.pendingSubscription.state !== 'joined')) {
         console.log("🔄 Reconnecting pending guests subscription...");
         setupPendingGuestsSubscription();
@@ -1271,6 +1345,7 @@ function checkAndReconnectSubscriptions() {
 // CHAT FUNCTIONS
 // ============================================
 
+// Handle typing
 async function handleTyping() {
     if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) return;
     
@@ -1285,6 +1360,7 @@ async function handleTyping() {
             })
             .eq('session_id', appState.currentSessionId);
         
+        // Clear typing indicator after 1 second
         if (appState.typingTimeout) {
             clearTimeout(appState.typingTimeout);
         }
@@ -1304,6 +1380,7 @@ async function handleTyping() {
     }
 }
 
+// Send message
 async function sendMessage() {
     if (!appState.isConnected || appState.isViewingHistory) {
         alert("You cannot send messages right now.");
@@ -1333,6 +1410,8 @@ async function sendMessage() {
     messageInput.style.height = 'auto';
 }
 
+// Send message to database
+// In app.js, update the sendMessageToDB function:
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB. Text:', text?.substring(0, 50), 'Has image:', !!imageUrl);
@@ -1341,7 +1420,7 @@ async function sendMessageToDB(text, imageUrl) {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
             sender_name: appState.userName,
-            message: text || '',
+            message: text || '', // Keep text if provided
             created_at: new Date().toISOString()
         };
         
@@ -1349,8 +1428,10 @@ async function sendMessageToDB(text, imageUrl) {
             console.log('📸 Adding image to message');
             messageData.image_url = imageUrl;
             
+            // Don't add filename to text if it's just an image
             if (!text || text.trim() === '') {
-                messageData.message = '';
+                // Optional: You can set empty text or a simple indicator
+                messageData.message = ''; // Or "[Image]" if you want a placeholder
             }
         }
         
@@ -1367,10 +1448,11 @@ async function sendMessageToDB(text, imageUrl) {
         
         console.log('✅ Message saved to DB:', data.id);
         
+        // Display the sent message immediately
         displayMessage({
             id: data.id,
             sender: appState.userName,
-            text: text,
+            text: text, // Keep original text
             image: imageUrl,
             time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             type: 'sent',
@@ -1385,7 +1467,24 @@ async function sendMessageToDB(text, imageUrl) {
         return null;
     }
 }
+function debugImageUpload() {
+    console.log("=== IMAGE UPLOAD DEBUG ===");
+    console.log("imageUpload element:", imageUpload);
+    console.log("Current files:", imageUpload.files);
+    
+    // Test if file input is working
+    const testFile = new File(['test'], 'test.png', { type: 'image/png' });
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(testFile);
+    imageUpload.files = dataTransfer.files;
+    
+    console.log("After setting test file:", imageUpload.files);
+    console.log("=== END DEBUG ===");
+}
 
+// Call in console: debugImageUpload()
+
+// Display message
 function displayMessage(message) {
     if (appState.isViewingHistory && message.is_historical === false) {
         return;
@@ -1402,6 +1501,7 @@ function displayMessage(message) {
     if (message.image) {
         messageContent += `<img src="${message.image}" class="message-image" onclick="showFullImage('${message.image}')">`;
     }
+    
     
     messageDiv.innerHTML = `
         <div class="message-sender">${message.sender}</div>
@@ -1428,6 +1528,7 @@ function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// Load chat history
 async function loadChatHistory(sessionId = null) {
     const targetSessionId = sessionId || appState.currentSessionId;
     if (!targetSessionId) return;
@@ -1487,6 +1588,7 @@ async function loadChatHistory(sessionId = null) {
 // UI FUNCTIONS
 // ============================================
 
+// Update UI for pending guest
 function updateUIForPendingGuest() {
     if (statusIndicator) statusIndicator.className = 'status-indicator offline';
     if (userRoleDisplay) userRoleDisplay.textContent = `${appState.userName} (Pending Approval)`;
@@ -1513,6 +1615,7 @@ function updateUIForPendingGuest() {
     }
 }
 
+// Update UI after connection - SECURITY FIXED
 function updateUIAfterConnection() {
     if (!statusIndicator || !userRoleDisplay || !logoutBtn) return;
     
@@ -1529,11 +1632,22 @@ function updateUIAfterConnection() {
     
     if (sendMessageBtn) sendMessageBtn.disabled = false;
     
+    // CRITICAL SECURITY: Set body class based on role
+    if (appState.isHost) {
+        document.body.classList.add('host-mode');
+        console.log("👑 Host mode enabled - admin panel visible");
+    } else {
+        document.body.classList.remove('host-mode');
+        console.log("👤 Guest mode - admin panel hidden");
+    }
+    
+    // Force hide/show admin section
     if (adminSection) {
         if (appState.isHost) {
-            console.log("👑 Host detected - showing admin panel");
             adminSection.style.display = 'block';
+            console.log("👑 Admin panel set to BLOCK for host");
             
+            // Initialize tabs
             if (historyTabBtn && usersTabBtn && historyTabContent && usersTabContent) {
                 historyTabBtn.classList.add('active');
                 usersTabBtn.classList.remove('active');
@@ -1545,22 +1659,30 @@ function updateUIAfterConnection() {
             
             loadChatSessions();
         } else {
-            console.log("👤 Guest detected - hiding admin panel");
             adminSection.style.display = 'none';
+            adminSection.removeAttribute('style'); // Remove any inline styles
+            console.log("👤 Admin panel set to NONE for guest");
         }
     }
     
+    // Force hide/show pending guests button
     if (pendingGuestsBtn) {
-        pendingGuestsBtn.style.display = appState.isHost && appState.currentSessionId ? 'flex' : 'none';
-        if (appState.isHost) setupPendingGuestsSubscription();
+        if (appState.isHost && appState.currentSessionId) {
+            pendingGuestsBtn.style.display = 'flex';
+            setupPendingGuestsSubscription();
+        } else {
+            pendingGuestsBtn.style.display = 'none';
+        }
     }
     
     if (appState.isViewingHistory) returnToActiveChat();
 }
 
+// Handle logout
 async function handleLogout() {
     if (!confirm("Are you sure you want to logout?")) return;
     
+    // Clear UI
     if (chatMessages) {
         chatMessages.innerHTML = `
             <div class="message received">
@@ -1587,6 +1709,7 @@ async function handleLogout() {
     if (sendMessageBtn) sendMessageBtn.disabled = true;
     if (adminSection) adminSection.style.display = 'none';
     
+    // Update database
     if (appState.isConnected && appState.currentSessionId) {
         try {
             if (appState.isHost) {
@@ -1612,6 +1735,7 @@ async function handleLogout() {
         }
     }
     
+    // Remove subscriptions
     if (appState.realtimeSubscription) {
         supabaseClient.removeChannel(appState.realtimeSubscription);
         appState.realtimeSubscription = null;
@@ -1625,6 +1749,7 @@ async function handleLogout() {
         appState.pendingSubscription = null;
     }
     
+    // Clear storage and reset state
     localStorage.removeItem('writeToMe_session');
     
     appState.isHost = false;
@@ -1647,9 +1772,11 @@ async function handleLogout() {
 // HELPER FUNCTIONS
 // ============================================
 
+// Get real IP address - IMPROVED VERSION
 async function getRealIP() {
     console.log("🔍 Attempting to get real IP...");
     
+    // Try multiple IP services for redundancy
     const ipServices = [
         'https://api.ipify.org?format=json',
         'https://api.myip.com',
@@ -1671,6 +1798,7 @@ async function getRealIP() {
             const data = await response.json();
             console.log(`Response from ${service}:`, data);
             
+            // Extract IP from different response formats
             let ip = null;
             if (data.ip) ip = data.ip;
             else if (data.address) ip = data.address;
@@ -1685,6 +1813,7 @@ async function getRealIP() {
         }
     }
     
+    // Fallback to a more reliable service
     try {
         console.log("Trying fallback IP service...");
         const response = await fetch('https://ipapi.co/ip/');
@@ -1701,12 +1830,15 @@ async function getRealIP() {
     return "Unknown";
 }
 
+// Handle image upload
+// Replace the handleImageUpload function with this:
 async function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
     console.log('📸 Image selected:', file.name, file.size, file.type);
     
+    // Validate file
     if (file.size > 5 * 1024 * 1024) {
         alert("❌ Image size should be less than 5MB.");
         imageUpload.value = '';
@@ -1719,6 +1851,7 @@ async function handleImageUpload(e) {
         return;
     }
     
+    // Disable send button and show loading
     if (sendMessageBtn) {
         sendMessageBtn.disabled = true;
         sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
@@ -1726,41 +1859,47 @@ async function handleImageUpload(e) {
     
     const reader = new FileReader();
     
-    reader.onload = async function(e) {
-        console.log('📸 Image loaded, size:', e.target.result.length, 'chars');
+// Update the handleImageUpload function (inside the reader.onload):
+reader.onload = async function(e) {
+    console.log('📸 Image loaded, size:', e.target.result.length, 'chars');
+    
+    try {
+        // Auto-send the image WITHOUT filename in text
+        const result = await sendMessageToDB('', e.target.result); // Empty string instead of filename
         
-        try {
-            const result = await sendMessageToDB('', e.target.result);
+        if (result && result.success) {
+            console.log('✅ Image sent successfully');
             
-            if (result && result.success) {
-                console.log('✅ Image sent successfully');
-                
-                imageUpload.value = '';
-                
-                if (sendMessageBtn) {
-                    sendMessageBtn.disabled = false;
-                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
-                }
-            } else {
-                throw new Error("Failed to send image");
-            }
+            // Clear file input
+            imageUpload.value = '';
             
-        } catch (error) {
-            console.error("❌ Error sending image:", error);
-            alert("Failed to send image: " + error.message);
-            
+            // Reset send button
             if (sendMessageBtn) {
                 sendMessageBtn.disabled = false;
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
+        } else {
+            throw new Error("Failed to send image");
         }
-    };
+        
+    } catch (error) {
+        console.error("❌ Error sending image:", error);
+        alert("Failed to send image: " + error.message);
+        
+        // Reset send button
+        if (sendMessageBtn) {
+            sendMessageBtn.disabled = false;
+            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+        }
+    }
+};
     
     reader.onerror = function(e) {
         console.error('❌ Error reading image:', e);
         alert("Error reading image file. Please try another image.");
         imageUpload.value = '';
         
+        // Reset send button
         if (sendMessageBtn) {
             sendMessageBtn.disabled = false;
             sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
@@ -1770,10 +1909,12 @@ async function handleImageUpload(e) {
     reader.readAsDataURL(file);
 }
 
+// Toggle emoji picker
 function toggleEmojiPicker() {
     emojiPicker.classList.toggle('show');
 }
 
+// Populate emojis
 function populateEmojis() {
     if (!emojiPicker) return;
     
@@ -1791,6 +1932,7 @@ function populateEmojis() {
     });
 }
 
+// Toggle sound
 function toggleSound() {
     appState.soundEnabled = !appState.soundEnabled;
     updateSoundControl();
@@ -1803,6 +1945,7 @@ function toggleSound() {
     }
 }
 
+// Update sound control UI
 function updateSoundControl() {
     if (!soundControl) return;
     
@@ -1815,6 +1958,7 @@ function updateSoundControl() {
     }
 }
 
+// Save system message to database
 async function saveMessageToDB(senderName, messageText) {
     try {
         const messageData = {
@@ -1871,14 +2015,26 @@ async function loadChatSessions() {
         for (const session of sessions) {
             const isActive = session.session_id === appState.currentSessionId && session.is_active;
             
+            // Get guests
             const { data: guests } = await supabaseClient
                 .from('session_guests')
-                .select('guest_name, guest_ip, approved_at, requested_at, status')
+                .select('guest_name, approved_at, status')
                 .eq('session_id', session.session_id)
                 .eq('status', 'approved');
             
             const guestCount = guests ? guests.length : 0;
+            let guestNames = 'None';
             
+            if (guests && guests.length > 0) {
+                if (guests.length <= 3) {
+                    guestNames = guests.map(g => g.guest_name).join(', ');
+                } else {
+                    const firstTwo = guests.slice(0, 2).map(g => g.guest_name).join(', ');
+                    guestNames = `${firstTwo} + ${guests.length - 2} more`;
+                }
+            }
+            
+            // Format dates
             const startDate = new Date(session.created_at);
             const endDate = session.ended_at ? new Date(session.ended_at) : null;
             
@@ -1898,134 +2054,137 @@ async function loadChatSessions() {
                 }
             }
             
+            const hostIP = appState.isHost ? (session.host_ip || 'N/A') : '***';
+            
             const card = document.createElement('div');
             card.className = 'session-card';
             if (isActive) card.classList.add('active');
             
-            card.innerHTML = `
-                <div class="session-card-header">
-                    <div class="session-header-left">
-                        <div class="session-id" title="${session.session_id}">
-                            <i class="fas fa-hashtag"></i> ${session.session_id.substring(0, 15)}...
-                        </div>
-                        <div class="session-stats">
-                            <div class="stat-item guest-count" title="Approved guests">
-                                <i class="fas fa-users"></i>
-                                <span>${guestCount} Approved</span>
-                            </div>
-                            <div class="stat-item duration-badge" title="Session duration">
-                                <i class="fas fa-clock"></i>
-                                <span>${duration}</span>
-                            </div>
-                            <div class="stat-item status-badge">
-                                <i class="fas fa-${session.is_active ? 'play-circle' : 'stop-circle'}"></i>
-                                <span>${session.is_active ? 'Active' : 'Ended'}</span>
-                            </div>
-                        </div>
-                    </div>
-                    ${isActive ? '<div class="session-active-badge"><i class="fas fa-circle"></i> Live</div>' : ''}
+// In the loadChatSessions function, update the card HTML generation:
+// Replace the card.innerHTML section with this:
+
+// In the loadChatSessions function, replace the entire card.innerHTML section with:
+
+// In the loadChatSessions function, update the card HTML generation:
+// Replace with guest-focused information only:
+
+card.innerHTML = `
+    <div class="session-card-header">
+        <div class="session-header-left">
+            <div class="session-id" title="${session.session_id}">
+                <i class="fas fa-hashtag"></i> ${session.session_id.substring(0, 15)}...
+            </div>
+            <div class="session-stats">
+                <div class="stat-item guest-count" title="Approved guests">
+                    <i class="fas fa-users"></i>
+                    <span>${guestCount} Approved</span>
                 </div>
-                
-                <div class="session-info">
-                    <div class="session-info-section">
-                        <div class="session-info-section-title">
-                            <i class="fas fa-users"></i> Guest Information
-                        </div>
-                        
-                        ${guests && guests.length > 0 ? `
-                        <div class="guest-list-container">
-                            <div class="guest-list">
-                                ${guests.slice(0, 3).map(guest => `
-                                    <div class="guest-item">
-                                        <div class="guest-item-info">
-                                            <div class="guest-name">
-                                                <i class="fas fa-user"></i>
-                                                ${guest.guest_name}
-                                            </div>
-                                            <div class="guest-meta">
-                                                <span title="Joined at: ${new Date(guest.approved_at || guest.requested_at).toLocaleString()}">
-                                                    <i class="fas fa-calendar-alt"></i> ${new Date(guest.approved_at || guest.requested_at).toLocaleDateString()}
-                                                </span>
-                                                <span title="IP Address: ${guest.guest_ip || 'Not recorded'}" style="color: ${guest.guest_ip ? 'var(--accent-light)' : 'var(--text-secondary)'};">
-                                                    <i class="fas fa-network-wired"></i> 
-                                                    ${guest.guest_ip || 'No IP'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div class="guest-status ${guest.status}">
-                                            ${guest.status === 'approved' ? 'Approved' : guest.status === 'pending' ? 'Pending' : 'Rejected'}
-                                        </div>
-                                    </div>
-                                `).join('')}
-                                
-                                ${guests.length > 3 ? `
-                                    <div class="guest-item" style="justify-content: center; background: rgba(138, 43, 226, 0.1);">
-                                        <div class="guest-name">
-                                            <i class="fas fa-ellipsis-h"></i>
-                                            ${guests.length - 3} more guests...
-                                        </div>
-                                    </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                        ` : `
-                        <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
-                            <i class="fas fa-user-slash" style="font-size: 24px; margin-bottom: 10px;"></i>
-                            <div>No guests in this session</div>
-                        </div>
-                        `}
-                        
-                        <div class="guest-info-rows">
-                            <div class="guest-info-row">
-                                <span class="guest-info-label">
-                                    <i class="fas fa-user-plus"></i> Total Guests:
-                                </span>
-                                <span class="guest-info-value">
-                                    ${guestCount} / ${session.max_guests || 10}
-                                </span>
-                            </div>
-                            <div class="guest-info-row">
-                                <span class="guest-info-label">
-                                    <i class="fas fa-check-circle"></i> Approval Required:
-                                </span>
-                                <span class="guest-info-value">
-                                    ${session.requires_approval ? 'Yes' : 'No'}
-                                </span>
-                            </div>
-                            <div class="guest-info-row">
-                                <span class="guest-info-label">
-                                    <i class="fas fa-calendar-alt"></i> Session Date:
-                                </span>
-                                <span class="guest-info-value" title="${startDate.toLocaleString()}">
-                                    ${startDate.toLocaleDateString()}
-                                </span>
-                            </div>
-                            <div class="guest-info-row">
-                                <span class="guest-info-label">
-                                    <i class="fas fa-server"></i> Host IP:
-                                </span>
-                                <span class="guest-info-value">
-                                    ${session.host_ip || 'Unknown'}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
+                <div class="stat-item duration-badge" title="Session duration">
+                    <i class="fas fa-clock"></i>
+                    <span>${duration}</span>
                 </div>
-                
-                <div class="session-actions">
-                    <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')" title="View chat history">
-                        <i class="fas fa-eye"></i> View Chat
-                    </button>
-                    <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')" title="View all guest details">
-                        <i class="fas fa-users"></i> All Guests
-                    </button>
-                    ${!isActive ? `
-                    <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')" title="Delete this session">
-                        <i class="fas fa-trash"></i> Delete
-                    </button>
+                <div class="stat-item status-badge">
+                    <i class="fas fa-${session.is_active ? 'play-circle' : 'stop-circle'}"></i>
+                    <span>${session.is_active ? 'Active' : 'Ended'}</span>
+                </div>
+            </div>
+        </div>
+        ${isActive ? '<div class="session-active-badge"><i class="fas fa-circle"></i> Live</div>' : ''}
+    </div>
+    
+    <div class="session-info">
+        <div class="session-info-section">
+            <div class="session-info-section-title">
+                <i class="fas fa-users"></i> Guest Information
+            </div>
+            
+            ${guests && guests.length > 0 ? `
+            <div class="guest-list-container">
+                <div class="guest-list">
+                    ${guests.slice(0, 3).map(guest => `
+                        <div class="guest-item">
+                            <div class="guest-item-info">
+                                <div class="guest-name">
+                                    <i class="fas fa-user"></i>
+                                    ${guest.guest_name}
+                                </div>
+// Replace the guest meta section with this:
+<div class="guest-meta">
+    <span title="Joined at: ${new Date(guest.approved_at || guest.requested_at).toLocaleString()}">
+        <i class="fas fa-calendar-alt"></i> ${new Date(guest.approved_at || guest.requested_at).toLocaleDateString()}
+    </span>
+    <span title="IP Address: ${guest.guest_ip || 'Not recorded'}" style="color: ${guest.guest_ip ? 'var(--accent-light)' : 'var(--text-secondary)'};">
+        <i class="fas fa-network-wired"></i> 
+        ${guest.guest_ip ? guest.guest_ip : 'No IP'}
+    </span>
+</div>
+                            </div>
+                            <div class="guest-status ${guest.status}">
+                                ${guest.status === 'approved' ? 'Approved' : guest.status === 'pending' ? 'Pending' : 'Rejected'}
+                            </div>
+                        </div>
+                    `).join('')}
+                    
+                    ${guests.length > 3 ? `
+                        <div class="guest-item" style="justify-content: center; background: rgba(138, 43, 226, 0.1);">
+                            <div class="guest-name">
+                                <i class="fas fa-ellipsis-h"></i>
+                                ${guests.length - 3} more guests...
+                            </div>
+                        </div>
                     ` : ''}
                 </div>
-            `;
+            </div>
+            ` : `
+            <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
+                <i class="fas fa-user-slash" style="font-size: 24px; margin-bottom: 10px;"></i>
+                <div>No guests in this session</div>
+            </div>
+            `}
+            
+            <div class="guest-info-rows">
+                <div class="guest-info-row">
+                    <span class="guest-info-label">
+                        <i class="fas fa-user-plus"></i> Total Guests:
+                    </span>
+                    <span class="guest-info-value">
+                        ${guestCount} / ${session.max_guests || 10}
+                    </span>
+                </div>
+                <div class="guest-info-row">
+                    <span class="guest-info-label">
+                        <i class="fas fa-check-circle"></i> Approval Required:
+                    </span>
+                    <span class="guest-info-value">
+                        ${session.requires_approval ? 'Yes' : 'No'}
+                    </span>
+                </div>
+                <div class="guest-info-row">
+                    <span class="guest-info-label">
+                        <i class="fas fa-calendar-alt"></i> Session Date:
+                    </span>
+                    <span class="guest-info-value" title="${startDate.toLocaleString()}">
+                        ${startDate.toLocaleDateString()}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="session-actions">
+        <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')" title="View chat history">
+            <i class="fas fa-eye"></i> View Chat
+        </button>
+        <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')" title="View all guest details">
+            <i class="fas fa-users"></i> All Guests
+        </button>
+        ${appState.isHost && !isActive ? `
+        <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')" title="Delete this session">
+            <i class="fas fa-trash"></i> Delete
+        </button>
+        ` : ''}
+    </div>
+`;
             
             historyCards.appendChild(card);
         }
@@ -2038,6 +2197,7 @@ async function loadChatSessions() {
     }
 }
 
+// View session history
 async function viewSessionHistory(sessionId) {
     appState.isViewingHistory = true;
     appState.viewingSessionId = sessionId;
@@ -2055,6 +2215,7 @@ async function viewSessionHistory(sessionId) {
     if (chatMessages) chatMessages.scrollTop = 0;
 }
 
+// Return to active chat
 function returnToActiveChat() {
     appState.isViewingHistory = false;
     appState.viewingSessionId = null;
@@ -2083,14 +2244,54 @@ async function deleteSession(sessionId) {
     }
     
     try {
+        // Try using the RPC function first
         const { error } = await supabaseClient
+            .rpc('delete_session_with_data', {
+                session_id_to_delete: sessionId
+            });
+        
+        if (error) {
+            console.error("RPC error:", error);
+            // Fallback to manual deletion
+            await deleteSessionManually(sessionId);
+        } else {
+            console.log("✅ Session deleted successfully via RPC!");
+            
+            // If this was the current session, handle cleanup
+            if (appState.currentSessionId === sessionId) {
+                appState.currentSessionId = null;
+                appState.isConnected = false;
+                chatMessages.innerHTML = '<div class="message received"><div class="message-sender">System</div><div class="message-content"><div class="message-text">Session was deleted. Please reconnect.</div><div class="message-time">Just now</div></div></div>';
+            }
+            
+            alert("Session deleted successfully!");
+            await loadChatSessions();
+            
+            if (appState.viewingSessionId === sessionId) {
+                returnToActiveChat();
+            }
+        }
+    } catch (error) {
+        console.error("❌ Error deleting session:", error);
+        alert("Failed to delete session: " + error.message);
+    }
+}
+
+// Manual deletion fallback
+async function deleteSessionManually(sessionId) {
+    console.log("Attempting manual deletion for session:", sessionId);
+    
+    try {
+        // Delete messages
+        const { error: msgError } = await supabaseClient
             .from('messages')
             .delete()
             .eq('session_id', sessionId);
         
-        if (error) throw error;
+        if (msgError) throw msgError;
         console.log("✅ Messages deleted");
         
+        // Delete session guests
         const { error: guestsError } = await supabaseClient
             .from('session_guests')
             .delete()
@@ -2099,6 +2300,7 @@ async function deleteSession(sessionId) {
         if (guestsError) throw guestsError;
         console.log("✅ Session guests deleted");
         
+        // Delete the session
         const { error: sessionError } = await supabaseClient
             .from('sessions')
             .delete()
@@ -2107,34 +2309,24 @@ async function deleteSession(sessionId) {
         if (sessionError) throw sessionError;
         console.log("✅ Session deleted");
         
-        if (appState.currentSessionId === sessionId) {
-            appState.currentSessionId = null;
-            appState.isConnected = false;
-            chatMessages.innerHTML = '<div class="message received"><div class="message-sender">System</div><div class="message-content"><div class="message-text">Session was deleted. Please reconnect.</div><div class="message-time">Just now</div></div></div>';
-        }
-        
         alert("Session deleted successfully!");
-        await loadChatSessions();
-        
-        if (appState.viewingSessionId === sessionId) {
-            returnToActiveChat();
-        }
         
     } catch (error) {
-        console.error("❌ Error deleting session:", error);
-        alert("Failed to delete session: " + error.message);
+        console.error("Manual deletion error:", error);
+        throw error;
     }
 }
-
 // ============================================
 // USER MANAGEMENT FUNCTIONS
 // ============================================
 
 function setupUserManagementListeners() {
+    // Add user button
     if (addUserBtn) {
         addUserBtn.addEventListener('click', showAddUserModal);
     }
     
+    // Close modals
     if (closeAddUserModal) {
         closeAddUserModal.addEventListener('click', () => {
             addUserModal.style.display = 'none';
@@ -2147,18 +2339,22 @@ function setupUserManagementListeners() {
         });
     }
     
+    // Save new user
     if (saveUserBtn) {
         saveUserBtn.addEventListener('click', saveNewUser);
     }
     
+    // Update user
     if (updateUserBtn) {
         updateUserBtn.addEventListener('click', updateUser);
     }
     
+    // Delete user
     if (deleteUserBtn) {
         deleteUserBtn.addEventListener('click', deleteUser);
     }
     
+    // Search users
     if (userSearchInput) {
         userSearchInput.addEventListener('input', function() {
             searchUsers(this.value.toLowerCase());
@@ -2166,6 +2362,7 @@ function setupUserManagementListeners() {
     }
 }
 
+// Load all users
 async function loadUsers() {
     if (!appState.isHost) return;
     
@@ -2193,6 +2390,7 @@ async function loadUsers() {
     }
 }
 
+// Render users list
 function renderUsers(users) {
     if (!usersList) return;
     
@@ -2253,6 +2451,7 @@ function renderUsers(users) {
     });
 }
 
+// Show add user modal
 function showAddUserModal() {
     if (!appState.isHost) return;
     
@@ -2265,6 +2464,7 @@ function showAddUserModal() {
     addUserModal.style.display = 'flex';
 }
 
+// Save new user
 async function saveNewUser() {
     if (!appState.isHost) return;
     
@@ -2308,6 +2508,7 @@ async function saveNewUser() {
     }
 }
 
+// Edit user modal
 function editUserModalOpen(userId) {
     const user = appState.users.find(u => u.id === userId);
     if (!user) return;
@@ -2323,6 +2524,7 @@ function editUserModalOpen(userId) {
     editUserModal.style.display = 'flex';
 }
 
+// Update user
 async function updateUser() {
     if (!appState.isHost) return;
     
@@ -2366,6 +2568,7 @@ async function updateUser() {
     }
 }
 
+// Delete user
 async function deleteUser() {
     if (!appState.isHost) return;
     
@@ -2392,6 +2595,7 @@ async function deleteUser() {
     }
 }
 
+// Search users
 function searchUsers(searchTerm) {
     if (!searchTerm) {
         renderUsers(appState.users);
@@ -2406,6 +2610,9 @@ function searchUsers(searchTerm) {
     
     renderUsers(filteredUsers);
 }
+
+
+
 
 // ============================================
 // GLOBAL FUNCTIONS
@@ -2493,6 +2700,8 @@ window.deleteSession = deleteSession;
 window.editUserModalOpen = editUserModalOpen;
 window.viewPendingGuestsNow = viewPendingGuestsNow;
 
+
+// Show session guests - FIXED IP DISPLAY
 window.showSessionGuests = async function(sessionId) {
     try {
         const { data: guests } = await supabaseClient
@@ -2573,7 +2782,7 @@ window.showSessionGuests = async function(sessionId) {
         alert("Failed to load guest details.");
     }
 };
-
+// Debug function to check IP storage
 window.debugGuestIPs = async function(sessionId) {
     if (!sessionId && appState.currentSessionId) {
         sessionId = appState.currentSessionId;
