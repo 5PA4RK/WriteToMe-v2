@@ -425,37 +425,30 @@ window.showFullImage = function(src) {
 function switchAdminTab(tabName) {
     console.log("Switching to tab:", tabName);
     
-    // Reset all tabs
-    if (historyTabBtn && usersTabBtn) {
-        historyTabBtn.classList.remove('active');
-        usersTabBtn.classList.remove('active');
+    if (!historyTabBtn || !usersTabBtn || !historyTabContent || !usersTabContent) {
+        console.error("Tab elements not found!");
+        return;
     }
     
-    if (historyTabContent && usersTabContent) {
-        historyTabContent.style.display = 'none';
-        usersTabContent.style.display = 'none';
-        historyTabContent.classList.remove('active');
-        usersTabContent.classList.remove('active');
-    }
+    // Reset all tabs
+    historyTabBtn.classList.remove('active');
+    usersTabBtn.classList.remove('active');
+    
+    historyTabContent.style.display = 'none';
+    usersTabContent.style.display = 'none';
+    historyTabContent.classList.remove('active');
+    usersTabContent.classList.remove('active');
     
     // Activate selected tab
     if (tabName === 'history') {
-        if (historyTabBtn) {
-            historyTabBtn.classList.add('active');
-        }
-        if (historyTabContent) {
-            historyTabContent.style.display = 'block';
-            historyTabContent.classList.add('active');
-        }
+        historyTabBtn.classList.add('active');
+        historyTabContent.style.display = 'block';
+        historyTabContent.classList.add('active');
         loadChatSessions();
     } else if (tabName === 'users') {
-        if (usersTabBtn) {
-            usersTabBtn.classList.add('active');
-        }
-        if (usersTabContent) {
-            usersTabContent.style.display = 'block';
-            usersTabContent.classList.add('active');
-        }
+        usersTabBtn.classList.add('active');
+        usersTabContent.style.display = 'block';
+        usersTabContent.classList.add('active');
         loadUsers();
     }
 }
@@ -1631,12 +1624,25 @@ function updateUIAfterConnection() {
     
     if (sendMessageBtn) sendMessageBtn.disabled = false;
     
+    // Show admin panel for hosts
     if (adminSection) {
-        adminSection.style.display = appState.isHost ? 'block' : 'none';
         if (appState.isHost) {
-            // Force show history tab by default
-            switchAdminTab('history');
+            adminSection.style.display = 'block';
+            
+            // Make sure history tab is active by default
+            if (historyTabBtn && usersTabBtn && historyTabContent && usersTabContent) {
+                historyTabBtn.classList.add('active');
+                usersTabBtn.classList.remove('active');
+                historyTabContent.style.display = 'block';
+                historyTabContent.classList.add('active');
+                usersTabContent.style.display = 'none';
+                usersTabContent.classList.remove('active');
+            }
+            
+            // Load sessions
             loadChatSessions();
+        } else {
+            adminSection.style.display = 'none';
         }
     }
     
