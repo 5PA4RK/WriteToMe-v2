@@ -729,9 +729,11 @@ async function connectAsHost(userIP) {
 }
 
 // Connect as guest
+// Connect as guest - FIXED IP STORAGE
 async function connectAsGuest(userIP) {
     try {
         console.log("👤 Connecting as guest...");
+        console.log("Guest IP:", userIP); // Debug log
         
         // Find active session
         const { data: activeSessions, error: sessionsError } = await supabaseClient
@@ -784,14 +786,15 @@ async function connectAsGuest(userIP) {
             return;
         }
         
-        // Add to pending guests
+        // Add to pending guests - MAKE SURE IP IS STORED
+        console.log("Adding guest with IP:", userIP);
         const { error: insertError } = await supabaseClient
             .from('session_guests')
             .insert([{
                 session_id: session.session_id,
                 guest_id: appState.userId,
                 guest_name: appState.userName,
-                guest_ip: userIP,
+                guest_ip: userIP, // This must be stored
                 status: 'pending',
                 requested_at: new Date().toISOString()
             }]);
@@ -803,7 +806,7 @@ async function connectAsGuest(userIP) {
             return;
         }
         
-        console.log("✅ Guest added to pending list");
+        console.log("✅ Guest added to pending list with IP:", userIP);
         appState.sessionId = session.session_id;
         connectionModal.style.display = 'none';
         resetConnectButton();
@@ -2038,14 +2041,14 @@ card.innerHTML = `
                                     <i class="fas fa-user"></i>
                                     ${guest.guest_name}
                                 </div>
-                                <div class="guest-meta">
-                                    <span title="Joined at: ${new Date(guest.approved_at || guest.requested_at).toLocaleString()}">
-                                        <i class="fas fa-calendar"></i> ${new Date(guest.approved_at || guest.requested_at).toLocaleDateString()}
-                                    </span>
-                                    <span title="IP: ${guest.guest_ip || 'Unknown'}">
-                                        <i class="fas fa-network-wired"></i> ${guest.guest_ip ? guest.guest_ip.substring(0, 10) + '...' : 'Unknown'}
-                                    </span>
-                                </div>
+<div class="guest-meta">
+    <span title="Joined at: ${new Date(guest.approved_at || guest.requested_at).toLocaleString()}">
+        <i class="fas fa-calendar"></i> ${new Date(guest.approved_at || guest.requested_at).toLocaleDateString()}
+    </span>
+    <span title="IP: ${guest.guest_ip || 'Unknown'}">
+        <i class="fas fa-network-wired"></i> ${guest.guest_ip || 'Unknown'}
+    </span>
+</div>
                             </div>
                             <div class="guest-status ${guest.status}">
                                 ${guest.status === 'approved' ? 'Approved' : guest.status === 'pending' ? 'Pending' : 'Rejected'}
@@ -2160,42 +2163,88 @@ function returnToActiveChat() {
     loadChatHistory();
 }
 
-// Delete session
-// Replace the existing deleteSession function with this improved version:
-// Alternative delete function using RPC
+// Delete session - FIXED VERSION
 async function deleteSession(sessionId) {
     if (!appState.isHost) {
         alert("Only hosts can delete sessions.");
         return;
     }
     
-    if (!confirm("⚠️ WARNING: Are you sure you want to delete this session?\n\nThis will permanently delete all data for this session!\n\nThis action CANNOT be undone!")) {
+    if (!confirm("⚠️ WARNING: Are you sure you want to delete this session?\n\nThis will permanently delete all messages and guest data for this session!\n\nThis action CANNOT be undone!")) {
         return;
     }
     
     try {
+        // Try using the RPC function first
         const { error } = await supabaseClient
             .rpc('delete_session_with_data', {
                 session_id_to_delete: sessionId
             });
         
-        if (error) throw error;
-        
-        console.log("✅ Session deleted successfully via RPC!");
-        alert("Session deleted successfully!");
-        
-        await loadChatSessions();
-        
-        if (appState.viewingSessionId === sessionId) {
-            returnToActiveChat();
+        if (error) {
+            console.error("RPC error:", error);
+            // Fallback to manual deletion
+            await deleteSessionManually(sessionId);
+        } else {
+            console.log("✅ Session deleted successfully via RPC!");
+            
+            // If this was the current session, handle cleanup
+            if (appState.currentSessionId === sessionId) {
+                appState.currentSessionId = null;
+                appState.isConnected = false;
+                chatMessages.innerHTML = '<div class="message received"><div class="message-sender">System</div><div class="message-content"><div class="message-text">Session was deleted. Please reconnect.</div><div class="message-time">Just now</div></div></div>';
+            }
+            
+            alert("Session deleted successfully!");
+            await loadChatSessions();
+            
+            if (appState.viewingSessionId === sessionId) {
+                returnToActiveChat();
+            }
         }
-        
     } catch (error) {
         console.error("❌ Error deleting session:", error);
+        alert("Failed to delete session: " + error.message);
+    }
+}
+
+// Manual deletion fallback
+async function deleteSessionManually(sessionId) {
+    console.log("Attempting manual deletion for session:", sessionId);
+    
+    try {
+        // Delete messages
+        const { error: msgError } = await supabaseClient
+            .from('messages')
+            .delete()
+            .eq('session_id', sessionId);
         
-        // Fallback to the JavaScript approach
-        alert("Using alternative delete method...");
-        await deleteSessionFallback(sessionId);
+        if (msgError) throw msgError;
+        console.log("✅ Messages deleted");
+        
+        // Delete session guests
+        const { error: guestsError } = await supabaseClient
+            .from('session_guests')
+            .delete()
+            .eq('session_id', sessionId);
+        
+        if (guestsError) throw guestsError;
+        console.log("✅ Session guests deleted");
+        
+        // Delete the session
+        const { error: sessionError } = await supabaseClient
+            .from('sessions')
+            .delete()
+            .eq('session_id', sessionId);
+        
+        if (sessionError) throw sessionError;
+        console.log("✅ Session deleted");
+        
+        alert("Session deleted successfully!");
+        
+    } catch (error) {
+        console.error("Manual deletion error:", error);
+        throw error;
     }
 }
 // ============================================
@@ -2582,7 +2631,8 @@ window.deleteSession = deleteSession;
 window.editUserModalOpen = editUserModalOpen;
 window.viewPendingGuestsNow = viewPendingGuestsNow;
 
-// Show session guests
+
+// Show session guests - FIXED IP DISPLAY
 window.showSessionGuests = async function(sessionId) {
     try {
         const { data: guests } = await supabaseClient
@@ -2608,7 +2658,7 @@ window.showSessionGuests = async function(sessionId) {
                             <strong>${g.guest_name}</strong>
                             <div class="guest-meta">
                                 <small>Joined: ${new Date(g.approved_at).toLocaleString()}</small>
-                                <small>IP: ${g.guest_ip || 'Unknown'}</small>
+                                <small>IP: ${g.guest_ip || 'Not recorded'}</small>
                             </div>
                         </div>
                     `).join('') : '<p>No approved guests</p>'}
@@ -2622,7 +2672,7 @@ window.showSessionGuests = async function(sessionId) {
                             <strong>${g.guest_name}</strong>
                             <div class="guest-meta">
                                 <small>Requested: ${new Date(g.requested_at).toLocaleString()}</small>
-                                <small>IP: ${g.guest_ip || 'Unknown'}</small>
+                                <small>IP: ${g.guest_ip || 'Not recorded'}</small>
                             </div>
                         </div>
                     `).join('')}
@@ -2662,6 +2712,37 @@ window.showSessionGuests = async function(sessionId) {
         console.error("Error loading session guests:", error);
         alert("Failed to load guest details.");
     }
+};
+// Debug function to check IP storage
+window.debugGuestIPs = async function(sessionId) {
+    if (!sessionId && appState.currentSessionId) {
+        sessionId = appState.currentSessionId;
+    }
+    
+    if (!sessionId) {
+        console.log("No session ID provided");
+        return;
+    }
+    
+    console.log("🔍 Checking guest IPs for session:", sessionId);
+    
+    const { data: guests, error } = await supabaseClient
+        .from('session_guests')
+        .select('*')
+        .eq('session_id', sessionId);
+    
+    if (error) {
+        console.error("Error fetching guests:", error);
+        return;
+    }
+    
+    console.log("Guest records:", guests);
+    
+    guests.forEach(guest => {
+        console.log(`Guest: ${guest.guest_name}, IP: ${guest.guest_ip || 'NO IP STORED'}, Status: ${guest.status}`);
+    });
+    
+    return guests;
 };
 
 // Initialize the app
