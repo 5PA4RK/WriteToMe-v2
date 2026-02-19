@@ -1789,3 +1789,252 @@ footer p {
         justify-content: flex-end;
     }
 }
+/* Room Selection Styles */
+.room-selection-section {
+    margin-bottom: 25px;
+    padding: 15px;
+    background: rgba(138, 43, 226, 0.1);
+    border-radius: 12px;
+    border: 1px solid var(--accent-secondary);
+}
+
+.room-selection-section h3 {
+    color: var(--accent-light);
+    margin-bottom: 15px;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rooms-list {
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: 15px;
+    padding: 5px;
+}
+
+.room-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: rgba(21, 33, 62, 0.8);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border-color);
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.room-item:hover {
+    border-color: var(--accent-primary);
+    transform: translateX(5px);
+}
+
+.room-item.selected {
+    border: 2px solid var(--success-green);
+    background: rgba(78, 205, 196, 0.1);
+}
+
+.room-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.room-number {
+    font-weight: bold;
+    color: var(--accent-light);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.room-host, .room-created {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.no-rooms-message {
+    text-align: center;
+    padding: 30px;
+    color: var(--text-secondary);
+}
+
+.no-rooms-message i {
+    font-size: 48px;
+    color: var(--accent-secondary);
+    margin-bottom: 15px;
+}
+
+.room-selected-message {
+    margin-top: 10px;
+    padding: 10px;
+    background: rgba(78, 205, 196, 0.1);
+    border-left: 3px solid var(--success-green);
+    border-radius: 4px;
+    color: var(--success-green);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Guest Note Section */
+.guest-note-section {
+    margin-bottom: 25px;
+    padding: 15px;
+    background: rgba(255, 209, 102, 0.05);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 209, 102, 0.3);
+}
+
+.guest-note-section h3 {
+    color: var(--warning-yellow);
+    margin-bottom: 15px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.guest-note-section textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.guest-note {
+    margin-top: 5px;
+    padding: 5px 10px;
+    background: rgba(138, 43, 226, 0.1);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--accent-light);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border-left: 2px solid var(--accent-primary);
+}
+
+.guest-note.small {
+    font-size: 11px;
+    padding: 3px 8px;
+    margin-top: 2px;
+}
+
+/* Login Section */
+.login-section {
+    padding: 15px;
+    background: rgba(21, 33, 62, 0.5);
+    border-radius: 12px;
+}
+
+.login-section h3 {
+    color: var(--accent-light);
+    margin-bottom: 15px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Kick button styles */
+.guest-item .btn-danger {
+    padding: 4px 8px;
+    font-size: 11px;
+    margin-left: 10px;
+}
+
+/* Guest details in pending modal */
+.guest-note {
+    margin-top: 5px;
+    padding: 5px 10px;
+    background: rgba(138, 43, 226, 0.1);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--accent-light);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border-left: 2px solid var(--accent-primary);
+}
+
+.guest-details small {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 2px 0;
+}
+
+/* Guest details modal */
+.guest-details-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.guest-details-modal h3 {
+    color: var(--accent-light);
+    margin-bottom: 10px;
+}
+
+.guest-details-modal h4 {
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.guest-status-section {
+    padding: 15px;
+    background: rgba(21, 33, 62, 0.5);
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.guest-detail {
+    padding: 8px;
+    border-bottom: 1px solid rgba(45, 66, 99, 0.3);
+}
+
+.guest-detail:last-child {
+    border-bottom: none;
+}
+
+.guest-detail .guest-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 5px;
+    padding-left: 20px;
+}
+
+.guest-meta small {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+/* Local system messages */
+.message.local-system {
+    opacity: 0.7;
+    border-left: 3px solid var(--text-secondary);
+}
+
+.message.local-system .message-sender {
+    color: var(--text-secondary);
+}
+
+/* Historical room view */
+.message.historical .message-sender small {
+    font-size: 10px;
+    opacity: 0.7;
+    margin-left: 5px;
+}
