@@ -822,27 +822,64 @@ async function connectAsHost(userIP) {
     }
 }
 
-// Connect as guest
+// Connect as guest - simpler version
 async function connectAsGuest(userIP) {
     try {
         console.log("👤 Connecting as guest...");
-        console.log("Guest IP:", userIP);
         
-        // Create a pending guest entry without a specific room
+        // Find any active session
+        const { data: activeSessions, error: sessionError } = await supabaseClient
+            .from('sessions')
+            .select('session_id, host_name')
+            .eq('is_active', true)
+            .limit(1);
+        
+        if (sessionError || !activeSessions || activeSessions.length === 0) {
+            alert("No active rooms available. Please try again later or contact a host.");
+            resetConnectButton();
+            return;
+        }
+        
+        const targetSession = activeSessions[0];
+        console.log("Found active session:", targetSession.session_id);
+        
+        // Check if guest already has a pending request
+        const { data: existingRequest } = await supabaseClient
+            .from('session_guests')
+            .select('status')
+            .eq('session_id', targetSession.session_id)
+            .eq('guest_id', appState.userId)
+            .maybeSingle();
+        
+        if (existingRequest) {
+            if (existingRequest.status === 'pending') {
+                console.log("Guest already pending");
+                appState.sessionId = targetSession.session_id;
+                connectionModal.style.display = 'none';
+                resetConnectButton();
+                updateUIForPendingGuest();
+                setupPendingApprovalSubscription();
+                return;
+            } else if (existingRequest.status === 'approved') {
+                console.log("Guest already approved");
+                completeGuestConnection(targetSession.session_id);
+                return;
+            }
+        }
+        
+        // Create new pending request
         console.log("Adding guest with IP:", userIP);
-        const { data: guestData, error: insertError } = await supabaseClient
+        const { error: insertError } = await supabaseClient
             .from('session_guests')
             .insert([{
-                session_id: null, // No room assigned yet
+                session_id: targetSession.session_id,
                 guest_id: appState.userId,
                 guest_name: appState.userName,
                 guest_ip: userIP,
                 guest_note: appState.guestNote || "",
                 status: 'pending',
                 requested_at: new Date().toISOString()
-            }])
-            .select()
-            .single();
+            }]);
         
         if (insertError) {
             console.error("Error adding to pending:", insertError);
@@ -851,12 +888,12 @@ async function connectAsGuest(userIP) {
             return;
         }
         
-        console.log("✅ Guest added to pending list with IP:", userIP);
-        appState.sessionId = 'pending_' + guestData.id;
+        console.log("✅ Guest added to pending list");
+        appState.sessionId = targetSession.session_id;
         connectionModal.style.display = 'none';
         resetConnectButton();
         updateUIForPendingGuest();
-        setupPendingApprovalSubscription(); // No session ID needed
+        setupPendingApprovalSubscription();
         
     } catch (error) {
         console.error("Error in guest connection:", error);
