@@ -28,7 +28,10 @@ const appState = {
     users: [],
     isViewingUsers: false,
     availableRooms: [],
-    guestNote: ""
+    guestNote: "",
+    visitorNotes: [], // Add this for storing visitor notes
+    unreadNotesCount: 0, // Add this for unread notes counter
+    showNotesPanel: false // Add this for toggling notes panel
 };
 
 // DOM Elements
@@ -110,6 +113,16 @@ const deleteUserBtn = document.getElementById('deleteUserBtn');
 
 const usernameInput = document.getElementById('usernameInput');
 const passwordInput = document.getElementById('passwordInput');
+
+// Add these after your other DOM element declarations
+const notesBtn = document.getElementById('notesBtn');
+const notesCount = document.getElementById('notesCount');
+const notesPanel = document.getElementById('notesPanel');
+const notesList = document.getElementById('notesList');
+const closeNotesPanel = document.getElementById('closeNotesPanel');
+const refreshNotesBtn = document.getElementById('refreshNotesBtn');
+const markAllReadBtn = document.getElementById('markAllReadBtn');
+const notesSearchInput = document.getElementById('notesSearchInput');
 
 // ============================================
 // CORE FUNCTIONS
@@ -823,6 +836,7 @@ async function connectAsHost(userIP) {
 }
 
 // Connect as guest - simpler version
+// Connect as guest
 async function connectAsGuest(userIP) {
     try {
         console.log("👤 Connecting as guest...");
@@ -830,7 +844,7 @@ async function connectAsGuest(userIP) {
         // Find any active session
         const { data: activeSessions, error: sessionError } = await supabaseClient
             .from('sessions')
-            .select('session_id, host_name')
+            .select('session_id, host_name, host_id')
             .eq('is_active', true)
             .limit(1);
         
@@ -876,7 +890,7 @@ async function connectAsGuest(userIP) {
                 guest_id: appState.userId,
                 guest_name: appState.userName,
                 guest_ip: userIP,
-                guest_note: appState.guestNote || "",
+                guest_note: appState.guestNote || "", // Keep this for backward compatibility
                 status: 'pending',
                 requested_at: new Date().toISOString()
             }]);
@@ -886,6 +900,11 @@ async function connectAsGuest(userIP) {
             alert("Failed to request access: " + insertError.message);
             resetConnectButton();
             return;
+        }
+        
+        // Save the visitor note to the new table if provided
+        if (appState.guestNote && appState.guestNote.trim() !== '') {
+            await saveVisitorNote(targetSession.session_id, appState.guestNote, userIP);
         }
         
         console.log("✅ Guest added to pending list");
@@ -899,6 +918,325 @@ async function connectAsGuest(userIP) {
         console.error("Error in guest connection:", error);
         alert("An error occurred: " + error.message);
         resetConnectButton();
+    }
+}
+
+// New function to save visitor note
+async function saveVisitorNote(sessionId, noteText, userIP) {
+    try {
+        const { error } = await supabaseClient
+            .from('visitor_notes')
+            .insert([{
+                guest_id: appState.userId,
+                guest_name: appState.userName,
+                session_id: sessionId,
+                note_text: noteText,
+                guest_ip: userIP,
+                created_at: new Date().toISOString(),
+                read_by_host: false
+            }]);
+        
+        if (error) {
+            console.error("Error saving visitor note:", error);
+        } else {
+            console.log("✅ Visitor note saved successfully");
+        }
+    } catch (error) {
+        console.error("Error in saveVisitorNote:", error);
+    }
+}
+// Load visitor notes for host
+async function loadVisitorNotes() {
+    if (!appState.isHost) return;
+    
+    try {
+        console.log("📝 Loading visitor notes...");
+        
+        const { data: notes, error } = await supabaseClient
+            .from('visitor_notes')
+            .select('*')
+            .eq('is_archived', false)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        appState.visitorNotes = notes || [];
+        appState.unreadNotesCount = appState.visitorNotes.filter(n => !n.read_by_host).length;
+        
+        updateNotesButtonUI();
+        renderVisitorNotes(appState.visitorNotes);
+        
+        console.log(`✅ Loaded ${appState.visitorNotes.length} visitor notes (${appState.unreadNotesCount} unread)`);
+        
+    } catch (error) {
+        console.error("Error loading visitor notes:", error);
+    }
+}
+
+// Render visitor notes in panel
+function renderVisitorNotes(notes) {
+    if (!notesList) return;
+    
+    if (!notes || notes.length === 0) {
+        notesList.innerHTML = `
+            <div class="no-notes-message">
+                <i class="fas fa-sticky-note"></i>
+                <p>No visitor notes yet</p>
+                <small>Notes from guests will appear here</small>
+            </div>
+        `;
+        return;
+    }
+    
+    notesList.innerHTML = '';
+    
+    notes.forEach(note => {
+        const noteElement = document.createElement('div');
+        noteElement.className = `visitor-note-item ${note.read_by_host ? 'read' : 'unread'}`;
+        noteElement.dataset.noteId = note.id;
+        
+        const createdDate = new Date(note.created_at).toLocaleString();
+        const roomInfo = note.session_id ? 
+            `<span class="note-room"><i class="fas fa-door-open"></i> Room: ${note.session_id.substring(0, 8)}...</span>` : 
+            '<span class="note-room"><i class="fas fa-door-closed"></i> No room assigned</span>';
+        
+        noteElement.innerHTML = `
+            <div class="note-header">
+                <div class="note-guest-info">
+                    <i class="fas fa-user"></i>
+                    <strong>${note.guest_name}</strong>
+                    ${!note.read_by_host ? '<span class="unread-badge">New</span>' : ''}
+                </div>
+                <div class="note-time">
+                    <i class="fas fa-clock"></i> ${createdDate}
+                </div>
+            </div>
+            <div class="note-content">
+                <div class="note-text">${escapeHtml(note.note_text)}</div>
+                ${note.guest_ip ? `<div class="note-ip"><i class="fas fa-network-wired"></i> IP: ${note.guest_ip}</div>` : ''}
+                <div class="note-metadata">
+                    ${roomInfo}
+                </div>
+            </div>
+            <div class="note-actions">
+                <button class="btn btn-small btn-success" onclick="markNoteAsRead('${note.id}')" ${note.read_by_host ? 'disabled' : ''}>
+                    <i class="fas fa-check"></i> Mark as Read
+                </button>
+                <button class="btn btn-small btn-info" onclick="archiveNote('${note.id}')">
+                    <i class="fas fa-archive"></i> Archive
+                </button>
+                ${note.session_id ? `
+                <button class="btn btn-small btn-secondary" onclick="viewNoteSession('${note.session_id}')">
+                    <i class="fas fa-eye"></i> View Room
+                </button>
+                ` : ''}
+            </div>
+        `;
+        
+        notesList.appendChild(noteElement);
+    });
+}
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Mark note as read
+window.markNoteAsRead = async function(noteId) {
+    if (!appState.isHost) return;
+    
+    try {
+        const { error } = await supabaseClient
+            .from('visitor_notes')
+            .update({
+                read_by_host: true,
+                read_at: new Date().toISOString(),
+                host_id: appState.userId
+            })
+            .eq('id', noteId);
+        
+        if (error) throw error;
+        
+        // Update local state
+        const note = appState.visitorNotes.find(n => n.id === noteId);
+        if (note) {
+            note.read_by_host = true;
+            note.read_at = new Date().toISOString();
+            appState.unreadNotesCount = appState.visitorNotes.filter(n => !n.read_by_host).length;
+        }
+        
+        updateNotesButtonUI();
+        renderVisitorNotes(appState.visitorNotes);
+        
+        console.log("✅ Note marked as read");
+        
+    } catch (error) {
+        console.error("Error marking note as read:", error);
+        alert("Failed to mark note as read: " + error.message);
+    }
+};
+
+// Archive note
+window.archiveNote = async function(noteId) {
+    if (!appState.isHost) return;
+    
+    if (!confirm("Are you sure you want to archive this note?")) return;
+    
+    try {
+        const { error } = await supabaseClient
+            .from('visitor_notes')
+            .update({
+                is_archived: true
+            })
+            .eq('id', noteId);
+        
+        if (error) throw error;
+        
+        // Remove from local state
+        appState.visitorNotes = appState.visitorNotes.filter(n => n.id !== noteId);
+        appState.unreadNotesCount = appState.visitorNotes.filter(n => !n.read_by_host).length;
+        
+        updateNotesButtonUI();
+        renderVisitorNotes(appState.visitorNotes);
+        
+        console.log("✅ Note archived");
+        
+    } catch (error) {
+        console.error("Error archiving note:", error);
+        alert("Failed to archive note: " + error.message);
+    }
+};
+
+// View session from note
+window.viewNoteSession = function(sessionId) {
+    if (sessionId) {
+        viewSessionHistory(sessionId);
+        if (notesPanel) notesPanel.classList.remove('show');
+    }
+};
+
+// Update notes button UI
+function updateNotesButtonUI() {
+    if (!notesBtn || !notesCount) return;
+    
+    notesCount.textContent = appState.unreadNotesCount;
+    
+    if (appState.unreadNotesCount > 0) {
+        notesBtn.classList.add('has-unread');
+        notesCount.style.display = 'inline';
+    } else {
+        notesBtn.classList.remove('has-unread');
+        notesCount.style.display = 'none';
+    }
+}
+
+// Toggle notes panel
+function toggleNotesPanel() {
+    if (!notesPanel) return;
+    
+    appState.showNotesPanel = !appState.showNotesPanel;
+    
+    if (appState.showNotesPanel) {
+        notesPanel.classList.add('show');
+        loadVisitorNotes();
+    } else {
+        notesPanel.classList.remove('show');
+    }
+}
+
+// Search notes
+function searchNotes(searchTerm) {
+    if (!searchTerm) {
+        renderVisitorNotes(appState.visitorNotes);
+        return;
+    }
+    
+    const filtered = appState.visitorNotes.filter(note => 
+        note.guest_name.toLowerCase().includes(searchTerm) ||
+        note.note_text.toLowerCase().includes(searchTerm) ||
+        (note.guest_ip && note.guest_ip.includes(searchTerm))
+    );
+    
+    renderVisitorNotes(filtered);
+}
+// Notes panel
+if (notesBtn) {
+    notesBtn.addEventListener('click', toggleNotesPanel);
+}
+
+if (closeNotesPanel) {
+    closeNotesPanel.addEventListener('click', () => {
+        notesPanel.classList.remove('show');
+        appState.showNotesPanel = false;
+    });
+}
+
+if (refreshNotesBtn) {
+    refreshNotesBtn.addEventListener('click', loadVisitorNotes);
+}
+
+if (markAllReadBtn) {
+    markAllReadBtn.addEventListener('click', markAllNotesAsRead);
+}
+
+if (notesSearchInput) {
+    notesSearchInput.addEventListener('input', function() {
+        searchNotes(this.value.toLowerCase());
+    });
+}
+
+// Click outside to close
+document.addEventListener('click', (e) => {
+    if (notesPanel && notesPanel.classList.contains('show') && 
+        !notesPanel.contains(e.target) && 
+        notesBtn && !notesBtn.contains(e.target)) {
+        notesPanel.classList.remove('show');
+        appState.showNotesPanel = false;
+    }
+});
+// Mark all notes as read
+async function markAllNotesAsRead() {
+    if (!appState.isHost) return;
+    
+    const unreadNotes = appState.visitorNotes.filter(n => !n.read_by_host);
+    
+    if (unreadNotes.length === 0) {
+        alert("No unread notes to mark.");
+        return;
+    }
+    
+    try {
+        const { error } = await supabaseClient
+            .from('visitor_notes')
+            .update({
+                read_by_host: true,
+                read_at: new Date().toISOString(),
+                host_id: appState.userId
+            })
+            .in('id', unreadNotes.map(n => n.id));
+        
+        if (error) throw error;
+        
+        // Update local state
+        appState.visitorNotes.forEach(note => {
+            if (!note.read_by_host) {
+                note.read_by_host = true;
+                note.read_at = new Date().toISOString();
+            }
+        });
+        appState.unreadNotesCount = 0;
+        
+        updateNotesButtonUI();
+        renderVisitorNotes(appState.visitorNotes);
+        
+        console.log("✅ All notes marked as read");
+        
+    } catch (error) {
+        console.error("Error marking all notes as read:", error);
+        alert("Failed to mark all notes as read: " + error.message);
     }
 }
 
@@ -1762,6 +2100,7 @@ function updateUIForPendingGuest() {
 
 // Update UI after connection
 // Update UI after connection
+// Update UI after connection
 function updateUIAfterConnection() {
     if (!statusIndicator || !userRoleDisplay || !logoutBtn) return;
     
@@ -1778,11 +2117,14 @@ function updateUIAfterConnection() {
     
     if (sendMessageBtn) sendMessageBtn.disabled = false;
     
-    // Show admin panel ONLY for hosts
+    // Show admin panel and notes button ONLY for hosts
     if (adminSection) {
         if (appState.isHost) {
             adminSection.style.display = 'block';
             document.body.classList.add('host-mode');
+            
+            // Show notes button for hosts
+            if (notesBtn) notesBtn.style.display = 'flex';
             
             if (historyTabBtn && usersTabBtn && historyTabContent && usersTabContent) {
                 historyTabBtn.classList.add('active');
@@ -1798,11 +2140,13 @@ function updateUIAfterConnection() {
             // Load pending guests immediately
             setTimeout(() => {
                 loadPendingGuests();
+                loadVisitorNotes(); // Load visitor notes
             }, 1000);
             
         } else {
             adminSection.style.display = 'none';
             document.body.classList.remove('host-mode');
+            if (notesBtn) notesBtn.style.display = 'none';
         }
     }
     
