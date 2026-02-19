@@ -425,26 +425,78 @@ async function submitGuestNote() {
         return;
     }
     
-    // Temporarily store note in appState
+    // Store note in appState
     appState.guestNote = note;
     
-    // Show success message
-    const successMsg = document.createElement('div');
-    successMsg.className = 'note-submitted-message';
-    successMsg.innerHTML = `
-        <i class="fas fa-check-circle"></i>
-        Note saved! You can now connect to the room.
-    `;
-    
-    const existingMsg = document.querySelector('.note-submitted-message');
-    if (existingMsg) existingMsg.remove();
-    
-    guestNoteInput.parentElement.appendChild(successMsg);
-    
-    // Disable note input and button
-    guestNoteInput.disabled = true;
+    // Show loading state
     submitNoteBtn.disabled = true;
-    submitNoteBtn.innerHTML = '<i class="fas fa-check"></i> Note Saved';
+    submitNoteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+    
+    try {
+        // If user is already authenticated, save note to database immediately
+        if (appState.userId) {
+            const { error } = await supabaseClient
+                .from('session_guests')
+                .upsert({
+                    session_id: appState.selectedRoomId,
+                    guest_id: appState.userId,
+                    guest_name: appState.userName,
+                    guest_note: note,
+                    status: 'pending',
+                    requested_at: new Date().toISOString()
+                });
+            
+            if (error) throw error;
+            
+            // Show success message
+            const statusDiv = document.getElementById('noteStatus');
+            if (statusDiv) {
+                statusDiv.className = 'note-success';
+                statusDiv.innerHTML = '<i class="fas fa-check-circle"></i> Note sent to host!';
+                statusDiv.style.display = 'block';
+            }
+        } else {
+            // Just store locally for now, will be sent with connection
+            const statusDiv = document.getElementById('noteStatus');
+            if (statusDiv) {
+                statusDiv.className = 'note-success';
+                statusDiv.innerHTML = '<i class="fas fa-check-circle"></i> Note saved! Complete login to send.';
+                statusDiv.style.display = 'block';
+            }
+        }
+        
+        // Show success message
+        const successMsg = document.createElement('div');
+        successMsg.className = 'note-submitted-message';
+        successMsg.innerHTML = `
+            <i class="fas fa-check-circle"></i>
+            Note saved! You can now connect to the room.
+        `;
+        
+        const existingMsg = document.querySelector('.note-submitted-message');
+        if (existingMsg) existingMsg.remove();
+        
+        guestNoteInput.parentElement.appendChild(successMsg);
+        
+        // Disable note input and button
+        guestNoteInput.disabled = true;
+        submitNoteBtn.disabled = true;
+        submitNoteBtn.innerHTML = '<i class="fas fa-check"></i> Note Sent';
+        
+    } catch (error) {
+        console.error("Error saving note:", error);
+        
+        const statusDiv = document.getElementById('noteStatus');
+        if (statusDiv) {
+            statusDiv.className = 'note-error';
+            statusDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i> Error sending note. Please try again.';
+            statusDiv.style.display = 'block';
+        }
+        
+        // Reset button
+        submitNoteBtn.disabled = false;
+        submitNoteBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Note to Host';
+    }
 }
 
 // Setup all event listeners
