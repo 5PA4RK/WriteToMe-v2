@@ -184,6 +184,9 @@
             <button id="usersTabBtn" class="admin-tab">
                 <i class="fas fa-users-cog"></i> User Management
             </button>
+            <button id="requestsTabBtn" class="admin-tab">
+                <i class="fas fa-inbox"></i> Visitors Messages
+            </button>
         </div>
         
         <div class="admin-tab-content">
@@ -212,6 +215,20 @@
                         <div class="search-box">
                             <input type="text" id="userSearchInput" placeholder="Search users..." class="form-input">
                             <i class="fas fa-search"></i>
+                        </div>
+                    </div>
+
+                    <div id="requestsTabContent" class="tab-pane">
+                        <div class="requests-section">
+                            <div class="section-header">
+                                <h2><i class="fas fa-inbox"></i> Guest Requests & Notes</h2>
+                                <button id="refreshRequestsBtn" class="btn btn-small" onclick="loadGuestRequests()">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div class="requests-list" id="guestRequestsList">
+                                <!-- Guest requests will be populated here -->
+                            </div>
                         </div>
                     </div>
                     
