@@ -732,13 +732,9 @@ async function handleConnect() {
         if (appState.isHost) {
             await connectAsHost(userIP);
         } else {
-            // Check if room was selected
-            if (!appState.selectedRoomId) {
-                alert("Please select a room to join.");
-                resetConnectButton();
-                return;
-            }
-            await connectAsGuest(userIP, appState.selectedRoomId);
+            // Guests no longer need to select a room
+            // The host will assign them to a room after approval
+            await connectAsGuest(userIP);
         }
         
     } catch (error) {
@@ -827,70 +823,26 @@ async function connectAsHost(userIP) {
 }
 
 // Connect as guest
-async function connectAsGuest(userIP, selectedRoomId) {
+async function connectAsGuest(userIP) {
     try {
         console.log("👤 Connecting as guest...");
         console.log("Guest IP:", userIP);
         
-        const { data: session, error: sessionError } = await supabaseClient
-            .from('sessions')
-            .select('*')
-            .eq('session_id', selectedRoomId)
-            .eq('is_active', true)
-            .single();
-        
-        if (sessionError || !session) {
-            alert("Selected room is no longer available.");
-            resetConnectButton();
-            return;
-        }
-        
-        console.log("Found active session:", session.session_id);
-        
-        const { data: existingGuest } = await supabaseClient
-            .from('session_guests')
-            .select('*')
-            .eq('session_id', session.session_id)
-            .eq('guest_id', appState.userId)
-            .eq('status', 'approved')
-            .single();
-        
-        if (existingGuest) {
-            console.log("Guest already approved, connecting directly");
-            completeGuestConnection(session.session_id);
-            return;
-        }
-        
-        const { data: pendingGuest } = await supabaseClient
-            .from('session_guests')
-            .select('*')
-            .eq('session_id', session.session_id)
-            .eq('guest_id', appState.userId)
-            .eq('status', 'pending')
-            .single();
-        
-        if (pendingGuest) {
-            console.log("Guest already pending");
-            appState.sessionId = session.session_id;
-            connectionModal.style.display = 'none';
-            resetConnectButton();
-            updateUIForPendingGuest();
-            setupPendingApprovalSubscription(session.session_id);
-            return;
-        }
-        
+        // Create a pending guest entry without a specific room
         console.log("Adding guest with IP:", userIP);
-        const { error: insertError } = await supabaseClient
+        const { data: guestData, error: insertError } = await supabaseClient
             .from('session_guests')
             .insert([{
-                session_id: session.session_id,
+                session_id: null, // No room assigned yet
                 guest_id: appState.userId,
                 guest_name: appState.userName,
                 guest_ip: userIP,
                 guest_note: appState.guestNote || "",
                 status: 'pending',
                 requested_at: new Date().toISOString()
-            }]);
+            }])
+            .select()
+            .single();
         
         if (insertError) {
             console.error("Error adding to pending:", insertError);
@@ -900,11 +852,11 @@ async function connectAsGuest(userIP, selectedRoomId) {
         }
         
         console.log("✅ Guest added to pending list with IP:", userIP);
-        appState.sessionId = session.session_id;
+        appState.sessionId = 'pending_' + guestData.id;
         connectionModal.style.display = 'none';
         resetConnectButton();
         updateUIForPendingGuest();
-        setupPendingApprovalSubscription(session.session_id);
+        setupPendingApprovalSubscription(); // No session ID needed
         
     } catch (error) {
         console.error("Error in guest connection:", error);
@@ -1000,10 +952,11 @@ async function loadPendingGuests() {
     try {
         console.log("🔄 Loading pending guests...");
         
+        // Load guests with null session_id OR guests pending for current session
         const { data: guests, error } = await supabaseClient
             .from('session_guests')
             .select('*')
-            .eq('session_id', appState.currentSessionId)
+            .or(`session_id.is.null,session_id.eq.${appState.currentSessionId}`)
             .eq('status', 'pending')
             .order('requested_at', { ascending: true });
         
@@ -1015,7 +968,7 @@ async function loadPendingGuests() {
         }
         
         appState.pendingGuests = guests || [];
-        console.log(`✅ Loaded ${appState.pendingGuests.length} pending guests`);
+        console.log(`✅ Loaded ${appState.pendingGuests.length} pending guests (including unassigned)`);
         
         updatePendingButtonUI();
         
@@ -1045,10 +998,24 @@ async function showPendingGuests() {
         } else {
             if (noPendingGuests) noPendingGuests.style.display = 'none';
             
+            // Also load available rooms for assignment
+            await loadAvailableRooms();
+            
             appState.pendingGuests.forEach((guest, index) => {
-                const roomNumber = (index + 1).toString().padStart(3, '0');
                 const guestDiv = document.createElement('div');
                 guestDiv.className = 'pending-guest';
+                
+                // Create room selection dropdown if guest has no room
+                const roomOptions = appState.availableRooms.length > 0 
+                    ? `<select class="room-select" data-guest-id="${guest.id}">
+                        <option value="">-- Select Room --</option>
+                        ${appState.availableRooms.map((room, i) => {
+                            const roomNumber = (i + 1).toString().padStart(3, '0');
+                            return `<option value="${room.session_id}">Room ${roomNumber} (Host: ${room.host_name})</option>`;
+                        }).join('')}
+                       </select>`
+                    : '<p class="no-rooms-warning">No active rooms available</p>';
+                
                 guestDiv.innerHTML = `
                     <div class="guest-info">
                         <div class="guest-name">
@@ -1056,7 +1023,6 @@ async function showPendingGuests() {
                             <strong>${guest.guest_name}</strong>
                         </div>
                         <div class="guest-details">
-                            <small><i class="fas fa-door-open"></i> Room: ${roomNumber}</small>
                             <small><i class="fas fa-calendar"></i> ${new Date(guest.requested_at).toLocaleString()}</small>
                             <small><i class="fas fa-network-wired"></i> IP: ${guest.guest_ip || 'Unknown'}</small>
                             ${guest.guest_note ? `
@@ -1067,6 +1033,9 @@ async function showPendingGuests() {
                         </div>
                     </div>
                     <div class="guest-actions">
+                        <div class="room-assignment">
+                            ${roomOptions}
+                        </div>
                         <button class="btn btn-success btn-small" onclick="approveGuest('${guest.id}')">
                             <i class="fas fa-check"></i> Approve
                         </button>
@@ -1076,6 +1045,19 @@ async function showPendingGuests() {
                     </div>
                 `;
                 pendingGuestsList.appendChild(guestDiv);
+            });
+            
+            // Add event listeners to room selects
+            document.querySelectorAll('.room-select').forEach(select => {
+                select.addEventListener('change', function() {
+                    const guestId = this.dataset.guestId;
+                    const selectedRoom = this.value;
+                    // Store the selected room for this guest
+                    if (!appState.guestRoomAssignments) {
+                        appState.guestRoomAssignments = {};
+                    }
+                    appState.guestRoomAssignments[guestId] = selectedRoom;
+                });
             });
         }
         
@@ -1155,6 +1137,14 @@ function updatePendingButtonUI() {
 // Approve a guest
 async function approveGuest(guestRecordId) {
     try {
+        // Get the selected room for this guest
+        const selectedRoom = appState.guestRoomAssignments?.[guestRecordId];
+        
+        if (!selectedRoom) {
+            alert("Please select a room for this guest before approving.");
+            return;
+        }
+        
         const { data: guest } = await supabaseClient
             .from('session_guests')
             .select('*')
@@ -1163,9 +1153,11 @@ async function approveGuest(guestRecordId) {
         
         if (!guest) throw new Error("Guest not found");
         
+        // Update guest with assigned room and approve
         const { error } = await supabaseClient
             .from('session_guests')
             .update({
+                session_id: selectedRoom,
                 status: 'approved',
                 approved_at: new Date().toISOString()
             })
@@ -1182,7 +1174,7 @@ async function approveGuest(guestRecordId) {
         
         await saveMessageToDB('System', `${guest.guest_name} has been approved and joined the chat.`);
         
-        console.log(`✅ Approved guest: ${guest.guest_name}`);
+        console.log(`✅ Approved guest: ${guest.guest_name} assigned to room: ${selectedRoom}`);
         
     } catch (error) {
         console.error("Error approving guest:", error);
