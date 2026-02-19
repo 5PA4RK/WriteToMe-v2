@@ -82,6 +82,45 @@
         </div>
     </div>
 
+
+    <!-- Notes Panel (Host Only) -->
+<div id="notesPanel" class="notes-panel">
+    <div class="notes-panel-header">
+        <h2><i class="fas fa-sticky-note"></i> Visitor Notes</h2>
+        <div class="notes-header-actions">
+            <button id="markAllReadBtn" class="btn btn-small btn-success" title="Mark all as read">
+                <i class="fas fa-check-double"></i>
+            </button>
+            <button id="refreshNotesBtn" class="btn btn-small btn-secondary" title="Refresh">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+            <button id="closeNotesPanel" class="btn btn-small btn-danger" title="Close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+    
+    <div class="notes-panel-search">
+        <input type="text" id="notesSearchInput" placeholder="Search notes..." class="form-input">
+        <i class="fas fa-search"></i>
+    </div>
+    
+    <div class="notes-list" id="notesList">
+        <div class="loading-notes">
+            <div class="loading-spinner"></div>
+            <p>Loading notes...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Add Notes Button to Header Controls -->
+<!-- Find the header-controls div and add this button before logoutBtn -->
+<button id="notesBtn" class="btn btn-secondary" style="display: none; position: relative;">
+    <i class="fas fa-sticky-note"></i>
+    <span id="notesCount" class="notes-count-badge">0</span>
+    Notes
+</button>
+
     <!-- Image Modal -->
     <div id="imageModal" class="image-modal-overlay" style="display: none;">
         <div class="image-modal-content">
