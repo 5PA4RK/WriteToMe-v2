@@ -933,6 +933,7 @@ function saveSessionToStorage() {
 // ============================================
 
 // Setup pending guests subscription
+// Setup pending guests subscription
 function setupPendingGuestsSubscription() {
     console.log("🔄 Setting up pending guests subscription...");
     
@@ -946,6 +947,7 @@ function setupPendingGuestsSubscription() {
         return;
     }
     
+    // Subscribe to ALL pending guests changes, then filter in the callback
     appState.pendingSubscription = supabaseClient
         .channel('public:session_guests')
         .on(
@@ -953,17 +955,22 @@ function setupPendingGuestsSubscription() {
             {
                 event: '*',
                 schema: 'public',
-                table: 'session_guests'
+                table: 'session_guests',
+                filter: `status=eq.pending` // Only get pending status changes
             },
             (payload) => {
                 console.log('📡 Pending guest change:', payload.eventType, payload.new?.guest_name);
                 
+                // Check if this guest is for the host's current session
                 if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                    console.log('🎯 This guest is for your session!');
                     loadPendingGuests();
                     
                     if (payload.eventType === 'INSERT' && payload.new.status === 'pending') {
                         showNewGuestNotification(payload.new);
                     }
+                } else {
+                    console.log('⏭️ Guest for different session:', payload.new?.session_id);
                 }
             }
         )
@@ -971,6 +978,8 @@ function setupPendingGuestsSubscription() {
             console.log('📡 PENDING GUESTS Subscription status:', status);
             if (status === 'SUBSCRIBED') {
                 console.log('✅ SUCCESS: Pending guests subscription active!');
+                // Load pending guests immediately after subscription is active
+                loadPendingGuests();
             }
             if (err) {
                 console.error('❌ Pending guests subscription error:', err);
@@ -979,21 +988,29 @@ function setupPendingGuestsSubscription() {
 }
 
 // Load pending guests
+// Load pending guests
 async function loadPendingGuests() {
-    if (!appState.isHost || !appState.currentSessionId) {
-        console.log("Cannot load pending guests: Not host or no session ID");
+    if (!appState.isHost) {
+        console.log("Cannot load pending guests: Not host");
         if (pendingGuestsBtn) pendingGuestsBtn.style.display = 'none';
         return;
     }
     
     try {
-        console.log("🔄 Loading pending guests...");
+        console.log("🔄 Loading pending guests for session:", appState.currentSessionId);
         
-        // Load guests with null session_id OR guests pending for current session
+        if (!appState.currentSessionId) {
+            console.log("No active session ID");
+            appState.pendingGuests = [];
+            updatePendingButtonUI();
+            return;
+        }
+        
+        // Load guests pending for current session
         const { data: guests, error } = await supabaseClient
             .from('session_guests')
             .select('*')
-            .or(`session_id.is.null,session_id.eq.${appState.currentSessionId}`)
+            .eq('session_id', appState.currentSessionId)
             .eq('status', 'pending')
             .order('requested_at', { ascending: true });
         
@@ -1005,7 +1022,7 @@ async function loadPendingGuests() {
         }
         
         appState.pendingGuests = guests || [];
-        console.log(`✅ Loaded ${appState.pendingGuests.length} pending guests (including unassigned)`);
+        console.log(`✅ Loaded ${appState.pendingGuests.length} pending guests for your session`);
         
         updatePendingButtonUI();
         
@@ -1110,19 +1127,31 @@ async function showPendingGuests() {
 }
 
 // Show notification for new pending guest
+// Show notification for new pending guest
 function showNewGuestNotification(guest) {
     if (!appState.isHost) return;
     
-    console.log("🔔 New guest notification:", guest.guest_name);
+    console.log("🔔 New guest notification for session:", guest.session_id);
+    
+    // Double-check this guest is for the current session
+    if (guest.session_id !== appState.currentSessionId) {
+        console.log("⏭️ Ignoring notification - guest for different session");
+        return;
+    }
     
     const notification = document.createElement('div');
     notification.className = 'guest-notification';
+    
+    // Get room number for display
+    const sessionIndex = appState.availableRooms.findIndex(s => s.session_id === guest.session_id);
+    const roomNumber = sessionIndex >= 0 ? (sessionIndex + 1).toString().padStart(3, '0') : '???';
+    
     notification.innerHTML = `
         <div class="notification-content">
             <i class="fas fa-user-plus" style="color: var(--accent-light); font-size: 20px;"></i>
             <div class="notification-text">
                 <strong>New Room Request!</strong>
-                <small>${guest.guest_name} wants to join Room ${guest.session_id.substring(0,8)}</small>
+                <small>${guest.guest_name} wants to join Room ${roomNumber}</small>
                 ${guest.guest_note ? `<small>Note: ${guest.guest_note}</small>` : ''}
             </div>
             <button class="btn btn-small btn-success" onclick="viewPendingGuestsNow()">
@@ -1732,6 +1761,7 @@ function updateUIForPendingGuest() {
 }
 
 // Update UI after connection
+// Update UI after connection
 function updateUIAfterConnection() {
     if (!statusIndicator || !userRoleDisplay || !logoutBtn) return;
     
@@ -1764,6 +1794,12 @@ function updateUIAfterConnection() {
             }
             
             loadChatSessions();
+            
+            // Load pending guests immediately
+            setTimeout(() => {
+                loadPendingGuests();
+            }, 1000);
+            
         } else {
             adminSection.style.display = 'none';
             document.body.classList.remove('host-mode');
@@ -1772,11 +1808,42 @@ function updateUIAfterConnection() {
     
     if (pendingGuestsBtn) {
         pendingGuestsBtn.style.display = appState.isHost && appState.currentSessionId ? 'flex' : 'none';
-        if (appState.isHost) setupPendingGuestsSubscription();
+        if (appState.isHost) {
+            setupPendingGuestsSubscription();
+        }
     }
     
     if (appState.isViewingHistory) returnToActiveChat();
 }
+// Debug function to manually check pending guests
+window.debugPendingGuests = async function() {
+    if (!appState.isHost) {
+        console.log("Not a host, cannot debug pending guests");
+        return;
+    }
+    
+    console.log("🔍 Debugging pending guests system...");
+    console.log("Current session ID:", appState.currentSessionId);
+    console.log("Is host:", appState.isHost);
+    
+    // Check subscription status
+    console.log("Subscription status:", appState.pendingSubscription?.state);
+    
+    // Manually query pending guests
+    const { data: guests, error } = await supabaseClient
+        .from('session_guests')
+        .select('*')
+        .eq('session_id', appState.currentSessionId)
+        .eq('status', 'pending');
+    
+    if (error) {
+        console.error("Error querying guests:", error);
+    } else {
+        console.log("Pending guests in database:", guests);
+    }
+    
+    return guests;
+};
 
 // Handle logout
 async function handleLogout() {
