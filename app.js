@@ -28,7 +28,10 @@ const appState = {
     users: [],
     isViewingUsers: false,
     availableRooms: [],
-    guestNote: ""
+    guestNote: "",
+    guestRequests: [], // Store guest requests with notes
+    selectedRoomId: null,
+    kickedGuests: [] // Track kicked guests
 };
 
 // DOM Elements
@@ -75,16 +78,18 @@ const historyTabBtn = document.getElementById('historyTabBtn');
 const usersTabBtn = document.getElementById('usersTabBtn');
 const historyTabContent = document.getElementById('historyTabContent');
 const usersTabContent = document.getElementById('usersTabContent');
+const requestsTabBtn = document.getElementById('requestsTabBtn');
+const requestsTabContent = document.getElementById('requestsTabContent');
 
 // Room selection elements
 const roomSelection = document.getElementById('roomSelection');
 const availableRoomsList = document.getElementById('availableRoomsList');
 const refreshRoomsBtn = document.getElementById('refreshRoomsBtn');
 const guestNoteInput = document.getElementById('guestNoteInput');
+const submitNoteBtn = document.getElementById('submitNoteBtn');
 
 // User Management DOM Elements
 const userManagementSection = document.getElementById('userManagementSection');
-const backToHistoryBtn = document.getElementById('backToHistoryBtn');
 const addUserBtn = document.getElementById('addUserBtn');
 const userSearchInput = document.getElementById('userSearchInput');
 const usersList = document.getElementById('usersList');
@@ -136,7 +141,7 @@ function showConnectionModal() {
     
     if (connectBtn) {
         connectBtn.disabled = false;
-        connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+        connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect to Room';
     }
     
     // Load available rooms for guests
@@ -238,6 +243,7 @@ async function initApp() {
     
     if (appState.isHost || savedSession) {
         loadChatSessions();
+        loadGuestRequests();
     }
     
     // Start subscription health check
@@ -331,6 +337,7 @@ async function loadAvailableRooms() {
                 const roomNumber = (index + 1).toString().padStart(3, '0');
                 const roomDiv = document.createElement('div');
                 roomDiv.className = 'room-item';
+                roomDiv.dataset.sessionId = session.session_id;
                 roomDiv.innerHTML = `
                     <div class="room-info">
                         <div class="room-number">
@@ -355,8 +362,17 @@ async function loadAvailableRooms() {
             
             // Add event listeners to select room buttons
             document.querySelectorAll('.select-room-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
                     const sessionId = btn.dataset.sessionId;
+                    selectRoom(sessionId);
+                });
+            });
+            
+            // Add click event to room items
+            document.querySelectorAll('.room-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    const sessionId = this.dataset.sessionId;
                     selectRoom(sessionId);
                 });
             });
@@ -371,23 +387,20 @@ async function loadAvailableRooms() {
 function selectRoom(sessionId) {
     const session = appState.availableRooms.find(s => s.session_id === sessionId);
     if (session) {
-        // Store selected room ID for connection
         appState.selectedRoomId = sessionId;
         
-        // Update UI to show selected room
         document.querySelectorAll('.room-item').forEach(item => {
             item.classList.remove('selected');
         });
         
-        const selectedItem = Array.from(document.querySelectorAll('.room-item')).find(
-            item => item.querySelector('.select-room-btn')?.dataset.sessionId === sessionId
-        );
-        
+        const selectedItem = document.querySelector(`.room-item[data-session-id="${sessionId}"]`);
         if (selectedItem) {
             selectedItem.classList.add('selected');
         }
         
-        // Show success message
+        const existingMsg = document.querySelector('.room-selected-message');
+        if (existingMsg) existingMsg.remove();
+        
         const successMsg = document.createElement('div');
         successMsg.className = 'room-selected-message';
         successMsg.innerHTML = `
@@ -395,11 +408,43 @@ function selectRoom(sessionId) {
             Room selected! Enter your username and password to connect.
         `;
         
-        const existingMsg = document.querySelector('.room-selected-message');
-        if (existingMsg) existingMsg.remove();
-        
         availableRoomsList.parentElement.insertBefore(successMsg, availableRoomsList.nextSibling);
     }
+}
+
+// Submit guest note
+async function submitGuestNote() {
+    const note = guestNoteInput.value.trim();
+    if (!note) {
+        alert("Please enter a note before submitting.");
+        return;
+    }
+    
+    if (!appState.selectedRoomId) {
+        alert("Please select a room first.");
+        return;
+    }
+    
+    // Temporarily store note in appState
+    appState.guestNote = note;
+    
+    // Show success message
+    const successMsg = document.createElement('div');
+    successMsg.className = 'note-submitted-message';
+    successMsg.innerHTML = `
+        <i class="fas fa-check-circle"></i>
+        Note saved! You can now connect to the room.
+    `;
+    
+    const existingMsg = document.querySelector('.note-submitted-message');
+    if (existingMsg) existingMsg.remove();
+    
+    guestNoteInput.parentElement.appendChild(successMsg);
+    
+    // Disable note input and button
+    guestNoteInput.disabled = true;
+    submitNoteBtn.disabled = true;
+    submitNoteBtn.innerHTML = '<i class="fas fa-check"></i> Note Saved';
 }
 
 // Setup all event listeners
@@ -412,11 +457,34 @@ function setupEventListeners() {
         });
     }
     
+    if (submitNoteBtn) {
+        submitNoteBtn.addEventListener('click', submitGuestNote);
+    }
+    
+    if (guestNoteInput) {
+        guestNoteInput.addEventListener('input', function() {
+            if (this.value.trim()) {
+                submitNoteBtn.disabled = false;
+            } else {
+                submitNoteBtn.disabled = true;
+            }
+        });
+    }
+    
     if (usersTabBtn) {
         usersTabBtn.addEventListener('click', () => {
             console.log("User management tab clicked");
             switchAdminTab('users');
             loadUsers();
+        });
+    }
+    
+    // Requests tab button
+    if (requestsTabBtn) {
+        requestsTabBtn.addEventListener('click', () => {
+            console.log("Requests tab clicked");
+            switchAdminTab('requests');
+            loadGuestRequests();
         });
     }
 
@@ -532,29 +600,119 @@ function setupEventListeners() {
 function switchAdminTab(tabName) {
     console.log("Switching to tab:", tabName);
     
-    if (!historyTabBtn || !usersTabBtn || !historyTabContent || !usersTabContent) {
+    if (!historyTabBtn || !usersTabBtn || !requestsTabBtn || !historyTabContent || !usersTabContent || !requestsTabContent) {
         console.error("Tab elements not found!");
         return;
     }
     
     historyTabBtn.classList.remove('active');
     usersTabBtn.classList.remove('active');
+    requestsTabBtn.classList.remove('active');
     
     historyTabContent.style.display = 'none';
     usersTabContent.style.display = 'none';
-    historyTabContent.classList.remove('active');
-    usersTabContent.classList.remove('active');
+    requestsTabContent.style.display = 'none';
     
     if (tabName === 'history') {
         historyTabBtn.classList.add('active');
         historyTabContent.style.display = 'block';
-        historyTabContent.classList.add('active');
         loadChatSessions();
     } else if (tabName === 'users') {
         usersTabBtn.classList.add('active');
         usersTabContent.style.display = 'block';
-        usersTabContent.classList.add('active');
         loadUsers();
+    } else if (tabName === 'requests') {
+        requestsTabBtn.classList.add('active');
+        requestsTabContent.style.display = 'block';
+        loadGuestRequests();
+    }
+}
+
+// Load guest requests (notes)
+async function loadGuestRequests() {
+    if (!appState.isHost) return;
+    
+    const requestsList = document.getElementById('guestRequestsList');
+    if (!requestsList) return;
+    
+    try {
+        const { data: guests, error } = await supabaseClient
+            .from('session_guests')
+            .select('*, sessions:session_id(host_name, created_at)')
+            .order('requested_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (!guests || guests.length === 0) {
+            requestsList.innerHTML = `
+                <div class="no-requests-message">
+                    <i class="fas fa-inbox"></i>
+                    <h3>No Guest Requests</h3>
+                    <p>Guest notes and requests will appear here</p>
+                </div>
+            `;
+            return;
+        }
+        
+        requestsList.innerHTML = '';
+        
+        guests.forEach((guest, index) => {
+            const roomNumber = (index + 1).toString().padStart(3, '0');
+            const requestCard = document.createElement('div');
+            requestCard.className = `request-card ${guest.status}`;
+            requestCard.innerHTML = `
+                <div class="request-header">
+                    <div class="request-user">
+                        <i class="fas fa-user"></i>
+                        <strong>${guest.guest_name}</strong>
+                    </div>
+                    <div class="request-status ${guest.status}">
+                        ${guest.status === 'pending' ? '⏳ Pending' : 
+                          guest.status === 'approved' ? '✅ Approved' : 
+                          guest.status === 'rejected' ? '❌ Rejected' : 
+                          guest.status === 'kicked' ? '👢 Kicked' : '📝 Left'}
+                    </div>
+                </div>
+                
+                <div class="request-details">
+                    <div class="request-room">
+                        <i class="fas fa-door-open"></i>
+                        Room ${roomNumber}
+                    </div>
+                    <div class="request-time">
+                        <i class="fas fa-clock"></i>
+                        ${new Date(guest.requested_at).toLocaleString()}
+                    </div>
+                    <div class="request-ip">
+                        <i class="fas fa-network-wired"></i>
+                        IP: ${guest.guest_ip || 'Unknown'}
+                    </div>
+                </div>
+                
+                ${guest.guest_note ? `
+                <div class="request-note">
+                    <i class="fas fa-sticky-note"></i>
+                    <div class="note-content">"${guest.guest_note}"</div>
+                </div>
+                ` : ''}
+                
+                ${guest.status === 'pending' ? `
+                <div class="request-actions">
+                    <button class="btn btn-success btn-small" onclick="approveGuest('${guest.id}')">
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                    <button class="btn btn-danger btn-small" onclick="denyGuest('${guest.id}')">
+                        <i class="fas fa-times"></i> Deny
+                    </button>
+                </div>
+                ` : ''}
+            `;
+            requestsList.appendChild(requestCard);
+        });
+        
+    } catch (error) {
+        console.error("Error loading guest requests:", error);
+        requestsList.innerHTML = '<div class="error-message">Error loading requests</div>';
     }
 }
 
@@ -631,7 +789,7 @@ function addSystemMessage(text, isLocal = false) {
 async function handleConnect() {
     const username = usernameInput.value.trim();
     const password = passwordInput.value;
-    const guestNote = guestNoteInput ? guestNoteInput.value.trim() : "";
+    const guestNote = appState.guestNote || (guestNoteInput ? guestNoteInput.value.trim() : "");
     
     passwordError.style.display = 'none';
     connectBtn.disabled = true;
@@ -757,7 +915,7 @@ function showAuthError(message) {
 
 function resetConnectButton() {
     connectBtn.disabled = false;
-    connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+    connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect to Room';
 }
 
 // Connect as host
@@ -846,6 +1004,21 @@ async function connectAsGuest(userIP, selectedRoomId) {
         }
         
         console.log("Found active session:", session.session_id);
+        
+        // Check if guest was kicked
+        const { data: kickedCheck } = await supabaseClient
+            .from('session_guests')
+            .select('*')
+            .eq('session_id', session.session_id)
+            .eq('guest_id', appState.userId)
+            .eq('status', 'kicked')
+            .single();
+        
+        if (kickedCheck) {
+            alert("You have been kicked from this room and cannot rejoin.");
+            resetConnectButton();
+            return;
+        }
         
         const { data: existingGuest } = await supabaseClient
             .from('session_guests')
@@ -971,6 +1144,7 @@ function setupPendingGuestsSubscription() {
                 
                 if (payload.new && payload.new.session_id === appState.currentSessionId) {
                     loadPendingGuests();
+                    loadGuestRequests(); // Refresh requests tab
                     
                     if (payload.eventType === 'INSERT' && payload.new.status === 'pending') {
                         showNewGuestNotification(payload.new);
@@ -1061,7 +1235,7 @@ async function showPendingGuests() {
                             <small><i class="fas fa-network-wired"></i> IP: ${guest.guest_ip || 'Unknown'}</small>
                             ${guest.guest_note ? `
                                 <div class="guest-note">
-                                    <i class="fas fa-sticky-note"></i> Note: ${guest.guest_note}
+                                    <i class="fas fa-sticky-note"></i> Note: "${guest.guest_note}"
                                 </div>
                             ` : ''}
                         </div>
@@ -1096,6 +1270,9 @@ function showNewGuestNotification(guest) {
     
     console.log("🔔 New guest notification:", guest.guest_name);
     
+    const roomIndex = appState.availableRooms.findIndex(r => r.session_id === guest.session_id);
+    const roomNumber = roomIndex >= 0 ? (roomIndex + 1).toString().padStart(3, '0') : '???';
+    
     const notification = document.createElement('div');
     notification.className = 'guest-notification';
     notification.innerHTML = `
@@ -1103,8 +1280,8 @@ function showNewGuestNotification(guest) {
             <i class="fas fa-user-plus" style="color: var(--accent-light); font-size: 20px;"></i>
             <div class="notification-text">
                 <strong>New Room Request!</strong>
-                <small>${guest.guest_name} wants to join Room ${guest.session_id.substring(0,8)}</small>
-                ${guest.guest_note ? `<small>Note: ${guest.guest_note}</small>` : ''}
+                <small>${guest.guest_name} wants to join Room ${roomNumber}</small>
+                ${guest.guest_note ? `<small class="notification-note">"${guest.guest_note}"</small>` : ''}
             </div>
             <button class="btn btn-small btn-success" onclick="viewPendingGuestsNow()">
                 <i class="fas fa-eye"></i> View
@@ -1180,6 +1357,10 @@ async function approveGuest(guestRecordId) {
             showPendingGuests();
         }
         
+        // Refresh requests tab
+        loadGuestRequests();
+        
+        // Activate the session for the guest to send messages
         await saveMessageToDB('System', `${guest.guest_name} has been approved and joined the chat.`);
         
         console.log(`✅ Approved guest: ${guest.guest_name}`);
@@ -1218,6 +1399,9 @@ async function denyGuest(guestRecordId) {
             showPendingGuests();
         }
         
+        // Refresh requests tab
+        loadGuestRequests();
+        
         console.log(`❌ Denied guest: ${guest.guest_name}`);
         
     } catch (error) {
@@ -1226,16 +1410,20 @@ async function denyGuest(guestRecordId) {
     }
 }
 
-// Kick a guest
-window.kickGuest = async function(guestId, guestName) {
-    if (!appState.isHost || !appState.currentSessionId) {
+// Kick a guest - FIXED VERSION
+window.kickGuest = async function(guestId, guestName, sessionId) {
+    if (!appState.isHost) {
         alert("Only hosts can kick guests.");
         return;
     }
     
-    if (!confirm(`Are you sure you want to kick ${guestName} from the chat?`)) return;
+    const targetSessionId = sessionId || appState.currentSessionId;
+    if (!targetSessionId) return;
+    
+    if (!confirm(`Are you sure you want to kick ${guestName} from the room? They will be logged out immediately.`)) return;
     
     try {
+        // Update guest status to kicked
         const { error } = await supabaseClient
             .from('session_guests')
             .update({
@@ -1243,17 +1431,27 @@ window.kickGuest = async function(guestId, guestName) {
                 left_at: new Date().toISOString()
             })
             .eq('id', guestId)
-            .eq('session_id', appState.currentSessionId);
+            .eq('session_id', targetSessionId);
         
         if (error) throw error;
         
-        await saveMessageToDB('System', `${guestName} has been kicked from the chat by host.`);
+        // Send system message about kick
+        await saveMessageToDB('System', `${guestName} has been kicked from the room by host.`);
         
-        // Refresh pending list and session view
+        // Force logout the kicked guest by sending a special message through subscription
+        const kickMessage = {
+            session_id: targetSessionId,
+            type: 'kick',
+            guest_id: guestId,
+            timestamp: new Date().toISOString()
+        };
+        
+        // Update UI
         loadPendingGuests();
         loadChatSessions();
+        loadGuestRequests();
         
-        alert(`${guestName} has been kicked.`);
+        alert(`${guestName} has been kicked from the room.`);
         
     } catch (error) {
         console.error("Error kicking guest:", error);
@@ -1309,7 +1507,8 @@ function setupPendingApprovalSubscription(sessionId) {
                         location.reload();
                     } else if (payload.new.status === 'kicked') {
                         console.log("👢 Guest has been KICKED");
-                        alert("You have been kicked from the chat by the host.");
+                        alert("You have been kicked from the chat by the host. You will now be logged out.");
+                        // Force logout
                         handleLogout();
                     }
                 }
@@ -1361,8 +1560,9 @@ function setupRealtimeSubscriptions() {
             (payload) => {
                 console.log('📦 Realtime message received:', payload.new?.sender_name, payload.new?.message);
                 
+                // Allow messages in both active and historical view if it's the same session
                 if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                    if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                    if (payload.new.sender_id !== appState.userId) {
                         console.log('✅ Displaying new message from:', payload.new.sender_name);
                         displayMessage({
                             id: payload.new.id,
@@ -1371,7 +1571,7 @@ function setupRealtimeSubscriptions() {
                             image: payload.new.image_url,
                             time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                             type: 'received',
-                            is_historical: false
+                            is_historical: appState.isViewingHistory // Mark based on current view
                         });
                         
                         if (appState.soundEnabled) {
@@ -1454,7 +1654,7 @@ function checkAndReconnectSubscriptions() {
 
 // Handle typing
 async function handleTyping() {
-    if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) return;
+    if (!appState.currentSessionId || !appState.isConnected) return;
     
     try {
         console.log('⌨️ User typing:', appState.userName);
@@ -1488,7 +1688,7 @@ async function handleTyping() {
 
 // Send message
 async function sendMessage() {
-    if (!appState.isConnected || appState.isViewingHistory) {
+    if (!appState.isConnected || !appState.currentSessionId) {
         alert("You cannot send messages right now.");
         return;
     }
@@ -1547,6 +1747,7 @@ async function sendMessageToDB(text, imageUrl) {
         
         console.log('✅ Message saved to DB:', data.id);
         
+        // Display message immediately
         displayMessage({
             id: data.id,
             sender: appState.userName,
@@ -1568,10 +1769,7 @@ async function sendMessageToDB(text, imageUrl) {
 
 // Display message
 function displayMessage(message) {
-    if (appState.isViewingHistory && message.is_historical === false) {
-        return;
-    }
-    
+    // Always display messages for the current session
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${message.type}`;
     if (message.is_historical) {
@@ -1609,7 +1807,7 @@ function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// Load chat history
+// Load chat history - MODIFIED to allow messaging in historical rooms
 async function loadChatHistory(sessionId = null) {
     const targetSessionId = sessionId || appState.currentSessionId;
     if (!targetSessionId) return;
@@ -1627,29 +1825,47 @@ async function loadChatHistory(sessionId = null) {
         chatMessages.innerHTML = '';
         appState.messages = [];
         
+        // Check if this is a historical room (not the active session)
+        const isHistorical = sessionId && sessionId !== appState.currentSessionId;
+        
         if (sessionId) {
             const { data: session } = await supabaseClient
                 .from('sessions')
-                .select('created_at, host_name')
+                .select('created_at, host_name, is_active')
                 .eq('session_id', sessionId)
                 .single();
             
             const sessionIndex = appState.availableRooms.findIndex(s => s.session_id === sessionId);
             const roomNumber = sessionIndex >= 0 ? (sessionIndex + 1).toString().padStart(3, '0') : '???';
             
-            const historyHeader = document.createElement('div');
-            historyHeader.className = 'message received historical';
-            historyHeader.innerHTML = `
-                <div class="message-sender">System</div>
-                <div class="message-content">
-                    <div class="message-text">
-                        <i class="fas fa-door-open"></i> Room ${roomNumber} - Chat History
-                        <br><small>Host: ${session.host_name} | Date: ${new Date(session.created_at).toLocaleDateString()}</small>
+            // Different header for historical vs active room view
+            if (isHistorical) {
+                const historyHeader = document.createElement('div');
+                historyHeader.className = 'message received historical';
+                historyHeader.innerHTML = `
+                    <div class="message-sender">System</div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            <i class="fas fa-door-open"></i> Room ${roomNumber} - Historical View
+                            <br><small>Host: ${session.host_name} | Created: ${new Date(session.created_at).toLocaleString()}</small>
+                            <br><small class="historical-note">You are viewing historical messages. You can still send messages if the room is active.</small>
+                        </div>
+                        <div class="message-time"></div>
                     </div>
-                    <div class="message-time"></div>
-                </div>
-            `;
-            chatMessages.appendChild(historyHeader);
+                `;
+                chatMessages.appendChild(historyHeader);
+                
+                // Allow sending if room is active
+                if (session.is_active && appState.isConnected) {
+                    messageInput.disabled = false;
+                    sendMessageBtn.disabled = false;
+                    messageInput.placeholder = "Room is active - you can send messages";
+                } else {
+                    messageInput.disabled = true;
+                    sendMessageBtn.disabled = true;
+                    messageInput.placeholder = "This room is no longer active";
+                }
+            }
         }
         
         messages.forEach(msg => {
@@ -1661,7 +1877,7 @@ async function loadChatHistory(sessionId = null) {
                 image: msg.image_url,
                 time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                 type: messageType,
-                is_historical: !!sessionId
+                is_historical: isHistorical
             });
         });
         
@@ -1725,16 +1941,17 @@ function updateUIAfterConnection() {
             adminSection.style.display = 'block';
             document.body.classList.add('host-mode');
             
-            if (historyTabBtn && usersTabBtn && historyTabContent && usersTabContent) {
+            if (historyTabBtn && usersTabBtn && requestsTabBtn && historyTabContent && usersTabContent && requestsTabContent) {
                 historyTabBtn.classList.add('active');
                 usersTabBtn.classList.remove('active');
+                requestsTabBtn.classList.remove('active');
                 historyTabContent.style.display = 'block';
-                historyTabContent.classList.add('active');
                 usersTabContent.style.display = 'none';
-                usersTabContent.classList.remove('active');
+                requestsTabContent.style.display = 'none';
             }
             
             loadChatSessions();
+            loadGuestRequests();
         } else {
             adminSection.style.display = 'none';
             document.body.classList.remove('host-mode');
@@ -2012,7 +2229,7 @@ async function loadChatSessions() {
                 historyCards.innerHTML = `
                     <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
                         <i class="fas fa-lock" style="font-size: 24px; margin-bottom: 10px;"></i>
-                        <div>History view requires host privileges</div>
+                        <div>Room management requires host privileges</div>
                     </div>
                 `;
             }
@@ -2032,7 +2249,8 @@ async function loadChatSessions() {
         for (let i = 0; i < sessions.length; i++) {
             const session = sessions[i];
             const roomNumber = (i + 1).toString().padStart(3, '0');
-            const isActive = session.session_id === appState.currentSessionId && session.is_active;
+            const isActive = session.is_active;
+            const isCurrentRoom = session.session_id === appState.currentSessionId;
             
             const { data: guests } = await supabaseClient
                 .from('session_guests')
@@ -2040,6 +2258,8 @@ async function loadChatSessions() {
                 .eq('session_id', session.session_id);
             
             const approvedGuests = guests ? guests.filter(g => g.status === 'approved') : [];
+            const pendingGuests = guests ? guests.filter(g => g.status === 'pending') : [];
+            const kickedGuests = guests ? guests.filter(g => g.status === 'kicked') : [];
             const guestCount = approvedGuests.length;
             
             const startDate = new Date(session.created_at);
@@ -2063,6 +2283,7 @@ async function loadChatSessions() {
             
             const card = document.createElement('div');
             card.className = 'session-card';
+            if (isCurrentRoom) card.classList.add('current');
             if (isActive) card.classList.add('active');
             
             card.innerHTML = `
@@ -2076,17 +2297,21 @@ async function loadChatSessions() {
                                 <i class="fas fa-users"></i>
                                 <span>${guestCount} Guests</span>
                             </div>
+                            <div class="stat-item pending-count" title="Pending requests">
+                                <i class="fas fa-clock"></i>
+                                <span>${pendingGuests.length} Pending</span>
+                            </div>
                             <div class="stat-item duration-badge" title="Session duration">
                                 <i class="fas fa-clock"></i>
                                 <span>${duration}</span>
                             </div>
                             <div class="stat-item status-badge">
-                                <i class="fas fa-${session.is_active ? 'play-circle' : 'stop-circle'}"></i>
-                                <span>${session.is_active ? 'Active' : 'Ended'}</span>
+                                <i class="fas fa-${isActive ? 'play-circle' : 'stop-circle'}"></i>
+                                <span>${isActive ? 'Active' : 'Ended'}</span>
                             </div>
                         </div>
                     </div>
-                    ${isActive ? '<div class="session-active-badge"><i class="fas fa-circle"></i> Live</div>' : ''}
+                    ${isCurrentRoom ? '<div class="session-current-badge"><i class="fas fa-circle"></i> Current Room</div>' : ''}
                 </div>
                 
                 <div class="session-info">
@@ -2127,8 +2352,8 @@ async function loadChatSessions() {
                                                 ${guest.guest_name}
                                             </div>
                                             <div class="guest-meta">
-                                                <span title="Status: ${guest.status}">
-                                                    <i class="fas fa-${guest.status === 'approved' ? 'check-circle' : guest.status === 'pending' ? 'clock' : 'times-circle'}"></i> 
+                                                <span class="guest-status-badge ${guest.status}">
+                                                    <i class="fas fa-${guest.status === 'approved' ? 'check-circle' : guest.status === 'pending' ? 'clock' : guest.status === 'kicked' ? 'user-slash' : 'times-circle'}"></i> 
                                                     ${guest.status}
                                                 </span>
                                                 <span title="IP: ${guest.guest_ip || 'Unknown'}">
@@ -2137,12 +2362,12 @@ async function loadChatSessions() {
                                             </div>
                                             ${guest.guest_note ? `
                                             <div class="guest-note small">
-                                                <i class="fas fa-sticky-note"></i> ${guest.guest_note}
+                                                <i class="fas fa-sticky-note"></i> "${guest.guest_note}"
                                             </div>
                                             ` : ''}
                                         </div>
                                         ${isActive && guest.status === 'approved' && guest.guest_id !== appState.userId ? `
-                                            <button class="btn btn-danger btn-small" onclick="kickGuest('${guest.id}', '${guest.guest_name}')">
+                                            <button class="btn btn-danger btn-small" onclick="kickGuest('${guest.id}', '${guest.guest_name}', '${session.session_id}')">
                                                 <i class="fas fa-user-slash"></i> Kick
                                             </button>
                                         ` : ''}
@@ -2164,14 +2389,14 @@ async function loadChatSessions() {
                 </div>
                 
                 <div class="session-actions">
-                    <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')" title="View chat history">
-                        <i class="fas fa-eye"></i> View Chat
+                    <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')" title="View room chat">
+                        <i class="fas fa-eye"></i> View Room
                     </button>
                     <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')" title="View all guest details">
                         <i class="fas fa-users"></i> Guest Details
                     </button>
                     ${appState.isHost && !isActive ? `
-                    <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')" title="Delete this session">
+                    <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')" title="Delete this room">
                         <i class="fas fa-trash"></i> Delete
                     </button>
                     ` : ''}
@@ -2184,12 +2409,12 @@ async function loadChatSessions() {
     } catch (error) {
         console.error("Error loading sessions:", error);
         if (historyCards) {
-            historyCards.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">Error loading sessions</div>';
+            historyCards.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">Error loading rooms</div>';
         }
     }
 }
 
-// View session history
+// View session history - MODIFIED to allow messaging
 async function viewSessionHistory(sessionId) {
     appState.isViewingHistory = true;
     appState.viewingSessionId = sessionId;
@@ -2197,13 +2422,26 @@ async function viewSessionHistory(sessionId) {
     const sessionIndex = appState.availableRooms.findIndex(s => s.session_id === sessionId);
     const roomNumber = sessionIndex >= 0 ? (sessionIndex + 1).toString().padStart(3, '0') : '???';
     
+    // Check if room is active
+    const { data: session } = await supabaseClient
+        .from('sessions')
+        .select('is_active')
+        .eq('session_id', sessionId)
+        .single();
+    
     if (chatModeIndicator) chatModeIndicator.style.display = 'flex';
-    if (chatTitle) chatTitle.innerHTML = `<i class="fas fa-door-open"></i> Room ${roomNumber} History`;
-    if (messageInput) {
+    if (chatTitle) chatTitle.innerHTML = `<i class="fas fa-door-open"></i> Room ${roomNumber}`;
+    
+    // Don't disable input - allow messaging in historical rooms if active
+    if (session && session.is_active && appState.isConnected) {
+        messageInput.disabled = false;
+        sendMessageBtn.disabled = false;
+        messageInput.placeholder = "Room is active - you can send messages";
+    } else if (!session || !session.is_active) {
         messageInput.disabled = true;
-        messageInput.placeholder = "Cannot send messages in historical view";
+        sendMessageBtn.disabled = true;
+        messageInput.placeholder = "This room is no longer active";
     }
-    if (sendMessageBtn) sendMessageBtn.disabled = true;
     
     await loadChatHistory(sessionId);
     
@@ -2234,7 +2472,7 @@ async function deleteSession(sessionId) {
         return;
     }
     
-    if (!confirm("⚠️ WARNING: Are you sure you want to delete this session?\n\nThis will permanently delete all messages and guest data for this session!\n\nThis action CANNOT be undone!")) {
+    if (!confirm("⚠️ WARNING: Are you sure you want to delete this room?\n\nThis will permanently delete all messages and guest data!\n\nThis action CANNOT be undone!")) {
         return;
     }
     
@@ -2253,10 +2491,10 @@ async function deleteSession(sessionId) {
             if (appState.currentSessionId === sessionId) {
                 appState.currentSessionId = null;
                 appState.isConnected = false;
-                chatMessages.innerHTML = '<div class="message received"><div class="message-sender">System</div><div class="message-content"><div class="message-text">Session was deleted. Please reconnect.</div><div class="message-time">Just now</div></div></div>';
+                chatMessages.innerHTML = '<div class="message received"><div class="message-sender">System</div><div class="message-content"><div class="message-text">Room was deleted. Please reconnect.</div><div class="message-time">Just now</div></div></div>';
             }
             
-            alert("Session deleted successfully!");
+            alert("Room deleted successfully!");
             await loadChatSessions();
             
             if (appState.viewingSessionId === sessionId) {
@@ -2265,7 +2503,7 @@ async function deleteSession(sessionId) {
         }
     } catch (error) {
         console.error("❌ Error deleting session:", error);
-        alert("Failed to delete session: " + error.message);
+        alert("Failed to delete room: " + error.message);
     }
 }
 
@@ -2298,7 +2536,7 @@ async function deleteSessionManually(sessionId) {
         if (sessionError) throw sessionError;
         console.log("✅ Session deleted");
         
-        alert("Session deleted successfully!");
+        alert("Room deleted successfully!");
         
     } catch (error) {
         console.error("Manual deletion error:", error);
@@ -2696,6 +2934,7 @@ window.showSessionGuests = async function(sessionId) {
         const approvedGuests = guests.filter(g => g.status === 'approved');
         const pendingGuests = guests.filter(g => g.status === 'pending');
         const kickedGuests = guests.filter(g => g.status === 'kicked');
+        const rejectedGuests = guests.filter(g => g.status === 'rejected');
         
         let guestInfo = `
             <div class="guest-details-modal">
@@ -2710,7 +2949,7 @@ window.showSessionGuests = async function(sessionId) {
                             <div class="guest-meta">
                                 <small>Joined: ${new Date(g.approved_at).toLocaleString()}</small>
                                 <small>IP: ${g.guest_ip || 'Not recorded'}</small>
-                                ${g.guest_note ? `<small>Note: ${g.guest_note}</small>` : ''}
+                                ${g.guest_note ? `<small>Note: "${g.guest_note}"</small>` : ''}
                             </div>
                         </div>
                     `).join('') : '<p>No approved guests</p>'}
@@ -2725,7 +2964,7 @@ window.showSessionGuests = async function(sessionId) {
                             <div class="guest-meta">
                                 <small>Requested: ${new Date(g.requested_at).toLocaleString()}</small>
                                 <small>IP: ${g.guest_ip || 'Not recorded'}</small>
-                                ${g.guest_note ? `<small>Note: ${g.guest_note}</small>` : ''}
+                                ${g.guest_note ? `<small>Note: "${g.guest_note}"</small>` : ''}
                             </div>
                         </div>
                     `).join('')}
@@ -2740,6 +2979,21 @@ window.showSessionGuests = async function(sessionId) {
                             <strong>${g.guest_name}</strong>
                             <div class="guest-meta">
                                 <small>Kicked: ${new Date(g.left_at).toLocaleString()}</small>
+                                <small>IP: ${g.guest_ip || 'Not recorded'}</small>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                ` : ''}
+                
+                ${rejectedGuests.length > 0 ? `
+                <div class="guest-status-section">
+                    <h4><i class="fas fa-times-circle" style="color: var(--danger-red);"></i> Rejected Guests (${rejectedGuests.length})</h4>
+                    ${rejectedGuests.map(g => `
+                        <div class="guest-detail">
+                            <strong>${g.guest_name}</strong>
+                            <div class="guest-meta">
+                                <small>Rejected: ${new Date(g.left_at).toLocaleString()}</small>
                                 <small>IP: ${g.guest_ip || 'Not recorded'}</small>
                             </div>
                         </div>
