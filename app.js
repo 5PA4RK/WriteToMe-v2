@@ -1,4 +1,3 @@
-
 // Supabase Configuration
 const SUPABASE_URL = 'https://plqvqenoroacvzwtgoxq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_91IHQ5--y4tDIo8L9X2ZJQ_YeThfdu_';
@@ -27,7 +26,9 @@ const appState = {
     pendingGuests: [],
     emojis: ["😀", "😂", "😍", "😎", "😭", "😡", "👍", "👎", "❤️", "🔥", "👏", "🙏", "🤔", "😴", "🥳"],
     users: [],
-    isViewingUsers: false
+    isViewingUsers: false,
+    availableRooms: [],
+    guestNote: ""
 };
 
 // DOM Elements
@@ -75,6 +76,12 @@ const usersTabBtn = document.getElementById('usersTabBtn');
 const historyTabContent = document.getElementById('historyTabContent');
 const usersTabContent = document.getElementById('usersTabContent');
 
+// Room selection elements
+const roomSelection = document.getElementById('roomSelection');
+const availableRoomsList = document.getElementById('availableRoomsList');
+const refreshRoomsBtn = document.getElementById('refreshRoomsBtn');
+const guestNoteInput = document.getElementById('guestNoteInput');
+
 // User Management DOM Elements
 const userManagementSection = document.getElementById('userManagementSection');
 const backToHistoryBtn = document.getElementById('backToHistoryBtn');
@@ -105,7 +112,7 @@ const usernameInput = document.getElementById('usernameInput');
 const passwordInput = document.getElementById('passwordInput');
 
 // ============================================
-// CORE FUNCTIONS - FIXED VERSION
+// CORE FUNCTIONS
 // ============================================
 
 // Modal control functions
@@ -121,6 +128,7 @@ function showConnectionModal() {
     
     if (usernameInput) usernameInput.value = '';
     if (passwordInput) passwordInput.value = '';
+    if (guestNoteInput) guestNoteInput.value = '';
     if (passwordError) passwordError.style.display = 'none';
     
     const passwordHint = document.getElementById('passwordHint');
@@ -130,6 +138,9 @@ function showConnectionModal() {
         connectBtn.disabled = false;
         connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
     }
+    
+    // Load available rooms for guests
+    loadAvailableRooms();
     
     clearSensitiveData();
 }
@@ -183,6 +194,9 @@ async function initApp() {
         mainContainer.style.display = 'none';
     }
     
+    // Check for host mode in body class
+    document.body.classList.remove('host-mode');
+    
     const savedSession = localStorage.getItem('writeToMe_session');
     if (savedSession) {
         try {
@@ -197,6 +211,9 @@ async function initApp() {
             
             if (await reconnectToSession()) {
                 appState.isConnected = true;
+                if (appState.isHost) {
+                    document.body.classList.add('host-mode');
+                }
                 hideConnectionModal();
                 updateUIAfterConnection();
                 console.log("✅ Successfully reconnected!");
@@ -285,6 +302,106 @@ async function reconnectToSession() {
     }
 }
 
+// Load available rooms
+async function loadAvailableRooms() {
+    if (!availableRoomsList) return;
+    
+    try {
+        const { data: sessions, error } = await supabaseClient
+            .from('sessions')
+            .select('*')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        appState.availableRooms = sessions || [];
+        
+        if (appState.availableRooms.length === 0) {
+            availableRoomsList.innerHTML = `
+                <div class="no-rooms-message">
+                    <i class="fas fa-door-closed"></i>
+                    <p>No active rooms available</p>
+                    <small>Please wait for a host to create a room</small>
+                </div>
+            `;
+        } else {
+            availableRoomsList.innerHTML = '';
+            appState.availableRooms.forEach((session, index) => {
+                const roomNumber = (index + 1).toString().padStart(3, '0');
+                const roomDiv = document.createElement('div');
+                roomDiv.className = 'room-item';
+                roomDiv.innerHTML = `
+                    <div class="room-info">
+                        <div class="room-number">
+                            <i class="fas fa-door-open"></i>
+                            Room ${roomNumber}
+                        </div>
+                        <div class="room-host">
+                            <i class="fas fa-user-crown"></i>
+                            Host: ${session.host_name}
+                        </div>
+                        <div class="room-created">
+                            <i class="fas fa-clock"></i>
+                            Created: ${new Date(session.created_at).toLocaleString()}
+                        </div>
+                    </div>
+                    <button class="btn btn-small btn-success select-room-btn" data-session-id="${session.session_id}">
+                        <i class="fas fa-sign-in-alt"></i> Select Room
+                    </button>
+                `;
+                availableRoomsList.appendChild(roomDiv);
+            });
+            
+            // Add event listeners to select room buttons
+            document.querySelectorAll('.select-room-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const sessionId = btn.dataset.sessionId;
+                    selectRoom(sessionId);
+                });
+            });
+        }
+    } catch (error) {
+        console.error("Error loading rooms:", error);
+        availableRoomsList.innerHTML = '<div class="error-message">Error loading rooms</div>';
+    }
+}
+
+// Select a room
+function selectRoom(sessionId) {
+    const session = appState.availableRooms.find(s => s.session_id === sessionId);
+    if (session) {
+        // Store selected room ID for connection
+        appState.selectedRoomId = sessionId;
+        
+        // Update UI to show selected room
+        document.querySelectorAll('.room-item').forEach(item => {
+            item.classList.remove('selected');
+        });
+        
+        const selectedItem = Array.from(document.querySelectorAll('.room-item')).find(
+            item => item.querySelector('.select-room-btn')?.dataset.sessionId === sessionId
+        );
+        
+        if (selectedItem) {
+            selectedItem.classList.add('selected');
+        }
+        
+        // Show success message
+        const successMsg = document.createElement('div');
+        successMsg.className = 'room-selected-message';
+        successMsg.innerHTML = `
+            <i class="fas fa-check-circle"></i>
+            Room selected! Enter your username and password to connect.
+        `;
+        
+        const existingMsg = document.querySelector('.room-selected-message');
+        if (existingMsg) existingMsg.remove();
+        
+        availableRoomsList.parentElement.insertBefore(successMsg, availableRoomsList.nextSibling);
+    }
+}
+
 // Setup all event listeners
 function setupEventListeners() {
     // Connection modal
@@ -294,6 +411,7 @@ function setupEventListeners() {
             updatePasswordHint(this.value);
         });
     }
+    
     if (usersTabBtn) {
         usersTabBtn.addEventListener('click', () => {
             console.log("User management tab clicked");
@@ -310,6 +428,11 @@ function setupEventListeners() {
     
     if (connectBtn) {
         connectBtn.addEventListener('click', handleConnect);
+    }
+    
+    // Refresh rooms button
+    if (refreshRoomsBtn) {
+        refreshRoomsBtn.addEventListener('click', loadAvailableRooms);
     }
     
     // Logout
@@ -374,35 +497,19 @@ function setupEventListeners() {
     }
     
     // Image modal
-// In setupEventListeners(), update the image modal event listener:
-if (imageModal) {
-    imageModal.addEventListener('click', (e) => {
-        // Close only if clicking on the overlay, not the image
-        if (e.target === imageModal || e.target.classList.contains('image-modal-overlay')) {
-            imageModal.style.display = 'none';
-        }
-    });
-    
-    // Also add escape key to close
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && imageModal.style.display === 'flex') {
-            imageModal.style.display = 'none';
-        }
-    });
-}
-
-// Update the showFullImage function to prevent propagation:
-window.showFullImage = function(src) {
-    fullSizeImage.src = src;
-    imageModal.style.display = 'flex';
-    
-    // Stop propagation on image click
-    if (fullSizeImage) {
-        fullSizeImage.onclick = (e) => {
-            e.stopPropagation();
-        };
+    if (imageModal) {
+        imageModal.addEventListener('click', (e) => {
+            if (e.target === imageModal || e.target.classList.contains('image-modal-overlay')) {
+                imageModal.style.display = 'none';
+            }
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && imageModal.style.display === 'flex') {
+                imageModal.style.display = 'none';
+            }
+        });
     }
-};
     
     // Click outside emoji picker to close
     document.addEventListener('click', (e) => {
@@ -430,7 +537,6 @@ function switchAdminTab(tabName) {
         return;
     }
     
-    // Reset all tabs
     historyTabBtn.classList.remove('active');
     usersTabBtn.classList.remove('active');
     
@@ -439,7 +545,6 @@ function switchAdminTab(tabName) {
     historyTabContent.classList.remove('active');
     usersTabContent.classList.remove('active');
     
-    // Activate selected tab
     if (tabName === 'history') {
         historyTabBtn.classList.add('active');
         historyTabContent.style.display = 'block';
@@ -452,20 +557,21 @@ function switchAdminTab(tabName) {
         loadUsers();
     }
 }
-// Replace the clearChat function with this:
+
+// Clear chat function - Different behavior for host vs guest
 async function clearChat() {
     if (!appState.isConnected || !appState.currentSessionId) {
         alert("You must be connected to clear chat.");
         return;
     }
     
-    if (!confirm("Are you sure you want to clear all messages? This cannot be undone!")) {
+    if (!confirm("Are you sure you want to clear messages?")) {
         return;
     }
     
     try {
         if (appState.isHost) {
-            // Host can delete all messages
+            // Host deletes messages permanently
             const { error } = await supabaseClient
                 .from('messages')
                 .update({
@@ -482,44 +588,19 @@ async function clearChat() {
             appState.messages = [];
             
             // Add system message
-            const systemMsg = document.createElement('div');
-            systemMsg.className = 'message received';
-            systemMsg.innerHTML = `
-                <div class="message-sender">System</div>
-                <div class="message-content">
-                    <div class="message-text">Chat cleared by ${appState.userName}</div>
-                    <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                </div>
-            `;
-            chatMessages.appendChild(systemMsg);
+            addSystemMessage(`Chat cleared by host ${appState.userName}`);
             
         } else {
-            // Guest can only delete their own messages
-            const { error } = await supabaseClient
-                .from('messages')
-                .update({
-                    is_deleted: true,
-                    deleted_at: new Date().toISOString(),
-                    deleted_by: appState.userId
-                })
-                .eq('session_id', appState.currentSessionId)
-                .eq('sender_id', appState.userId);
-            
-            if (error) throw error;
-            
-            // Remove guest's messages from view
-            const guestMessages = document.querySelectorAll(`.message.sent`);
-            guestMessages.forEach(msg => {
-                msg.innerHTML = `
-                    <div class="message-sender">${appState.userName}</div>
-                    <div class="message-content">
-                        <div class="message-text"><i>Message deleted</i></div>
-                        <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                    </div>
-                `;
+            // Guest hides messages locally only
+            const messages = document.querySelectorAll('.message');
+            messages.forEach(msg => {
+                if (msg.querySelector('.message-sender').textContent === appState.userName) {
+                    msg.remove();
+                }
             });
             
-            alert("Your messages have been deleted.");
+            // Add local clear indicator
+            addSystemMessage(`You cleared your view of the chat`, true);
         }
         
     } catch (error) {
@@ -527,10 +608,30 @@ async function clearChat() {
         alert("Failed to clear chat: " + error.message);
     }
 }
+
+// Add system message helper
+function addSystemMessage(text, isLocal = false) {
+    const systemMsg = document.createElement('div');
+    systemMsg.className = 'message received';
+    if (isLocal) {
+        systemMsg.classList.add('local-system');
+    }
+    systemMsg.innerHTML = `
+        <div class="message-sender">System</div>
+        <div class="message-content">
+            <div class="message-text">${text}</div>
+            <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+        </div>
+    `;
+    chatMessages.appendChild(systemMsg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
 // Handle connection
 async function handleConnect() {
     const username = usernameInput.value.trim();
     const password = passwordInput.value;
+    const guestNote = guestNoteInput ? guestNoteInput.value.trim() : "";
     
     passwordError.style.display = 'none';
     connectBtn.disabled = true;
@@ -553,7 +654,6 @@ async function handleConnect() {
     try {
         console.log("🔐 Attempting authentication for:", username);
         
-        // First check if user exists
         const { data: userData, error: userError } = await supabaseClient
             .from('user_management')
             .select('id, username, display_name, password_hash, role, is_active')
@@ -573,7 +673,6 @@ async function handleConnect() {
         let isAuthenticated = false;
         
         try {
-            // Try RPC function first
             const { data: authResult } = await supabaseClient
                 .rpc('verify_password', {
                     stored_hash: userData.password_hash,
@@ -587,7 +686,6 @@ async function handleConnect() {
             console.log("RPC failed, trying test passwords:", rpcError);
         }
         
-        // Fallback for test accounts (development only)
         if (!isAuthenticated) {
             const testPasswords = {
                 'admin': 'admin123',
@@ -605,11 +703,11 @@ async function handleConnect() {
             return;
         }
         
-        // Authentication successful
         appState.isHost = userData.role === 'host';
         appState.userName = userData.display_name || userData.username;
         appState.userId = userData.id;
         appState.connectionTime = new Date();
+        appState.guestNote = guestNote;
         
         console.log("✅ Authentication successful:", {
             name: appState.userName,
@@ -617,7 +715,6 @@ async function handleConnect() {
             isHost: appState.isHost
         });
         
-        // Update last login
         try {
             await supabaseClient
                 .from('user_management')
@@ -630,14 +727,18 @@ async function handleConnect() {
             console.log("Could not update last login:", updateError);
         }
         
-        // Get user IP
         const userIP = await getRealIP();
         
-        // Connect based on role
         if (appState.isHost) {
             await connectAsHost(userIP);
         } else {
-            await connectAsGuest(userIP);
+            // Check if room was selected
+            if (!appState.selectedRoomId) {
+                alert("Please select a room to join.");
+                resetConnectButton();
+                return;
+            }
+            await connectAsGuest(userIP, appState.selectedRoomId);
         }
         
     } catch (error) {
@@ -664,9 +765,8 @@ async function connectAsHost(userIP) {
     try {
         console.log("👑 Connecting as host...");
         
-        const sessionId = 'session_' + Date.now().toString(36);
+        const sessionId = 'room_' + Date.now().toString(36);
         
-        // Create session
         const { data, error } = await supabaseClient
             .from('sessions')
             .insert([
@@ -691,30 +791,27 @@ async function connectAsHost(userIP) {
             return;
         }
         
-        // Update app state
         appState.sessionId = sessionId;
         appState.currentSessionId = sessionId;
         appState.isConnected = true;
         
-        // Save to localStorage
+        // Add host class to body
+        document.body.classList.add('host-mode');
+        
         saveSessionToStorage();
         
-        // Close modal and update UI
         connectionModal.style.display = 'none';
         resetConnectButton();
         updateUIAfterConnection();
         
-        // Set up subscriptions
         setupRealtimeSubscriptions();
         setupPendingGuestsSubscription();
         
-        // Load data
         await loadPendingGuests();
         await loadChatHistory();
         await loadChatSessions();
         
-        // Send welcome message
-        await saveMessageToDB('System', `${appState.userName} has created a new chat session.`);
+        await saveMessageToDB('System', `${appState.userName} has created a new chat room.`);
         
         console.log("✅ Host connection completed successfully!");
         
@@ -725,34 +822,31 @@ async function connectAsHost(userIP) {
         appState.isConnected = false;
         appState.currentSessionId = null;
         localStorage.removeItem('writeToMe_session');
+        document.body.classList.remove('host-mode');
     }
 }
 
 // Connect as guest
-// Connect as guest - FIXED IP STORAGE
-async function connectAsGuest(userIP) {
+async function connectAsGuest(userIP, selectedRoomId) {
     try {
         console.log("👤 Connecting as guest...");
-        console.log("Guest IP:", userIP); // Debug log
+        console.log("Guest IP:", userIP);
         
-        // Find active session
-        const { data: activeSessions, error: sessionsError } = await supabaseClient
+        const { data: session, error: sessionError } = await supabaseClient
             .from('sessions')
             .select('*')
+            .eq('session_id', selectedRoomId)
             .eq('is_active', true)
-            .order('created_at', { ascending: false })
-            .limit(1);
+            .single();
         
-        if (sessionsError || !activeSessions || activeSessions.length === 0) {
-            alert("No active session found. Ask the host to create a session.");
+        if (sessionError || !session) {
+            alert("Selected room is no longer available.");
             resetConnectButton();
             return;
         }
         
-        const session = activeSessions[0];
         console.log("Found active session:", session.session_id);
         
-        // Check if already approved
         const { data: existingGuest } = await supabaseClient
             .from('session_guests')
             .select('*')
@@ -767,7 +861,6 @@ async function connectAsGuest(userIP) {
             return;
         }
         
-        // Check if already pending
         const { data: pendingGuest } = await supabaseClient
             .from('session_guests')
             .select('*')
@@ -786,7 +879,6 @@ async function connectAsGuest(userIP) {
             return;
         }
         
-        // Add to pending guests - MAKE SURE IP IS STORED
         console.log("Adding guest with IP:", userIP);
         const { error: insertError } = await supabaseClient
             .from('session_guests')
@@ -794,7 +886,8 @@ async function connectAsGuest(userIP) {
                 session_id: session.session_id,
                 guest_id: appState.userId,
                 guest_name: appState.userName,
-                guest_ip: userIP, // This must be stored
+                guest_ip: userIP,
+                guest_note: appState.guestNote || "",
                 status: 'pending',
                 requested_at: new Date().toISOString()
             }]);
@@ -847,14 +940,13 @@ function saveSessionToStorage() {
 }
 
 // ============================================
-// PENDING GUESTS SYSTEM - FIXED VERSION
+// PENDING GUESTS SYSTEM
 // ============================================
 
-// Setup pending guests subscription - COMPLETELY REWRITTEN
+// Setup pending guests subscription
 function setupPendingGuestsSubscription() {
     console.log("🔄 Setting up pending guests subscription...");
     
-    // Remove existing subscription
     if (appState.pendingSubscription) {
         supabaseClient.removeChannel(appState.pendingSubscription);
         appState.pendingSubscription = null;
@@ -865,25 +957,21 @@ function setupPendingGuestsSubscription() {
         return;
     }
     
-    // Create subscription for session_guests
     appState.pendingSubscription = supabaseClient
         .channel('public:session_guests')
         .on(
             'postgres_changes',
             {
-                event: '*', // Listen to ALL events
+                event: '*',
                 schema: 'public',
                 table: 'session_guests'
             },
             (payload) => {
                 console.log('📡 Pending guest change:', payload.eventType, payload.new?.guest_name);
                 
-                // Check if this guest belongs to current session
                 if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                    // Refresh pending guests list
                     loadPendingGuests();
                     
-                    // Show notification for new pending guests
                     if (payload.eventType === 'INSERT' && payload.new.status === 'pending') {
                         showNewGuestNotification(payload.new);
                     }
@@ -901,7 +989,7 @@ function setupPendingGuestsSubscription() {
         });
 }
 
-// Load pending guests - IMPROVED
+// Load pending guests
 async function loadPendingGuests() {
     if (!appState.isHost || !appState.currentSessionId) {
         console.log("Cannot load pending guests: Not host or no session ID");
@@ -938,14 +1026,13 @@ async function loadPendingGuests() {
     }
 }
 
-// Show pending guests modal - IMPROVED
+// Show pending guests modal
 async function showPendingGuests() {
     if (!pendingGuestsList) return;
     
     console.log("Showing pending guests modal...");
     
     try {
-        // Refresh data first
         await loadPendingGuests();
         
         pendingGuestsList.innerHTML = '';
@@ -958,7 +1045,8 @@ async function showPendingGuests() {
         } else {
             if (noPendingGuests) noPendingGuests.style.display = 'none';
             
-            appState.pendingGuests.forEach((guest) => {
+            appState.pendingGuests.forEach((guest, index) => {
+                const roomNumber = (index + 1).toString().padStart(3, '0');
                 const guestDiv = document.createElement('div');
                 guestDiv.className = 'pending-guest';
                 guestDiv.innerHTML = `
@@ -968,8 +1056,14 @@ async function showPendingGuests() {
                             <strong>${guest.guest_name}</strong>
                         </div>
                         <div class="guest-details">
-                            <small>Requested: ${new Date(guest.requested_at).toLocaleString()}</small>
-                            <small>IP: ${guest.guest_ip || 'Unknown'}</small>
+                            <small><i class="fas fa-door-open"></i> Room: ${roomNumber}</small>
+                            <small><i class="fas fa-calendar"></i> ${new Date(guest.requested_at).toLocaleString()}</small>
+                            <small><i class="fas fa-network-wired"></i> IP: ${guest.guest_ip || 'Unknown'}</small>
+                            ${guest.guest_note ? `
+                                <div class="guest-note">
+                                    <i class="fas fa-sticky-note"></i> Note: ${guest.guest_note}
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
                     <div class="guest-actions">
@@ -1002,15 +1096,15 @@ function showNewGuestNotification(guest) {
     
     console.log("🔔 New guest notification:", guest.guest_name);
     
-    // Create notification
     const notification = document.createElement('div');
     notification.className = 'guest-notification';
     notification.innerHTML = `
         <div class="notification-content">
             <i class="fas fa-user-plus" style="color: var(--accent-light); font-size: 20px;"></i>
             <div class="notification-text">
-                <strong>New Guest Request!</strong>
-                <small>${guest.guest_name} wants to join</small>
+                <strong>New Room Request!</strong>
+                <small>${guest.guest_name} wants to join Room ${guest.session_id.substring(0,8)}</small>
+                ${guest.guest_note ? `<small>Note: ${guest.guest_note}</small>` : ''}
             </div>
             <button class="btn btn-small btn-success" onclick="viewPendingGuestsNow()">
                 <i class="fas fa-eye"></i> View
@@ -1020,7 +1114,6 @@ function showNewGuestNotification(guest) {
     
     document.body.appendChild(notification);
     
-    // Play sound if enabled
     if (appState.soundEnabled) {
         try {
             messageSound.currentTime = 0;
@@ -1030,7 +1123,6 @@ function showNewGuestNotification(guest) {
         }
     }
     
-    // Auto remove after 10 seconds
     setTimeout(() => {
         if (notification.parentNode) notification.remove();
     }, 10000);
@@ -1039,7 +1131,6 @@ function showNewGuestNotification(guest) {
 // Helper to view pending guests immediately
 function viewPendingGuestsNow() {
     showPendingGuests();
-    // Remove all notifications
     document.querySelectorAll('.guest-notification').forEach(n => n.remove());
 }
 
@@ -1064,7 +1155,6 @@ function updatePendingButtonUI() {
 // Approve a guest
 async function approveGuest(guestRecordId) {
     try {
-        // Get guest details
         const { data: guest } = await supabaseClient
             .from('session_guests')
             .select('*')
@@ -1073,7 +1163,6 @@ async function approveGuest(guestRecordId) {
         
         if (!guest) throw new Error("Guest not found");
         
-        // Update status
         const { error } = await supabaseClient
             .from('session_guests')
             .update({
@@ -1084,16 +1173,13 @@ async function approveGuest(guestRecordId) {
         
         if (error) throw error;
         
-        // Update local state
         appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
         updatePendingButtonUI();
         
-        // Refresh modal if open
         if (pendingGuestsModal.style.display === 'flex') {
             showPendingGuests();
         }
         
-        // Send system message
         await saveMessageToDB('System', `${guest.guest_name} has been approved and joined the chat.`);
         
         console.log(`✅ Approved guest: ${guest.guest_name}`);
@@ -1140,6 +1226,41 @@ async function denyGuest(guestRecordId) {
     }
 }
 
+// Kick a guest
+window.kickGuest = async function(guestId, guestName) {
+    if (!appState.isHost || !appState.currentSessionId) {
+        alert("Only hosts can kick guests.");
+        return;
+    }
+    
+    if (!confirm(`Are you sure you want to kick ${guestName} from the chat?`)) return;
+    
+    try {
+        const { error } = await supabaseClient
+            .from('session_guests')
+            .update({
+                status: 'kicked',
+                left_at: new Date().toISOString()
+            })
+            .eq('id', guestId)
+            .eq('session_id', appState.currentSessionId);
+        
+        if (error) throw error;
+        
+        await saveMessageToDB('System', `${guestName} has been kicked from the chat by host.`);
+        
+        // Refresh pending list and session view
+        loadPendingGuests();
+        loadChatSessions();
+        
+        alert(`${guestName} has been kicked.`);
+        
+    } catch (error) {
+        console.error("Error kicking guest:", error);
+        alert("Failed to kick guest: " + error.message);
+    }
+};
+
 // Setup pending approval subscription for guest
 function setupPendingApprovalSubscription(sessionId) {
     console.log("⏳ Setting up pending approval subscription for guest...");
@@ -1149,7 +1270,6 @@ function setupPendingApprovalSubscription(sessionId) {
         appState.pendingSubscription = null;
     }
     
-    // Subscribe to session_guests for THIS GUEST specifically
     appState.pendingSubscription = supabaseClient
         .channel('guest_approval_' + appState.userId)
         .on(
@@ -1171,25 +1291,26 @@ function setupPendingApprovalSubscription(sessionId) {
                         appState.isConnected = true;
                         saveSessionToStorage();
                         
-                        // Remove pending subscription
                         if (appState.pendingSubscription) {
                             supabaseClient.removeChannel(appState.pendingSubscription);
                             appState.pendingSubscription = null;
                         }
                         
-                        // Update UI and setup chat
                         updateUIAfterConnection();
                         setupRealtimeSubscriptions();
                         await loadChatHistory();
                         await saveMessageToDB('System', `${appState.userName} has joined the chat.`);
                         
-                        // Alert the user
                         alert("🎉 You have been approved! Welcome to the chat.");
                         
                     } else if (payload.new.status === 'rejected') {
                         console.log("❌ Guest has been REJECTED");
                         alert("Your access request was rejected by the host.");
                         location.reload();
+                    } else if (payload.new.status === 'kicked') {
+                        console.log("👢 Guest has been KICKED");
+                        alert("You have been kicked from the chat by the host.");
+                        handleLogout();
                     }
                 }
             }
@@ -1217,7 +1338,6 @@ function setupRealtimeSubscriptions() {
     
     console.log("📡 Setting up real-time subscriptions for session:", appState.currentSessionId);
     
-    // Remove existing subscriptions
     if (appState.realtimeSubscription) {
         console.log("Removing old subscription");
         supabaseClient.removeChannel(appState.realtimeSubscription);
@@ -1229,9 +1349,8 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-    // Create NEW subscription with simpler configuration
     appState.realtimeSubscription = supabaseClient
-        .channel('public:messages')  // Simpler channel name
+        .channel('public:messages')
         .on(
             'postgres_changes',
             {
@@ -1242,7 +1361,6 @@ function setupRealtimeSubscriptions() {
             (payload) => {
                 console.log('📦 Realtime message received:', payload.new?.sender_name, payload.new?.message);
                 
-                // Filter by session_id in JavaScript instead of SQL filter
                 if (payload.new && payload.new.session_id === appState.currentSessionId) {
                     if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
                         console.log('✅ Displaying new message from:', payload.new.sender_name);
@@ -1278,39 +1396,35 @@ function setupRealtimeSubscriptions() {
             }
         });
     
-    // Typing indicator subscription
-// In setupRealtimeSubscriptions(), update the typing subscription:
-appState.typingSubscription = supabaseClient
-    .channel('typing_updates_' + appState.currentSessionId)
-    .on(
-        'postgres_changes',
-        {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'sessions',
-            filter: `session_id=eq.${appState.currentSessionId}`
-        },
-        (payload) => {
-            console.log('⌨️ Typing update for session:', payload.new?.typing_user);
-            if (payload.new && payload.new.typing_user && payload.new.typing_user !== appState.userName) {
-                typingUser.textContent = payload.new.typing_user;
-                typingIndicator.classList.add('show');
-                
-                // Clear after 3 seconds
-                setTimeout(() => {
-                    if (typingUser.textContent === payload.new.typing_user) {
-                        typingIndicator.classList.remove('show');
-                    }
-                }, 3000);
+    appState.typingSubscription = supabaseClient
+        .channel('typing_updates_' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'sessions',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                console.log('⌨️ Typing update for session:', payload.new?.typing_user);
+                if (payload.new && payload.new.typing_user && payload.new.typing_user !== appState.userName) {
+                    typingUser.textContent = payload.new.typing_user;
+                    typingIndicator.classList.add('show');
+                    
+                    setTimeout(() => {
+                        if (typingUser.textContent === payload.new.typing_user) {
+                            typingIndicator.classList.remove('show');
+                        }
+                    }, 3000);
+                }
             }
-        }
-    )
-    .subscribe((status, err) => {
-        console.log('⌨️ TYPING Subscription status:', status);
-        if (err) console.error('Typing subscription error:', err);
-    });
+        )
+        .subscribe((status, err) => {
+            console.log('⌨️ TYPING Subscription status:', status);
+            if (err) console.error('Typing subscription error:', err);
+        });
     
-    // Pending guests subscription (host only)
     if (appState.isHost) {
         console.log("👑 Setting up pending guests subscription for host");
         setupPendingGuestsSubscription();
@@ -1323,13 +1437,11 @@ function checkAndReconnectSubscriptions() {
     
     console.log("🔍 Checking subscription health...");
     
-    // Reconnect messages if needed
     if (!appState.realtimeSubscription || appState.realtimeSubscription.state !== 'joined') {
         console.log("🔄 Reconnecting messages subscription...");
         setupRealtimeSubscriptions();
     }
     
-    // Reconnect pending guests if host
     if (appState.isHost && (!appState.pendingSubscription || appState.pendingSubscription.state !== 'joined')) {
         console.log("🔄 Reconnecting pending guests subscription...");
         setupPendingGuestsSubscription();
@@ -1355,7 +1467,6 @@ async function handleTyping() {
             })
             .eq('session_id', appState.currentSessionId);
         
-        // Clear typing indicator after 1 second
         if (appState.typingTimeout) {
             clearTimeout(appState.typingTimeout);
         }
@@ -1406,7 +1517,6 @@ async function sendMessage() {
 }
 
 // Send message to database
-// In app.js, update the sendMessageToDB function:
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB. Text:', text?.substring(0, 50), 'Has image:', !!imageUrl);
@@ -1415,19 +1525,13 @@ async function sendMessageToDB(text, imageUrl) {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
             sender_name: appState.userName,
-            message: text || '', // Keep text if provided
+            message: text || '',
             created_at: new Date().toISOString()
         };
         
         if (imageUrl) {
             console.log('📸 Adding image to message');
             messageData.image_url = imageUrl;
-            
-            // Don't add filename to text if it's just an image
-            if (!text || text.trim() === '') {
-                // Optional: You can set empty text or a simple indicator
-                messageData.message = ''; // Or "[Image]" if you want a placeholder
-            }
         }
         
         const { data, error } = await supabaseClient
@@ -1443,11 +1547,10 @@ async function sendMessageToDB(text, imageUrl) {
         
         console.log('✅ Message saved to DB:', data.id);
         
-        // Display the sent message immediately
         displayMessage({
             id: data.id,
             sender: appState.userName,
-            text: text, // Keep original text
+            text: text,
             image: imageUrl,
             time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             type: 'sent',
@@ -1462,22 +1565,6 @@ async function sendMessageToDB(text, imageUrl) {
         return null;
     }
 }
-function debugImageUpload() {
-    console.log("=== IMAGE UPLOAD DEBUG ===");
-    console.log("imageUpload element:", imageUpload);
-    console.log("Current files:", imageUpload.files);
-    
-    // Test if file input is working
-    const testFile = new File(['test'], 'test.png', { type: 'image/png' });
-    const dataTransfer = new DataTransfer();
-    dataTransfer.items.add(testFile);
-    imageUpload.files = dataTransfer.files;
-    
-    console.log("After setting test file:", imageUpload.files);
-    console.log("=== END DEBUG ===");
-}
-
-// Call in console: debugImageUpload()
 
 // Display message
 function displayMessage(message) {
@@ -1496,7 +1583,6 @@ function displayMessage(message) {
     if (message.image) {
         messageContent += `<img src="${message.image}" class="message-image" onclick="showFullImage('${message.image}')">`;
     }
-    
     
     messageDiv.innerHTML = `
         <div class="message-sender">${message.sender}</div>
@@ -1544,16 +1630,22 @@ async function loadChatHistory(sessionId = null) {
         if (sessionId) {
             const { data: session } = await supabaseClient
                 .from('sessions')
-                .select('created_at')
+                .select('created_at, host_name')
                 .eq('session_id', sessionId)
                 .single();
+            
+            const sessionIndex = appState.availableRooms.findIndex(s => s.session_id === sessionId);
+            const roomNumber = sessionIndex >= 0 ? (sessionIndex + 1).toString().padStart(3, '0') : '???';
             
             const historyHeader = document.createElement('div');
             historyHeader.className = 'message received historical';
             historyHeader.innerHTML = `
                 <div class="message-sender">System</div>
                 <div class="message-content">
-                    <div class="message-text">Historical Chat - ${new Date(session.created_at).toLocaleDateString()}</div>
+                    <div class="message-text">
+                        <i class="fas fa-door-open"></i> Room ${roomNumber} - Chat History
+                        <br><small>Host: ${session.host_name} | Date: ${new Date(session.created_at).toLocaleDateString()}</small>
+                    </div>
                     <div class="message-time"></div>
                 </div>
             `;
@@ -1627,12 +1719,12 @@ function updateUIAfterConnection() {
     
     if (sendMessageBtn) sendMessageBtn.disabled = false;
     
-    // Show admin panel for hosts
+    // Show admin panel ONLY for hosts
     if (adminSection) {
         if (appState.isHost) {
             adminSection.style.display = 'block';
+            document.body.classList.add('host-mode');
             
-            // Make sure history tab is active by default
             if (historyTabBtn && usersTabBtn && historyTabContent && usersTabContent) {
                 historyTabBtn.classList.add('active');
                 usersTabBtn.classList.remove('active');
@@ -1642,10 +1734,10 @@ function updateUIAfterConnection() {
                 usersTabContent.classList.remove('active');
             }
             
-            // Load sessions
             loadChatSessions();
         } else {
             adminSection.style.display = 'none';
+            document.body.classList.remove('host-mode');
         }
     }
     
@@ -1661,7 +1753,6 @@ function updateUIAfterConnection() {
 async function handleLogout() {
     if (!confirm("Are you sure you want to logout?")) return;
     
-    // Clear UI
     if (chatMessages) {
         chatMessages.innerHTML = `
             <div class="message received">
@@ -1688,7 +1779,9 @@ async function handleLogout() {
     if (sendMessageBtn) sendMessageBtn.disabled = true;
     if (adminSection) adminSection.style.display = 'none';
     
-    // Update database
+    // Remove host mode class
+    document.body.classList.remove('host-mode');
+    
     if (appState.isConnected && appState.currentSessionId) {
         try {
             if (appState.isHost) {
@@ -1714,7 +1807,6 @@ async function handleLogout() {
         }
     }
     
-    // Remove subscriptions
     if (appState.realtimeSubscription) {
         supabaseClient.removeChannel(appState.realtimeSubscription);
         appState.realtimeSubscription = null;
@@ -1728,7 +1820,6 @@ async function handleLogout() {
         appState.pendingSubscription = null;
     }
     
-    // Clear storage and reset state
     localStorage.removeItem('writeToMe_session');
     
     appState.isHost = false;
@@ -1743,6 +1834,8 @@ async function handleLogout() {
     appState.pendingGuests = [];
     appState.isViewingUsers = false;
     appState.users = [];
+    appState.selectedRoomId = null;
+    appState.guestNote = "";
     
     showConnectionModal();
 }
@@ -1764,14 +1857,12 @@ async function getRealIP() {
 }
 
 // Handle image upload
-// Replace the handleImageUpload function with this:
 async function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
     console.log('📸 Image selected:', file.name, file.size, file.type);
     
-    // Validate file
     if (file.size > 5 * 1024 * 1024) {
         alert("❌ Image size should be less than 5MB.");
         imageUpload.value = '';
@@ -1784,7 +1875,6 @@ async function handleImageUpload(e) {
         return;
     }
     
-    // Disable send button and show loading
     if (sendMessageBtn) {
         sendMessageBtn.disabled = true;
         sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
@@ -1792,47 +1882,41 @@ async function handleImageUpload(e) {
     
     const reader = new FileReader();
     
-// Update the handleImageUpload function (inside the reader.onload):
-reader.onload = async function(e) {
-    console.log('📸 Image loaded, size:', e.target.result.length, 'chars');
-    
-    try {
-        // Auto-send the image WITHOUT filename in text
-        const result = await sendMessageToDB('', e.target.result); // Empty string instead of filename
+    reader.onload = async function(e) {
+        console.log('📸 Image loaded, size:', e.target.result.length, 'chars');
         
-        if (result && result.success) {
-            console.log('✅ Image sent successfully');
+        try {
+            const result = await sendMessageToDB('', e.target.result);
             
-            // Clear file input
-            imageUpload.value = '';
+            if (result && result.success) {
+                console.log('✅ Image sent successfully');
+                
+                imageUpload.value = '';
+                
+                if (sendMessageBtn) {
+                    sendMessageBtn.disabled = false;
+                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+                }
+            } else {
+                throw new Error("Failed to send image");
+            }
             
-            // Reset send button
+        } catch (error) {
+            console.error("❌ Error sending image:", error);
+            alert("Failed to send image: " + error.message);
+            
             if (sendMessageBtn) {
                 sendMessageBtn.disabled = false;
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
-        } else {
-            throw new Error("Failed to send image");
         }
-        
-    } catch (error) {
-        console.error("❌ Error sending image:", error);
-        alert("Failed to send image: " + error.message);
-        
-        // Reset send button
-        if (sendMessageBtn) {
-            sendMessageBtn.disabled = false;
-            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
-        }
-    }
-};
+    };
     
     reader.onerror = function(e) {
         console.error('❌ Error reading image:', e);
         alert("Error reading image file. Please try another image.");
         imageUpload.value = '';
         
-        // Reset send button
         if (sendMessageBtn) {
             sendMessageBtn.disabled = false;
             sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
@@ -1945,29 +2029,19 @@ async function loadChatSessions() {
         if (!historyCards) return;
         historyCards.innerHTML = '';
         
-        for (const session of sessions) {
+        for (let i = 0; i < sessions.length; i++) {
+            const session = sessions[i];
+            const roomNumber = (i + 1).toString().padStart(3, '0');
             const isActive = session.session_id === appState.currentSessionId && session.is_active;
             
-            // Get guests
             const { data: guests } = await supabaseClient
                 .from('session_guests')
-                .select('guest_name, approved_at, status')
-                .eq('session_id', session.session_id)
-                .eq('status', 'approved');
+                .select('*')
+                .eq('session_id', session.session_id);
             
-            const guestCount = guests ? guests.length : 0;
-            let guestNames = 'None';
+            const approvedGuests = guests ? guests.filter(g => g.status === 'approved') : [];
+            const guestCount = approvedGuests.length;
             
-            if (guests && guests.length > 0) {
-                if (guests.length <= 3) {
-                    guestNames = guests.map(g => g.guest_name).join(', ');
-                } else {
-                    const firstTwo = guests.slice(0, 2).map(g => g.guest_name).join(', ');
-                    guestNames = `${firstTwo} + ${guests.length - 2} more`;
-                }
-            }
-            
-            // Format dates
             const startDate = new Date(session.created_at);
             const endDate = session.ended_at ? new Date(session.ended_at) : null;
             
@@ -1987,135 +2061,122 @@ async function loadChatSessions() {
                 }
             }
             
-            const hostIP = appState.isHost ? (session.host_ip || 'N/A') : '***';
-            
             const card = document.createElement('div');
             card.className = 'session-card';
             if (isActive) card.classList.add('active');
             
-// In the loadChatSessions function, update the card HTML generation:
-// Replace the card.innerHTML section with this:
-
-// In the loadChatSessions function, replace the entire card.innerHTML section with:
-
-// In the loadChatSessions function, update the card HTML generation:
-// Replace with guest-focused information only:
-
-card.innerHTML = `
-    <div class="session-card-header">
-        <div class="session-header-left">
-            <div class="session-id" title="${session.session_id}">
-                <i class="fas fa-hashtag"></i> ${session.session_id.substring(0, 15)}...
-            </div>
-            <div class="session-stats">
-                <div class="stat-item guest-count" title="Approved guests">
-                    <i class="fas fa-users"></i>
-                    <span>${guestCount} Approved</span>
-                </div>
-                <div class="stat-item duration-badge" title="Session duration">
-                    <i class="fas fa-clock"></i>
-                    <span>${duration}</span>
-                </div>
-                <div class="stat-item status-badge">
-                    <i class="fas fa-${session.is_active ? 'play-circle' : 'stop-circle'}"></i>
-                    <span>${session.is_active ? 'Active' : 'Ended'}</span>
-                </div>
-            </div>
-        </div>
-        ${isActive ? '<div class="session-active-badge"><i class="fas fa-circle"></i> Live</div>' : ''}
-    </div>
-    
-    <div class="session-info">
-        <div class="session-info-section">
-            <div class="session-info-section-title">
-                <i class="fas fa-users"></i> Guest Information
-            </div>
-            
-            ${guests && guests.length > 0 ? `
-            <div class="guest-list-container">
-                <div class="guest-list">
-                    ${guests.slice(0, 3).map(guest => `
-                        <div class="guest-item">
-                            <div class="guest-item-info">
-                                <div class="guest-name">
-                                    <i class="fas fa-user"></i>
-                                    ${guest.guest_name}
-                                </div>
-<div class="guest-meta">
-    <span title="Joined at: ${new Date(guest.approved_at || guest.requested_at).toLocaleString()}">
-        <i class="fas fa-calendar"></i> ${new Date(guest.approved_at || guest.requested_at).toLocaleDateString()}
-    </span>
-    <span title="IP: ${guest.guest_ip || 'Unknown'}">
-        <i class="fas fa-network-wired"></i> ${guest.guest_ip || 'Unknown'}
-    </span>
-</div>
+            card.innerHTML = `
+                <div class="session-card-header">
+                    <div class="session-header-left">
+                        <div class="session-id" title="${session.session_id}">
+                            <i class="fas fa-door-open"></i> Room ${roomNumber}
+                        </div>
+                        <div class="session-stats">
+                            <div class="stat-item guest-count" title="Approved guests">
+                                <i class="fas fa-users"></i>
+                                <span>${guestCount} Guests</span>
                             </div>
-                            <div class="guest-status ${guest.status}">
-                                ${guest.status === 'approved' ? 'Approved' : guest.status === 'pending' ? 'Pending' : 'Rejected'}
+                            <div class="stat-item duration-badge" title="Session duration">
+                                <i class="fas fa-clock"></i>
+                                <span>${duration}</span>
+                            </div>
+                            <div class="stat-item status-badge">
+                                <i class="fas fa-${session.is_active ? 'play-circle' : 'stop-circle'}"></i>
+                                <span>${session.is_active ? 'Active' : 'Ended'}</span>
                             </div>
                         </div>
-                    `).join('')}
+                    </div>
+                    ${isActive ? '<div class="session-active-badge"><i class="fas fa-circle"></i> Live</div>' : ''}
+                </div>
+                
+                <div class="session-info">
+                    <div class="session-info-section">
+                        <div class="session-info-section-title">
+                            <i class="fas fa-info-circle"></i> Room Information
+                        </div>
+                        
+                        <div class="guest-info-rows">
+                            <div class="guest-info-row">
+                                <span class="guest-info-label"><i class="fas fa-user-crown"></i> Host:</span>
+                                <span class="guest-info-value">${session.host_name}</span>
+                            </div>
+                            <div class="guest-info-row">
+                                <span class="guest-info-label"><i class="fas fa-calendar-alt"></i> Created:</span>
+                                <span class="guest-info-value">${startDate.toLocaleString()}</span>
+                            </div>
+                            <div class="guest-info-row">
+                                <span class="guest-info-label"><i class="fas fa-network-wired"></i> Host IP:</span>
+                                <span class="guest-info-value">${session.host_ip || 'Unknown'}</span>
+                            </div>
+                        </div>
+                    </div>
                     
-                    ${guests.length > 3 ? `
-                        <div class="guest-item" style="justify-content: center; background: rgba(138, 43, 226, 0.1);">
-                            <div class="guest-name">
-                                <i class="fas fa-ellipsis-h"></i>
-                                ${guests.length - 3} more guests...
+                    ${guests && guests.length > 0 ? `
+                    <div class="session-info-section">
+                        <div class="session-info-section-title">
+                            <i class="fas fa-users"></i> Guests (${guests.length})
+                        </div>
+                        
+                        <div class="guest-list-container">
+                            <div class="guest-list">
+                                ${guests.slice(0, 3).map(guest => `
+                                    <div class="guest-item">
+                                        <div class="guest-item-info">
+                                            <div class="guest-name">
+                                                <i class="fas fa-user"></i>
+                                                ${guest.guest_name}
+                                            </div>
+                                            <div class="guest-meta">
+                                                <span title="Status: ${guest.status}">
+                                                    <i class="fas fa-${guest.status === 'approved' ? 'check-circle' : guest.status === 'pending' ? 'clock' : 'times-circle'}"></i> 
+                                                    ${guest.status}
+                                                </span>
+                                                <span title="IP: ${guest.guest_ip || 'Unknown'}">
+                                                    <i class="fas fa-network-wired"></i> ${guest.guest_ip || 'Unknown'}
+                                                </span>
+                                            </div>
+                                            ${guest.guest_note ? `
+                                            <div class="guest-note small">
+                                                <i class="fas fa-sticky-note"></i> ${guest.guest_note}
+                                            </div>
+                                            ` : ''}
+                                        </div>
+                                        ${isActive && guest.status === 'approved' && guest.guest_id !== appState.userId ? `
+                                            <button class="btn btn-danger btn-small" onclick="kickGuest('${guest.id}', '${guest.guest_name}')">
+                                                <i class="fas fa-user-slash"></i> Kick
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                `).join('')}
+                                
+                                ${guests.length > 3 ? `
+                                    <div class="guest-item" style="justify-content: center; background: rgba(138, 43, 226, 0.1);">
+                                        <div class="guest-name">
+                                            <i class="fas fa-ellipsis-h"></i>
+                                            ${guests.length - 3} more guests...
+                                        </div>
+                                    </div>
+                                ` : ''}
                             </div>
                         </div>
+                    </div>
                     ` : ''}
                 </div>
-            </div>
-            ` : `
-            <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
-                <i class="fas fa-user-slash" style="font-size: 24px; margin-bottom: 10px;"></i>
-                <div>No guests in this session</div>
-            </div>
-            `}
-            
-            <div class="guest-info-rows">
-                <div class="guest-info-row">
-                    <span class="guest-info-label">
-                        <i class="fas fa-user-plus"></i> Total Guests:
-                    </span>
-                    <span class="guest-info-value">
-                        ${guestCount} / ${session.max_guests || 10}
-                    </span>
+                
+                <div class="session-actions">
+                    <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')" title="View chat history">
+                        <i class="fas fa-eye"></i> View Chat
+                    </button>
+                    <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')" title="View all guest details">
+                        <i class="fas fa-users"></i> Guest Details
+                    </button>
+                    ${appState.isHost && !isActive ? `
+                    <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')" title="Delete this session">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                    ` : ''}
                 </div>
-                <div class="guest-info-row">
-                    <span class="guest-info-label">
-                        <i class="fas fa-check-circle"></i> Approval Required:
-                    </span>
-                    <span class="guest-info-value">
-                        ${session.requires_approval ? 'Yes' : 'No'}
-                    </span>
-                </div>
-                <div class="guest-info-row">
-                    <span class="guest-info-label">
-                        <i class="fas fa-calendar-alt"></i> Session Date:
-                    </span>
-                    <span class="guest-info-value" title="${startDate.toLocaleString()}">
-                        ${startDate.toLocaleDateString()}
-                    </span>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="session-actions">
-        <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')" title="View chat history">
-            <i class="fas fa-eye"></i> View Chat
-        </button>
-        <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')" title="View all guest details">
-            <i class="fas fa-users"></i> All Guests
-        </button>
-        ${appState.isHost && !isActive ? `
-        <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')" title="Delete this session">
-            <i class="fas fa-trash"></i> Delete
-        </button>
-        ` : ''}
-    </div>
-`;
+            `;
             
             historyCards.appendChild(card);
         }
@@ -2133,8 +2194,11 @@ async function viewSessionHistory(sessionId) {
     appState.isViewingHistory = true;
     appState.viewingSessionId = sessionId;
     
+    const sessionIndex = appState.availableRooms.findIndex(s => s.session_id === sessionId);
+    const roomNumber = sessionIndex >= 0 ? (sessionIndex + 1).toString().padStart(3, '0') : '???';
+    
     if (chatModeIndicator) chatModeIndicator.style.display = 'flex';
-    if (chatTitle) chatTitle.innerHTML = '<i class="fas fa-history"></i> Historical Chat';
+    if (chatTitle) chatTitle.innerHTML = `<i class="fas fa-door-open"></i> Room ${roomNumber} History`;
     if (messageInput) {
         messageInput.disabled = true;
         messageInput.placeholder = "Cannot send messages in historical view";
@@ -2163,7 +2227,7 @@ function returnToActiveChat() {
     loadChatHistory();
 }
 
-// Delete session - FIXED VERSION
+// Delete session
 async function deleteSession(sessionId) {
     if (!appState.isHost) {
         alert("Only hosts can delete sessions.");
@@ -2175,7 +2239,6 @@ async function deleteSession(sessionId) {
     }
     
     try {
-        // Try using the RPC function first
         const { error } = await supabaseClient
             .rpc('delete_session_with_data', {
                 session_id_to_delete: sessionId
@@ -2183,12 +2246,10 @@ async function deleteSession(sessionId) {
         
         if (error) {
             console.error("RPC error:", error);
-            // Fallback to manual deletion
             await deleteSessionManually(sessionId);
         } else {
             console.log("✅ Session deleted successfully via RPC!");
             
-            // If this was the current session, handle cleanup
             if (appState.currentSessionId === sessionId) {
                 appState.currentSessionId = null;
                 appState.isConnected = false;
@@ -2213,7 +2274,6 @@ async function deleteSessionManually(sessionId) {
     console.log("Attempting manual deletion for session:", sessionId);
     
     try {
-        // Delete messages
         const { error: msgError } = await supabaseClient
             .from('messages')
             .delete()
@@ -2222,7 +2282,6 @@ async function deleteSessionManually(sessionId) {
         if (msgError) throw msgError;
         console.log("✅ Messages deleted");
         
-        // Delete session guests
         const { error: guestsError } = await supabaseClient
             .from('session_guests')
             .delete()
@@ -2231,7 +2290,6 @@ async function deleteSessionManually(sessionId) {
         if (guestsError) throw guestsError;
         console.log("✅ Session guests deleted");
         
-        // Delete the session
         const { error: sessionError } = await supabaseClient
             .from('sessions')
             .delete()
@@ -2247,17 +2305,16 @@ async function deleteSessionManually(sessionId) {
         throw error;
     }
 }
+
 // ============================================
 // USER MANAGEMENT FUNCTIONS
 // ============================================
 
 function setupUserManagementListeners() {
-    // Add user button
     if (addUserBtn) {
         addUserBtn.addEventListener('click', showAddUserModal);
     }
     
-    // Close modals
     if (closeAddUserModal) {
         closeAddUserModal.addEventListener('click', () => {
             addUserModal.style.display = 'none';
@@ -2270,22 +2327,18 @@ function setupUserManagementListeners() {
         });
     }
     
-    // Save new user
     if (saveUserBtn) {
         saveUserBtn.addEventListener('click', saveNewUser);
     }
     
-    // Update user
     if (updateUserBtn) {
         updateUserBtn.addEventListener('click', updateUser);
     }
     
-    // Delete user
     if (deleteUserBtn) {
         deleteUserBtn.addEventListener('click', deleteUser);
     }
     
-    // Search users
     if (userSearchInput) {
         userSearchInput.addEventListener('input', function() {
             searchUsers(this.value.toLowerCase());
@@ -2542,9 +2595,6 @@ function searchUsers(searchTerm) {
     renderUsers(filteredUsers);
 }
 
-
-
-
 // ============================================
 // GLOBAL FUNCTIONS
 // ============================================
@@ -2626,13 +2676,13 @@ window.replyToMessage = function(messageId) {
 
 window.approveGuest = approveGuest;
 window.denyGuest = denyGuest;
+window.kickGuest = kickGuest;
 window.viewSessionHistory = viewSessionHistory;
 window.deleteSession = deleteSession;
 window.editUserModalOpen = editUserModalOpen;
 window.viewPendingGuestsNow = viewPendingGuestsNow;
 
-
-// Show session guests - FIXED IP DISPLAY
+// Show session guests
 window.showSessionGuests = async function(sessionId) {
     try {
         const { data: guests } = await supabaseClient
@@ -2645,6 +2695,7 @@ window.showSessionGuests = async function(sessionId) {
         
         const approvedGuests = guests.filter(g => g.status === 'approved');
         const pendingGuests = guests.filter(g => g.status === 'pending');
+        const kickedGuests = guests.filter(g => g.status === 'kicked');
         
         let guestInfo = `
             <div class="guest-details-modal">
@@ -2659,6 +2710,7 @@ window.showSessionGuests = async function(sessionId) {
                             <div class="guest-meta">
                                 <small>Joined: ${new Date(g.approved_at).toLocaleString()}</small>
                                 <small>IP: ${g.guest_ip || 'Not recorded'}</small>
+                                ${g.guest_note ? `<small>Note: ${g.guest_note}</small>` : ''}
                             </div>
                         </div>
                     `).join('') : '<p>No approved guests</p>'}
@@ -2672,6 +2724,22 @@ window.showSessionGuests = async function(sessionId) {
                             <strong>${g.guest_name}</strong>
                             <div class="guest-meta">
                                 <small>Requested: ${new Date(g.requested_at).toLocaleString()}</small>
+                                <small>IP: ${g.guest_ip || 'Not recorded'}</small>
+                                ${g.guest_note ? `<small>Note: ${g.guest_note}</small>` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                ` : ''}
+                
+                ${kickedGuests.length > 0 ? `
+                <div class="guest-status-section">
+                    <h4><i class="fas fa-user-slash" style="color: var(--danger-red);"></i> Kicked Guests (${kickedGuests.length})</h4>
+                    ${kickedGuests.map(g => `
+                        <div class="guest-detail">
+                            <strong>${g.guest_name}</strong>
+                            <div class="guest-meta">
+                                <small>Kicked: ${new Date(g.left_at).toLocaleString()}</small>
                                 <small>IP: ${g.guest_ip || 'Not recorded'}</small>
                             </div>
                         </div>
@@ -2713,6 +2781,7 @@ window.showSessionGuests = async function(sessionId) {
         alert("Failed to load guest details.");
     }
 };
+
 // Debug function to check IP storage
 window.debugGuestIPs = async function(sessionId) {
     if (!sessionId && appState.currentSessionId) {
@@ -2739,7 +2808,7 @@ window.debugGuestIPs = async function(sessionId) {
     console.log("Guest records:", guests);
     
     guests.forEach(guest => {
-        console.log(`Guest: ${guest.guest_name}, IP: ${guest.guest_ip || 'NO IP STORED'}, Status: ${guest.status}`);
+        console.log(`Guest: ${guest.guest_name}, IP: ${guest.guest_ip || 'NO IP STORED'}, Status: ${guest.status}, Note: ${guest.guest_note || 'No note'}`);
     });
     
     return guests;
