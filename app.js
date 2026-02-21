@@ -1358,28 +1358,36 @@ function saveSessionToStorage() {
     }));
 }
 
+
 // ============================================
-// PENDING GUESTS SYSTEM
+// PENDING GUESTS SYSTEM - COMPLETELY REWRITTEN
 // ============================================
 
 // Setup pending guests subscription
-// Setup pending guests subscription
 function setupPendingGuestsSubscription() {
-    console.log("🔄 Setting up pending guests subscription...");
-    
-    if (appState.pendingSubscription) {
-        supabaseClient.removeChannel(appState.pendingSubscription);
-        appState.pendingSubscription = null;
-    }
+    console.log("🔄 Setting up enhanced pending guests subscription...");
     
     if (!appState.isHost || !appState.currentSessionId) {
         console.log("⚠️ Cannot setup pending subscription: Not host or no session ID");
+        if (pendingGuestsBtn) pendingGuestsBtn.style.display = 'none';
         return;
     }
     
-    // Listen for database changes
-    const dbSubscription = supabaseClient
-        .channel('db_changes_' + appState.currentSessionId)
+    console.log("✅ Host detected, setting up pending guests for session:", appState.currentSessionId);
+    
+    // Clear any existing subscriptions
+    if (appState.pendingSubscription) {
+        supabaseClient.removeChannel(appState.pendingSubscription);
+    }
+    
+    // Create a channel specifically for this host's session
+    const channelName = `pending-guests-${appState.currentSessionId}-${Date.now()}`;
+    console.log("Creating channel:", channelName);
+    
+    appState.pendingSubscription = supabaseClient.channel(channelName);
+    
+    // Listen for INSERT events on session_guests
+    appState.pendingSubscription
         .on(
             'postgres_changes',
             {
@@ -1388,133 +1396,145 @@ function setupPendingGuestsSubscription() {
                 table: 'session_guests',
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
-            async (payload) => {
-                console.log('📡 NEW PENDING GUEST DETECTED:', payload.new);
+            (payload) => {
+                console.log('🎯 NEW PENDING GUEST INSERTED:', payload);
+                console.log('Guest data:', payload.new);
                 
-                if (payload.new.status === 'pending') {
-                    // Add to pending list
-                    const existingIndex = appState.pendingGuests.findIndex(g => g.id === payload.new.id);
-                    if (existingIndex === -1) {
-                        appState.pendingGuests.push(payload.new);
-                    }
-                    
-                    // Update UI
-                    updatePendingButtonUI();
-                    
-                    // Show notification
-                    showUrgentNotification(payload.new);
-                    
-                    // Play sound
-                    if (appState.soundEnabled) {
-                        try {
-                            messageSound.currentTime = 0;
-                            messageSound.play().catch(e => console.log("Sound play failed:", e));
-                        } catch (e) {
-                            console.log("Sound error:", e);
-                        }
-                    }
-                    
-                    // Also update pending guests list if modal is open
-                    if (pendingGuestsModal.style.display === 'flex') {
-                        showPendingGuests();
-                    }
+                if (payload.new && payload.new.status === 'pending') {
+                    // Handle the new guest immediately
+                    handleNewPendingGuest(payload.new);
                 }
             }
         )
-        .subscribe();
-    
-    // Also listen for broadcast notifications
-    const broadcastSubscription = supabaseClient
-        .channel('host_notifications')
-        .on('broadcast', { event: 'new_guest' }, (payload) => {
-            console.log('📡 BROADCAST NOTIFICATION:', payload);
-            if (payload.payload && payload.payload.session_id === appState.currentSessionId) {
-                // Refresh pending guests
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'session_guests',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                console.log('🔄 PENDING GUEST UPDATED:', payload);
+                // Refresh the list to get latest status
+                loadPendingGuests();
+            }
+        )
+        .subscribe((status, err) => {
+            console.log('📡 Subscription status:', status);
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ Successfully subscribed to pending guests!');
+                // Load initial pending guests
                 loadPendingGuests();
                 
-                // Show notification if not already shown
-                showUrgentNotification(payload.payload.guest);
+                // Show a test message to confirm subscription is working
+                addSystemMessage('🔔 Pending guest notifications are active');
+            }
+            if (err) {
+                console.error('❌ Subscription error:', err);
+            }
+        });
+    
+    // Also listen for realtime via broadcast
+    const broadcastChannel = supabaseClient.channel('guest-broadcast');
+    broadcastChannel
+        .on('broadcast', { event: 'new-guest' }, (payload) => {
+            console.log('📢 Broadcast received:', payload);
+            if (payload.payload && payload.payload.session_id === appState.currentSessionId) {
+                handleNewPendingGuest(payload.payload);
             }
         })
         .subscribe();
     
+    // Store both subscriptions
     appState.pendingSubscription = {
         remove: () => {
-            dbSubscription.unsubscribe();
-            broadcastSubscription.unsubscribe();
+            appState.pendingSubscription.unsubscribe();
+            broadcastChannel.unsubscribe();
         }
     };
-    
-    // Load pending guests immediately
-    loadPendingGuests();
 }
 
-// Show urgent notification
-function showUrgentNotification(guest) {
-    if (!appState.isHost) return;
+// Handle new pending guest
+function handleNewPendingGuest(guest) {
+    console.log("🎯 Handling new pending guest:", guest);
     
-    console.log("🔔 Showing urgent notification for:", guest.guest_name);
+    // Add to pending guests array if not already there
+    const exists = appState.pendingGuests.some(g => g.id === guest.id);
+    if (!exists) {
+        appState.pendingGuests.push(guest);
+        console.log(`Added guest ${guest.guest_name} to pending list. Total: ${appState.pendingGuests.length}`);
+    }
+    
+    // Update button UI
+    updatePendingButtonUI();
+    
+    // Show visual notification
+    showGuestNotification(guest);
+    
+    // Play sound
+    if (appState.soundEnabled) {
+        try {
+            messageSound.currentTime = 0;
+            messageSound.play().catch(e => console.log("Sound play failed:", e));
+        } catch (e) {
+            console.log("Sound error:", e);
+        }
+    }
+    
+    // Update modal if it's open
+    if (pendingGuestsModal.style.display === 'flex') {
+        renderPendingGuestsList();
+    }
+    
+    // Also add a system message to chat
+    addSystemMessage(`🔔 New guest request from ${guest.guest_name}${guest.guest_note ? ': ' + guest.guest_note : ''}`);
+}
+
+// Show guest notification
+function showGuestNotification(guest) {
+    console.log("🔔 Showing notification for:", guest.guest_name);
+    
+    // Remove any existing notifications
+    document.querySelectorAll('.guest-notification').forEach(n => n.remove());
     
     const notification = document.createElement('div');
     notification.className = 'guest-notification';
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-        border-radius: 12px;
-        padding: 20px;
-        z-index: 10000;
-        box-shadow: 0 10px 40px rgba(138, 43, 226, 0.5);
-        animation: slideInRight 0.3s ease;
-        max-width: 380px;
-        border-left: 5px solid var(--warning-yellow);
-    `;
-    
     notification.innerHTML = `
-        <div style="display: flex; align-items: flex-start; gap: 15px;">
-            <div style="background: rgba(255,255,255,0.2); padding: 12px; border-radius: 50%;">
-                <i class="fas fa-user-plus" style="color: white; font-size: 24px;"></i>
+        <div class="notification-content">
+            <div class="notification-icon">
+                <i class="fas fa-user-plus"></i>
             </div>
-            <div style="flex: 1;">
-                <h3 style="color: white; margin: 0 0 5px 0; font-size: 18px;">New Guest Request!</h3>
-                <p style="color: white; margin: 5px 0; opacity: 0.9;">
-                    <strong>${guest.guest_name}</strong> wants to join
-                </p>
-                ${guest.guest_note ? `
-                    <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; margin: 10px 0;">
-                        <i class="fas fa-quote-left" style="color: var(--warning-yellow);"></i>
-                        <span style="color: white;">${guest.guest_note}</span>
-                    </div>
-                ` : ''}
-                <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button onclick="viewPendingGuestsNow()" class="btn btn-small" style="background: white; color: var(--accent-primary);">
-                        <i class="fas fa-eye"></i> View Request
-                    </button>
-                    <button onclick="this.closest('.guest-notification').remove()" class="btn btn-small btn-secondary">
-                        <i class="fas fa-times"></i> Dismiss
-                    </button>
-                </div>
+            <div class="notification-text">
+                <strong>New Guest Request!</strong>
+                <span>${guest.guest_name} wants to join</span>
+                ${guest.guest_note ? `<small>📝 ${guest.guest_note}</small>` : ''}
+            </div>
+            <div class="notification-actions">
+                <button onclick="viewPendingGuestsNow()" class="btn btn-small btn-success">
+                    <i class="fas fa-eye"></i> View
+                </button>
+                <button onclick="this.closest('.guest-notification').remove()" class="btn btn-small btn-secondary">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
         </div>
     `;
     
     document.body.appendChild(notification);
     
-    // Auto remove after 30 seconds
+    // Auto remove after 15 seconds
     setTimeout(() => {
         if (notification.parentNode) {
             notification.remove();
         }
-    }, 30000);
+    }, 15000);
 }
 
-// Load pending guests
 // Load pending guests
 async function loadPendingGuests() {
     if (!appState.isHost) {
         console.log("Cannot load pending guests: Not host");
-        if (pendingGuestsBtn) pendingGuestsBtn.style.display = 'none';
         return;
     }
     
@@ -1528,169 +1548,82 @@ async function loadPendingGuests() {
             return;
         }
         
-        // Load guests pending for current session
         const { data: guests, error } = await supabaseClient
             .from('session_guests')
             .select('*')
             .eq('session_id', appState.currentSessionId)
             .eq('status', 'pending')
-            .order('requested_at', { ascending: true });
+            .order('requested_at', { ascending: false });
         
         if (error) {
             console.error("Error loading pending guests:", error);
-            appState.pendingGuests = [];
-            updatePendingButtonUI();
             return;
         }
         
+        console.log(`✅ Loaded ${guests?.length || 0} pending guests`);
         appState.pendingGuests = guests || [];
-        console.log(`✅ Loaded ${appState.pendingGuests.length} pending guests for your session`);
         
         updatePendingButtonUI();
+        
+        // If modal is open, refresh the list
+        if (pendingGuestsModal.style.display === 'flex') {
+            renderPendingGuestsList();
+        }
         
     } catch (error) {
         console.error("Error in loadPendingGuests:", error);
-        appState.pendingGuests = [];
-        updatePendingButtonUI();
     }
 }
 
-// Show pending guests modal
-async function showPendingGuests() {
+// Render pending guests list
+function renderPendingGuestsList() {
     if (!pendingGuestsList) return;
     
-    console.log("Showing pending guests modal...");
+    pendingGuestsList.innerHTML = '';
     
-    try {
-        await loadPendingGuests();
-        
-        pendingGuestsList.innerHTML = '';
-        
-        if (appState.pendingGuests.length === 0) {
-            if (noPendingGuests) {
-                noPendingGuests.style.display = 'block';
-                noPendingGuests.innerHTML = '<i class="fas fa-check-circle"></i> No pending guest requests';
-            }
-        } else {
-            if (noPendingGuests) noPendingGuests.style.display = 'none';
-            
-            // Also load available rooms for assignment
-            await loadAvailableRooms();
-            
-            appState.pendingGuests.forEach((guest, index) => {
-                const guestDiv = document.createElement('div');
-                guestDiv.className = 'pending-guest';
-                
-                // Create room selection dropdown if guest has no room
-                const roomOptions = appState.availableRooms.length > 0 
-                    ? `<select class="room-select" data-guest-id="${guest.id}">
-                        <option value="">-- Select Room --</option>
-                        ${appState.availableRooms.map((room, i) => {
-                            const roomNumber = (i + 1).toString().padStart(3, '0');
-                            return `<option value="${room.session_id}">Room ${roomNumber} (Host: ${room.host_name})</option>`;
-                        }).join('')}
-                       </select>`
-                    : '<p class="no-rooms-warning">No active rooms available</p>';
-                
-                guestDiv.innerHTML = `
-                    <div class="guest-info">
-                        <div class="guest-name">
-                            <i class="fas fa-user"></i>
-                            <strong>${guest.guest_name}</strong>
-                        </div>
-                        <div class="guest-details">
-                            <small><i class="fas fa-calendar"></i> ${new Date(guest.requested_at).toLocaleString()}</small>
-                            <small><i class="fas fa-network-wired"></i> IP: ${guest.guest_ip || 'Unknown'}</small>
-                            ${guest.guest_note ? `
-                                <div class="guest-note">
-                                    <i class="fas fa-sticky-note"></i> Note: ${guest.guest_note}
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                    <div class="guest-actions">
-                        <div class="room-assignment">
-                            ${roomOptions}
-                        </div>
-                        <button class="btn btn-success btn-small" onclick="approveGuest('${guest.id}')">
-                            <i class="fas fa-check"></i> Approve
-                        </button>
-                        <button class="btn btn-danger btn-small" onclick="denyGuest('${guest.id}')">
-                            <i class="fas fa-times"></i> Deny
-                        </button>
-                    </div>
-                `;
-                pendingGuestsList.appendChild(guestDiv);
-            });
-            
-            // Add event listeners to room selects
-            document.querySelectorAll('.room-select').forEach(select => {
-                select.addEventListener('change', function() {
-                    const guestId = this.dataset.guestId;
-                    const selectedRoom = this.value;
-                    // Store the selected room for this guest
-                    if (!appState.guestRoomAssignments) {
-                        appState.guestRoomAssignments = {};
-                    }
-                    appState.guestRoomAssignments[guestId] = selectedRoom;
-                });
-            });
-        }
-        
-        pendingGuestsModal.style.display = 'flex';
-        
-    } catch (error) {
-        console.error("Error showing pending guests:", error);
+    if (appState.pendingGuests.length === 0) {
         if (noPendingGuests) {
             noPendingGuests.style.display = 'block';
-            noPendingGuests.innerHTML = '<i class="fas fa-exclamation-circle"></i> Error loading pending guests';
+            noPendingGuests.innerHTML = '<i class="fas fa-check-circle"></i> No pending guest requests';
         }
-    }
-}
-
-// Show notification for new pending guest
-function showNewGuestNotification(guest) {
-    if (!appState.isHost) return;
-    
-    console.log("🔔 New guest notification for session:", guest.session_id);
-    
-    // Double-check this guest is for the current session
-    if (guest.session_id !== appState.currentSessionId) {
-        console.log("⏭️ Ignoring notification - guest for different session");
         return;
     }
     
-    const notification = document.createElement('div');
-    notification.className = 'guest-notification';
+    if (noPendingGuests) noPendingGuests.style.display = 'none';
     
-    notification.innerHTML = `
-        <div class="notification-content">
-            <i class="fas fa-user-plus" style="color: var(--accent-light); font-size: 20px;"></i>
-            <div class="notification-text">
-                <strong>New Guest Request!</strong>
-                <small>${guest.guest_name} wants to join</small>
-                ${guest.guest_note ? `<small>Note: ${guest.guest_note}</small>` : ''}
+    appState.pendingGuests.forEach(guest => {
+        const guestDiv = document.createElement('div');
+        guestDiv.className = 'pending-guest';
+        guestDiv.dataset.guestId = guest.id;
+        
+        guestDiv.innerHTML = `
+            <div class="guest-info">
+                <div class="guest-name">
+                    <i class="fas fa-user"></i>
+                    <strong>${guest.guest_name}</strong>
+                </div>
+                <div class="guest-details">
+                    <small><i class="fas fa-calendar"></i> ${new Date(guest.requested_at).toLocaleString()}</small>
+                    <small><i class="fas fa-network-wired"></i> IP: ${guest.guest_ip || 'Unknown'}</small>
+                    ${guest.guest_note ? `
+                        <div class="guest-note">
+                            <i class="fas fa-sticky-note"></i> ${guest.guest_note}
+                        </div>
+                    ` : ''}
+                </div>
             </div>
-            <button class="btn btn-small btn-success" onclick="viewPendingGuestsNow()">
-                <i class="fas fa-eye"></i> View
-            </button>
-        </div>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Auto-remove after 10 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.remove();
-        }
-    }, 10000);
-}
-
-// Helper to view pending guests immediately
-function viewPendingGuestsNow() {
-    showPendingGuests();
-    document.querySelectorAll('.guest-notification').forEach(n => n.remove());
+            <div class="guest-actions">
+                <button class="btn btn-success btn-small" onclick="approveGuest('${guest.id}')">
+                    <i class="fas fa-check"></i> Approve
+                </button>
+                <button class="btn btn-danger btn-small" onclick="denyGuest('${guest.id}')">
+                    <i class="fas fa-times"></i> Deny
+                </button>
+            </div>
+        `;
+        
+        pendingGuestsList.appendChild(guestDiv);
+    });
 }
 
 // Update pending button UI
@@ -1698,43 +1631,52 @@ function updatePendingButtonUI() {
     if (!pendingGuestsBtn || !pendingCount) return;
     
     const count = appState.pendingGuests.length;
+    console.log(`Updating pending button UI. Count: ${count}`);
+    
     pendingCount.textContent = count;
     
     if (count > 0) {
         pendingGuestsBtn.style.display = 'flex';
         pendingGuestsBtn.classList.add('has-pending');
-        pendingGuestsBtn.style.animation = 'pulsePending 2s infinite';
+        pendingCount.style.display = 'inline';
+        
+        // Also update the button text
+        const btnText = pendingGuestsBtn.querySelector('span:not(#pendingCount)') || pendingGuestsBtn;
+        if (btnText) {
+            pendingGuestsBtn.innerHTML = `<i class="fas fa-user-clock"></i> <span id="pendingCount">${count}</span> Pending`;
+        }
     } else {
-        pendingGuestsBtn.style.display = 'flex';
+        pendingGuestsBtn.style.display = 'flex'; // Keep visible but show 0
         pendingGuestsBtn.classList.remove('has-pending');
-        pendingGuestsBtn.style.animation = 'none';
+        pendingCount.textContent = '0';
     }
 }
 
-// Approve a guest
+// Show pending guests modal
+function showPendingGuests() {
+    console.log("Showing pending guests modal...");
+    renderPendingGuestsList();
+    pendingGuestsModal.style.display = 'flex';
+}
+
+// Approve guest
 async function approveGuest(guestRecordId) {
     try {
-        // Get the selected room for this guest
-        const selectedRoom = appState.guestRoomAssignments?.[guestRecordId];
+        console.log("Approving guest:", guestRecordId);
         
-        if (!selectedRoom) {
-            alert("Please select a room for this guest before approving.");
-            return;
-        }
-        
-        const { data: guest } = await supabaseClient
+        const { data: guest, error: fetchError } = await supabaseClient
             .from('session_guests')
             .select('*')
             .eq('id', guestRecordId)
             .single();
         
-        if (!guest) throw new Error("Guest not found");
+        if (fetchError || !guest) {
+            throw new Error("Guest not found");
+        }
         
-        // Update guest with assigned room and approve
         const { error } = await supabaseClient
             .from('session_guests')
             .update({
-                session_id: selectedRoom,
                 status: 'approved',
                 approved_at: new Date().toISOString()
             })
@@ -1742,16 +1684,19 @@ async function approveGuest(guestRecordId) {
         
         if (error) throw error;
         
+        // Remove from pending list
         appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
         updatePendingButtonUI();
         
+        // Close modal if open
         if (pendingGuestsModal.style.display === 'flex') {
-            showPendingGuests();
+            renderPendingGuestsList();
         }
         
+        // Add system message
         await saveMessageToDB('System', `${guest.guest_name} has been approved and joined the chat.`);
         
-        console.log(`✅ Approved guest: ${guest.guest_name} assigned to room: ${selectedRoom}`);
+        console.log(`✅ Approved guest: ${guest.guest_name}`);
         
     } catch (error) {
         console.error("Error approving guest:", error);
@@ -1759,16 +1704,20 @@ async function approveGuest(guestRecordId) {
     }
 }
 
-// Deny a guest
+// Deny guest
 async function denyGuest(guestRecordId) {
     try {
-        const { data: guest } = await supabaseClient
+        console.log("Denying guest:", guestRecordId);
+        
+        const { data: guest, error: fetchError } = await supabaseClient
             .from('session_guests')
             .select('*')
             .eq('id', guestRecordId)
             .single();
         
-        if (!guest) throw new Error("Guest not found");
+        if (fetchError || !guest) {
+            throw new Error("Guest not found");
+        }
         
         const { error } = await supabaseClient
             .from('session_guests')
@@ -1780,11 +1729,13 @@ async function denyGuest(guestRecordId) {
         
         if (error) throw error;
         
+        // Remove from pending list
         appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
         updatePendingButtonUI();
         
+        // Close modal if open
         if (pendingGuestsModal.style.display === 'flex') {
-            showPendingGuests();
+            renderPendingGuestsList();
         }
         
         console.log(`❌ Denied guest: ${guest.guest_name}`);
@@ -1794,6 +1745,16 @@ async function denyGuest(guestRecordId) {
         alert("Failed to deny guest: " + error.message);
     }
 }
+
+// View pending guests now (for notification button)
+window.viewPendingGuestsNow = function() {
+    showPendingGuests();
+    document.querySelectorAll('.guest-notification').forEach(n => n.remove());
+};
+
+// Make functions global
+window.approveGuest = approveGuest;
+window.denyGuest = denyGuest;
 
 // Kick a guest
 window.kickGuest = async function(guestId, guestName) {
