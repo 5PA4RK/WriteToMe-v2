@@ -11,57 +11,83 @@
 <body>
     <!-- Connection Modal -->
 <!-- Connection Modal - Update the modal-body section -->
+<!-- Connection Modal - Complete Redesign -->
 <div id="connectionModal" class="connection-modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h2><i class="fas fa-door-open"></i> WriteToMira - Room Selection</h2>
+            <h2><i class="fas fa-door-open"></i> WriteToMira - Connect to Chat</h2>
         </div>
         <div class="modal-body">
-            <div class="login-form">
+            <!-- Available Rooms Section -->
+            <div class="room-selection-section">
+                <h3><i class="fas fa-list"></i> Available Rooms</h3>
+                <div class="rooms-list" id="availableRoomsList">
+                    <div class="loading-spinner"></div>
+                </div>
+                <div class="rooms-actions">
+                    <button id="refreshRoomsBtn" class="btn btn-small btn-secondary">
+                        <i class="fas fa-sync-alt"></i> Refresh Rooms
+                    </button>
+                </div>
+            </div>
+
+            <!-- Connection Form -->
+            <div class="connection-form">
+                <h3><i class="fas fa-sign-in-alt"></i> Enter Your Details</h3>
                 
-                <!-- Room Selection Section -->
-                <div class="room-selection-section" id="roomSelection">
-                    <h3><i class="fas fa-list"></i> Available Rooms</h3>
-                    <div class="rooms-list" id="availableRoomsList">
-                        <div class="loading-spinner"></div>
+                <!-- Username Field -->
+                <div class="form-group">
+                    <label for="usernameInput">
+                        <i class="fas fa-user"></i> Username:
+                    </label>
+                    <input type="text" id="usernameInput" class="form-input" 
+                           placeholder="Enter your username" autocomplete="off">
+                </div>
+                
+                <!-- Password Field -->
+                <div class="form-group">
+                    <label for="passwordInput">
+                        <i class="fas fa-lock"></i> Password:
+                    </label>
+                    <input type="password" id="passwordInput" class="form-input" 
+                           placeholder="Enter your password">
+                    <div class="password-hint" id="passwordHint"></div>
+                </div>
+                
+                <!-- Guest Note Section - Prominent and Clear -->
+                <div class="guest-note-section">
+                    <div class="note-header">
+                        <i class="fas fa-sticky-note"></i>
+                        <h3>Leave a Note for the Host (Optional)</h3>
                     </div>
-                    <div class="rooms-actions">
-                        <button id="refreshRoomsBtn" class="btn btn-small btn-secondary">
-                            <i class="fas fa-sync-alt"></i> Refresh Rooms
-                        </button>
+                    <textarea id="guestNoteInput" class="form-input note-textarea" 
+                              placeholder="Example: Hi, I'm John. I'd like to join the chat to discuss project ideas..." 
+                              rows="4"></textarea>
+                    <div class="note-hint">
+                        <i class="fas fa-info-circle"></i>
+                        <small>Your note will be sent to the host with your connection request</small>
                     </div>
                 </div>
-
-                <!-- Login Section -->
-                <div class="login-section">
-                    <h3><i class="fas fa-sign-in-alt"></i> Login</h3>
-                    <div class="form-group">
-                        <label for="usernameInput"><i class="fas fa-user"></i> Username:</label>
-                        <input type="text" id="usernameInput" class="form-input" placeholder="Enter username">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="passwordInput"><i class="fas fa-lock"></i> Password:</label>
-                        <input type="password" id="passwordInput" class="form-input" placeholder="Enter password">
-                        <div class="password-hint" id="passwordHint"></div>
-                    </div>
-                    
-                    <!-- Guest Note Section - Moved inside login section -->
-                    <div class="guest-note-section" style="margin-top: 15px;">
-                        <h3><i class="fas fa-sticky-note"></i> Leave a Note (Optional)</h3>
-                        <textarea id="guestNoteInput" class="form-input" placeholder="Hi, I'm [Name]. I need [Something]. Contact me via [Method].." rows="3"></textarea>
-                        <small style="color: var(--text-secondary); display: block; margin-top: 5px;">
-                            <i class="fas fa-info-circle"></i> This note will be sent to the host with your request
-                        </small>
-                    </div>
-                    
-                    <div id="passwordError" class="error-message" style="display: none;">
-                        Incorrect password.
-                    </div>
-                    
-                    <button id="connectBtn" class="btn" style="width: 100%; margin-top: 20px;">
-                        <i class="fas fa-plug"></i> Connect to Room
-                    </button>
+                
+                <!-- Error Message Area -->
+                <div id="passwordError" class="error-message" style="display: none;">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span></span>
+                </div>
+                
+                <!-- CONNECT BUTTON - Large and Prominent -->
+                <button id="connectBtn" class="btn btn-primary btn-large connect-button">
+                    <i class="fas fa-plug"></i>
+                    <span>Connect to Room</span>
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+                
+                <!-- Connection Help Text -->
+                <div class="connection-help">
+                    <small>
+                        <i class="fas fa-shield-alt"></i>
+                        Your connection is secure. Hosts will see your request immediately.
+                    </small>
                 </div>
             </div>
         </div>
