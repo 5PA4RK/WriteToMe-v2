@@ -837,6 +837,7 @@ async function connectAsHost(userIP) {
 
 // Connect as guest - simpler version
 // Connect as guest
+// Connect as guest
 async function connectAsGuest(userIP) {
     try {
         console.log("👤 Connecting as guest...");
@@ -872,7 +873,7 @@ async function connectAsGuest(userIP) {
                 connectionModal.style.display = 'none';
                 resetConnectButton();
                 updateUIForPendingGuest();
-                setupPendingApprovalSubscription();
+                setupPendingApprovalSubscription(targetSession.session_id);
                 return;
             } else if (existingRequest.status === 'approved') {
                 console.log("Guest already approved");
@@ -907,17 +908,65 @@ async function connectAsGuest(userIP) {
             await saveVisitorNote(targetSession.session_id, appState.guestNote, userIP);
         }
         
-        console.log("✅ Guest added to pending list");
+        console.log("✅ Guest added to pending list for session:", targetSession.session_id);
         appState.sessionId = targetSession.session_id;
+        
+        // **CRITICAL FIX: Manually trigger a refresh of pending guests for the host**
+        // We need to notify the host's session that a new guest is pending
+        await triggerPendingGuestNotification(targetSession.session_id, {
+            guest_name: appState.userName,
+            guest_note: appState.guestNote
+        });
+        
         connectionModal.style.display = 'none';
         resetConnectButton();
         updateUIForPendingGuest();
-        setupPendingApprovalSubscription();
+        setupPendingApprovalSubscription(targetSession.session_id);
         
     } catch (error) {
         console.error("Error in guest connection:", error);
         alert("An error occurred: " + error.message);
         resetConnectButton();
+    }
+}
+
+// New function to trigger pending guest notification
+async function triggerPendingGuestNotification(sessionId, guestInfo) {
+    try {
+        // Update the session to trigger a change that will be picked up by the host
+        // This ensures the host's subscription will fire
+        const { error } = await supabaseClient
+            .from('sessions')
+            .update({
+                updated_at: new Date().toISOString(),
+                last_guest_request: new Date().toISOString()
+            })
+            .eq('session_id', sessionId);
+        
+        if (error) {
+            console.log("Could not update session timestamp:", error);
+        }
+        
+        // Also insert a system message that the host will see
+        const { error: msgError } = await supabaseClient
+            .from('messages')
+            .insert([{
+                session_id: sessionId,
+                sender_id: 'system',
+                sender_name: 'System',
+                message: `🔔 New pending guest: ${guestInfo.guest_name}${guestInfo.guest_note ? ' - Note: ' + guestInfo.guest_note : ''}`,
+                created_at: new Date().toISOString(),
+                is_system_notification: true
+            }]);
+        
+        if (msgError) {
+            console.log("Could not send system message:", msgError);
+        }
+        
+        console.log("✅ Triggered pending guest notification");
+        
+    } catch (error) {
+        console.error("Error triggering notification:", error);
     }
 }
 
@@ -1465,7 +1514,6 @@ async function showPendingGuests() {
 }
 
 // Show notification for new pending guest
-// Show notification for new pending guest
 function showNewGuestNotification(guest) {
     if (!appState.isHost) return;
     
@@ -1480,16 +1528,12 @@ function showNewGuestNotification(guest) {
     const notification = document.createElement('div');
     notification.className = 'guest-notification';
     
-    // Get room number for display
-    const sessionIndex = appState.availableRooms.findIndex(s => s.session_id === guest.session_id);
-    const roomNumber = sessionIndex >= 0 ? (sessionIndex + 1).toString().padStart(3, '0') : '???';
-    
     notification.innerHTML = `
         <div class="notification-content">
             <i class="fas fa-user-plus" style="color: var(--accent-light); font-size: 20px;"></i>
             <div class="notification-text">
-                <strong>New Room Request!</strong>
-                <small>${guest.guest_name} wants to join Room ${roomNumber}</small>
+                <strong>New Guest Request!</strong>
+                <small>${guest.guest_name} wants to join</small>
                 ${guest.guest_note ? `<small>Note: ${guest.guest_note}</small>` : ''}
             </div>
             <button class="btn btn-small btn-success" onclick="viewPendingGuestsNow()">
@@ -1500,17 +1544,11 @@ function showNewGuestNotification(guest) {
     
     document.body.appendChild(notification);
     
-    if (appState.soundEnabled) {
-        try {
-            messageSound.currentTime = 0;
-            messageSound.play().catch(e => console.log("Sound play failed:", e));
-        } catch (e) {
-            console.log("Sound error:", e);
-        }
-    }
-    
+    // Auto-remove after 10 seconds
     setTimeout(() => {
-        if (notification.parentNode) notification.remove();
+        if (notification.parentNode) {
+            notification.remove();
+        }
     }, 10000);
 }
 
