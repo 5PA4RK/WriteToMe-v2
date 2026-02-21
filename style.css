@@ -2346,3 +2346,112 @@ footer p {
         min-width: 80px;
     }
 }
+/* Enhanced Guest Notifications */
+.guest-notification {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    border-radius: 16px;
+    padding: 20px;
+    z-index: 10000;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(255, 255, 255, 0.1);
+    animation: slideInRight 0.3s ease, glowPulse 2s infinite;
+    max-width: 400px;
+    border-left: 5px solid var(--warning-yellow);
+}
+
+@keyframes glowPulse {
+    0% { box-shadow: 0 10px 40px rgba(138, 43, 226, 0.3); }
+    50% { box-shadow: 0 10px 50px rgba(138, 43, 226, 0.6); }
+    100% { box-shadow: 0 10px 40px rgba(138, 43, 226, 0.3); }
+}
+
+.notification-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    color: white;
+}
+
+.notification-icon {
+    background: rgba(255, 255, 255, 0.2);
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.notification-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.notification-text strong {
+    font-size: 18px;
+    margin-bottom: 5px;
+}
+
+.notification-text span {
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.notification-text small {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 8px;
+    border-radius: 8px;
+    margin-top: 8px;
+    font-size: 13px;
+    border-left: 3px solid var(--warning-yellow);
+}
+
+.notification-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.notification-actions button {
+    background: white;
+    color: var(--accent-primary);
+    border: none;
+    padding: 8px 15px;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.notification-actions button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.notification-actions button.btn-secondary {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.notification-actions button.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Pending guests button animation */
+#pendingGuestsBtn.has-pending {
+    animation: pulse 1.5s infinite;
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    border: 2px solid var(--warning-yellow);
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
