@@ -836,6 +836,7 @@ async function connectAsHost(userIP) {
 }
 
 // Connect as guest
+// Connect as guest - FIXED VERSION
 async function connectAsGuest(userIP) {
     try {
         console.log("👤 Connecting as guest...");
@@ -843,7 +844,7 @@ async function connectAsGuest(userIP) {
         // Find any active session
         const { data: activeSessions, error: sessionError } = await supabaseClient
             .from('sessions')
-            .select('session_id, host_name, host_id, host_name')
+            .select('session_id, host_name, host_id')
             .eq('is_active', true)
             .limit(1);
         
@@ -856,12 +857,29 @@ async function connectAsGuest(userIP) {
         const targetSession = activeSessions[0];
         console.log("Found active session:", targetSession.session_id);
         
+        // IMPORTANT: Generate a proper UUID for the guest_id
+        // Instead of using appState.userId (which might be a string), we need to ensure it's a UUID
+        let guestUuid = appState.userId;
+        
+        // Check if it's a valid UUID format
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(guestUuid)) {
+            console.log("Invalid UUID format, generating a proper UUID");
+            // Generate a proper UUID v4
+            guestUuid = crypto.randomUUID ? crypto.randomUUID() : 
+                'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    const r = Math.random() * 16 | 0;
+                    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+        }
+        
         // Check if guest already has a pending request
         const { data: existingRequest } = await supabaseClient
             .from('session_guests')
             .select('status, id')
             .eq('session_id', targetSession.session_id)
-            .eq('guest_id', appState.userId)
+            .eq('guest_id', guestUuid)
             .maybeSingle();
         
         if (existingRequest) {
@@ -880,21 +898,22 @@ async function connectAsGuest(userIP) {
             }
         }
         
-        // Create new pending request
+        // Create new pending request with proper UUID
         console.log("Adding guest with IP:", userIP);
+        console.log("Using guest UUID:", guestUuid);
+        
         const { data: newGuest, error: insertError } = await supabaseClient
             .from('session_guests')
             .insert([{
                 session_id: targetSession.session_id,
-                guest_id: appState.userId,
+                guest_id: guestUuid,  // Now using proper UUID
                 guest_name: appState.userName,
                 guest_ip: userIP,
                 guest_note: appState.guestNote || "",
                 status: 'pending',
                 requested_at: new Date().toISOString()
             }])
-            .select()
-            .single();
+            .select();
         
         if (insertError) {
             console.error("Error adding to pending:", insertError);
@@ -905,13 +924,18 @@ async function connectAsGuest(userIP) {
         
         console.log("✅ Guest added to pending list:", newGuest);
         
-        // Save the visitor note to the new table if provided
+        // Save the visitor note if provided
         if (appState.guestNote && appState.guestNote.trim() !== '') {
             await saveVisitorNote(targetSession.session_id, appState.guestNote, userIP);
         }
         
-        // CRITICAL: Force a direct notification to the host
-        await forceNotifyHost(targetSession, newGuest);
+        // Directly update the session to trigger a change (using created_at since updated_at doesn't exist)
+        await supabaseClient
+            .from('sessions')
+            .update({
+                created_at: new Date().toISOString()  // Using created_at instead of updated_at
+            })
+            .eq('session_id', targetSession.session_id);
         
         appState.sessionId = targetSession.session_id;
         connectionModal.style.display = 'none';
@@ -1364,12 +1388,12 @@ function saveSessionToStorage() {
 // ============================================
 
 // Setup pending guests subscription
+// Setup pending guests subscription - FIXED VERSION
 function setupPendingGuestsSubscription() {
-    console.log("🔄 Setting up enhanced pending guests subscription...");
+    console.log("🔄 Setting up pending guests subscription...");
     
     if (!appState.isHost || !appState.currentSessionId) {
         console.log("⚠️ Cannot setup pending subscription: Not host or no session ID");
-        if (pendingGuestsBtn) pendingGuestsBtn.style.display = 'none';
         return;
     }
     
@@ -1380,14 +1404,9 @@ function setupPendingGuestsSubscription() {
         supabaseClient.removeChannel(appState.pendingSubscription);
     }
     
-    // Create a channel specifically for this host's session
-    const channelName = `pending-guests-${appState.currentSessionId}-${Date.now()}`;
-    console.log("Creating channel:", channelName);
-    
-    appState.pendingSubscription = supabaseClient.channel(channelName);
-    
-    // Listen for INSERT events on session_guests
-    appState.pendingSubscription
+    // Create a channel for this host's session
+    appState.pendingSubscription = supabaseClient
+        .channel(`pending-${appState.currentSessionId}`)
         .on(
             'postgres_changes',
             {
@@ -1397,63 +1416,70 @@ function setupPendingGuestsSubscription() {
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
             (payload) => {
-                console.log('🎯 NEW PENDING GUEST INSERTED:', payload);
-                console.log('Guest data:', payload.new);
+                console.log('🎯 NEW PENDING GUEST DETECTED:', payload.new);
                 
                 if (payload.new && payload.new.status === 'pending') {
-                    // Handle the new guest immediately
-                    handleNewPendingGuest(payload.new);
+                    // Add to pending list
+                    appState.pendingGuests.push(payload.new);
+                    
+                    // Update UI
+                    updatePendingButtonUI();
+                    
+                    // Show notification
+                    showUrgentNotification(payload.new);
+                    
+                    // Play sound
+                    if (appState.soundEnabled) {
+                        try {
+                            messageSound.currentTime = 0;
+                            messageSound.play().catch(e => console.log("Sound play failed:", e));
+                        } catch (e) {
+                            console.log("Sound error:", e);
+                        }
+                    }
+                    
+                    // Update modal if open
+                    if (pendingGuestsModal.style.display === 'flex') {
+                        showPendingGuests();
+                    }
                 }
-            }
-        )
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'session_guests',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            (payload) => {
-                console.log('🔄 PENDING GUEST UPDATED:', payload);
-                // Refresh the list to get latest status
-                loadPendingGuests();
             }
         )
         .subscribe((status, err) => {
             console.log('📡 Subscription status:', status);
             if (status === 'SUBSCRIBED') {
                 console.log('✅ Successfully subscribed to pending guests!');
-                // Load initial pending guests
+                // Load existing pending guests
                 loadPendingGuests();
-                
-                // Show a test message to confirm subscription is working
-                addSystemMessage('🔔 Pending guest notifications are active');
             }
             if (err) {
                 console.error('❌ Subscription error:', err);
             }
         });
-    
-    // Also listen for realtime via broadcast
-    const broadcastChannel = supabaseClient.channel('guest-broadcast');
-    broadcastChannel
-        .on('broadcast', { event: 'new-guest' }, (payload) => {
-            console.log('📢 Broadcast received:', payload);
-            if (payload.payload && payload.payload.session_id === appState.currentSessionId) {
-                handleNewPendingGuest(payload.payload);
-            }
-        })
-        .subscribe();
-    
-    // Store both subscriptions
-    appState.pendingSubscription = {
-        remove: () => {
-            appState.pendingSubscription.unsubscribe();
-            broadcastChannel.unsubscribe();
-        }
-    };
 }
+// Debug function to manually check pending guests
+window.debugPendingSystem = async function() {
+    console.log("🔍 Debugging pending guests system...");
+    console.log("Is host:", appState.isHost);
+    console.log("Current session ID:", appState.currentSessionId);
+    
+    // Check session_guests table
+    const { data: guests, error } = await supabaseClient
+        .from('session_guests')
+        .select('*')
+        .eq('session_id', appState.currentSessionId)
+        .eq('status', 'pending');
+    
+    if (error) {
+        console.error("Error fetching guests:", error);
+    } else {
+        console.log("Pending guests in DB:", guests);
+        appState.pendingGuests = guests || [];
+        updatePendingButtonUI();
+    }
+    
+    return guests;
+};
 
 // Handle new pending guest
 function handleNewPendingGuest(guest) {
