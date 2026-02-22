@@ -31,7 +31,8 @@ const appState = {
     guestNote: "",
     visitorNotes: [],
     unreadNotesCount: 0,
-    showNotesPanel: false
+    showNotesPanel: false,
+    allSessions: [] // Store all sessions for stable numbering
 };
 
 // DOM Elements
@@ -79,15 +80,10 @@ const usersTabBtn = document.getElementById('usersTabBtn');
 const historyTabContent = document.getElementById('historyTabContent');
 const usersTabContent = document.getElementById('usersTabContent');
 
-// Room selection elements - REMOVED but keeping reference to avoid errors
-const roomSelection = document.getElementById('roomSelection');
-const availableRoomsList = document.getElementById('availableRoomsList');
-const refreshRoomsBtn = document.getElementById('refreshRoomsBtn');
 const guestNoteInput = document.getElementById('guestNoteInput');
 
 // User Management DOM Elements
 const userManagementSection = document.getElementById('userManagementSection');
-const backToHistoryBtn = document.getElementById('backToHistoryBtn');
 const addUserBtn = document.getElementById('addUserBtn');
 const userSearchInput = document.getElementById('userSearchInput');
 const usersList = document.getElementById('usersList');
@@ -124,6 +120,17 @@ const refreshNotesBtn = document.getElementById('refreshNotesBtn');
 const markAllReadBtn = document.getElementById('markAllReadBtn');
 const notesSearchInput = document.getElementById('notesSearchInput');
 
+// Guest notification elements
+const guestNotifyBtn = document.getElementById('guestNotifyBtn');
+const guestNotificationModal = document.getElementById('guestNotificationModal');
+const closeGuestNotifyModal = document.getElementById('closeGuestNotifyModal');
+const guestNotifyName = document.getElementById('guestNotifyName');
+const guestNotifyEmail = document.getElementById('guestNotifyEmail');
+const guestNotifyMessage = document.getElementById('guestNotifyMessage');
+const sendGuestNotification = document.getElementById('sendGuestNotification');
+const guestNotifyError = document.getElementById('guestNotifyError');
+const guestNotifySuccess = document.getElementById('guestNotifySuccess');
+
 // ============================================
 // INITIALIZATION
 // ============================================
@@ -134,11 +141,6 @@ async function initApp() {
     const mainContainer = document.querySelector('.main-container') || document.querySelector('.app-container');
     if (mainContainer) {
         mainContainer.style.display = 'none';
-    }
-    
-    // Hide room selection section since guests don't need it anymore
-    if (roomSelection) {
-        roomSelection.style.display = 'none';
     }
     
     document.body.classList.remove('host-mode');
@@ -183,6 +185,7 @@ async function initApp() {
     populateEmojis();
     
     if (appState.isHost || savedSession) {
+        await loadAllSessions();
         loadChatSessions();
     }
     
@@ -322,6 +325,34 @@ async function reconnectToSession() {
 }
 
 // ============================================
+// LOAD ALL SESSIONS FOR STABLE NUMBERING
+// ============================================
+
+async function loadAllSessions() {
+    try {
+        const { data: sessions, error } = await supabaseClient
+            .from('sessions')
+            .select('*')
+            .order('created_at', { ascending: true });
+        
+        if (error) throw error;
+        
+        appState.allSessions = sessions || [];
+        console.log(`📊 Loaded ${appState.allSessions.length} total sessions for stable numbering`);
+    } catch (error) {
+        console.error("Error loading all sessions:", error);
+        appState.allSessions = [];
+    }
+}
+
+// Get stable room number for a session
+function getStableRoomNumber(sessionId) {
+    const index = appState.allSessions.findIndex(s => s.session_id === sessionId);
+    if (index === -1) return '?';
+    return (index + 1).toString(); // 1-based index for display
+}
+
+// ============================================
 // EVENT LISTENERS SETUP
 // ============================================
 
@@ -352,9 +383,19 @@ function setupEventListeners() {
         connectBtn.addEventListener('click', handleConnect);
     }
     
-    // Hide refresh rooms button since we don't need it anymore
-    if (refreshRoomsBtn) {
-        refreshRoomsBtn.style.display = 'none';
+    // Guest notification button
+    if (guestNotifyBtn) {
+        guestNotifyBtn.addEventListener('click', showGuestNotificationModal);
+    }
+    
+    if (closeGuestNotifyModal) {
+        closeGuestNotifyModal.addEventListener('click', () => {
+            guestNotificationModal.style.display = 'none';
+        });
+    }
+    
+    if (sendGuestNotification) {
+        sendGuestNotification.addEventListener('click', sendGuestNotificationToAdmin);
     }
     
     // Logout
@@ -410,7 +451,10 @@ function setupEventListeners() {
     
     // History
     if (refreshHistoryBtn) {
-        refreshHistoryBtn.addEventListener('click', loadChatSessions);
+        refreshHistoryBtn.addEventListener('click', async () => {
+            await loadAllSessions();
+            loadChatSessions();
+        });
     }
     
     // Sound control
@@ -482,6 +526,13 @@ function setupEventListeners() {
             notesBtn && !notesBtn.contains(e.target)) {
             notesPanel.classList.remove('show');
             appState.showNotesPanel = false;
+        }
+    });
+    
+    // Click outside to close guest notification modal
+    window.addEventListener('click', (e) => {
+        if (guestNotificationModal && e.target === guestNotificationModal) {
+            guestNotificationModal.style.display = 'none';
         }
     });
 }
@@ -753,6 +804,9 @@ async function connectAsHost(userIP) {
             return;
         }
         
+        // Refresh all sessions for stable numbering
+        await loadAllSessions();
+        
         appState.sessionId = sessionId;
         appState.currentSessionId = sessionId;
         appState.isConnected = true;
@@ -788,7 +842,7 @@ async function connectAsHost(userIP) {
 }
 
 // ============================================
-// CONNECT AS GUEST - SIMPLIFIED - AUTO-JOIN LATEST ROOM
+// CONNECT AS GUEST - AUTO-JOIN LATEST ROOM
 // ============================================
 
 async function connectAsGuest(userIP) {
@@ -873,7 +927,6 @@ async function createNewGuestRequest(session, userIP) {
         if (insertError) {
             console.error("Error adding to pending:", insertError);
             
-            // Check for specific error
             if (insertError.message.includes('duplicate key')) {
                 alert("You already have a pending request for this room.");
             } else {
@@ -895,7 +948,7 @@ async function createNewGuestRequest(session, userIP) {
             await supabaseClient
                 .from('sessions')
                 .update({
-                    created_at: new Date().toISOString() // Using created_at since updated_at might not exist
+                    created_at: new Date().toISOString()
                 })
                 .eq('session_id', session.session_id);
         } catch (updateError) {
@@ -1017,23 +1070,16 @@ function setupPendingGuestsSubscription() {
             },
             (payload) => {
                 console.log('🎯 NEW PENDING GUEST DETECTED:', payload.new);
-                console.log('Guest name:', payload.new.guest_name);
-                console.log('Guest note:', payload.new.guest_note);
                 
                 if (payload.new && payload.new.status === 'pending') {
-                    // Add to pending list
                     const exists = appState.pendingGuests.some(g => g.id === payload.new.id);
                     if (!exists) {
                         appState.pendingGuests.push(payload.new);
                     }
                     
-                    // Update UI
                     updatePendingButtonUI();
-                    
-                    // Show notification
                     showGuestNotification(payload.new);
                     
-                    // Play sound
                     if (appState.soundEnabled) {
                         try {
                             messageSound.currentTime = 0;
@@ -1043,10 +1089,8 @@ function setupPendingGuestsSubscription() {
                         }
                     }
                     
-                    // Add system message to chat
                     addSystemMessage(`🔔 New guest request from ${payload.new.guest_name}${payload.new.guest_note ? ': ' + payload.new.guest_note : ''}`);
                     
-                    // Update modal if open
                     if (pendingGuestsModal.style.display === 'flex') {
                         showPendingGuests();
                     }
@@ -1063,7 +1107,6 @@ function setupPendingGuestsSubscription() {
             },
             (payload) => {
                 console.log('🔄 PENDING GUEST UPDATED:', payload.new);
-                // Refresh the list
                 loadPendingGuests();
             }
         )
@@ -1071,7 +1114,6 @@ function setupPendingGuestsSubscription() {
             console.log('📡 Pending guests subscription status:', status);
             if (status === 'SUBSCRIBED') {
                 console.log('✅ Successfully subscribed to pending guests!');
-                // Load existing pending guests
                 loadPendingGuests();
             }
             if (err) {
@@ -1114,7 +1156,6 @@ async function loadPendingGuests() {
         
         updatePendingButtonUI();
         
-        // If modal is open, refresh the list
         if (pendingGuestsModal.style.display === 'flex') {
             renderPendingGuestsList();
         }
@@ -1128,7 +1169,6 @@ async function loadPendingGuests() {
 function showGuestNotification(guest) {
     console.log("🔔 Showing notification for:", guest.guest_name);
     
-    // Remove any existing notifications
     document.querySelectorAll('.guest-notification').forEach(n => n.remove());
     
     const notification = document.createElement('div');
@@ -1156,7 +1196,6 @@ function showGuestNotification(guest) {
     
     document.body.appendChild(notification);
     
-    // Auto remove after 15 seconds
     setTimeout(() => {
         if (notification.parentNode) {
             notification.remove();
@@ -1269,16 +1308,13 @@ async function approveGuest(guestRecordId) {
         
         if (error) throw error;
         
-        // Remove from pending list
         appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
         updatePendingButtonUI();
         
-        // Close modal if open
         if (pendingGuestsModal.style.display === 'flex') {
             renderPendingGuestsList();
         }
         
-        // Add system message
         await saveMessageToDB('System', `${guest.guest_name} has been approved and joined the chat.`);
         
         console.log(`✅ Approved guest: ${guest.guest_name}`);
@@ -1314,11 +1350,9 @@ async function denyGuest(guestRecordId) {
         
         if (error) throw error;
         
-        // Remove from pending list
         appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
         updatePendingButtonUI();
         
-        // Close modal if open
         if (pendingGuestsModal.style.display === 'flex') {
             renderPendingGuestsList();
         }
@@ -1354,7 +1388,6 @@ window.kickGuest = async function(guestId, guestName) {
         
         await saveMessageToDB('System', `${guestName} has been kicked from the chat by host.`);
         
-        // Refresh pending list and session view
         loadPendingGuests();
         loadChatSessions();
         
@@ -1432,6 +1465,122 @@ function setupPendingApprovalSubscription(sessionId) {
 }
 
 // ============================================
+// GUEST NOTIFICATION TO ADMIN (NO LOGIN REQUIRED)
+// ============================================
+
+function showGuestNotificationModal() {
+    guestNotifyName.value = '';
+    guestNotifyEmail.value = '';
+    guestNotifyMessage.value = '';
+    guestNotifyError.style.display = 'none';
+    guestNotifySuccess.style.display = 'none';
+    guestNotificationModal.style.display = 'flex';
+}
+
+async function sendGuestNotificationToAdmin() {
+    const name = guestNotifyName.value.trim();
+    const email = guestNotifyEmail.value.trim();
+    const message = guestNotifyMessage.value.trim();
+    
+    guestNotifyError.style.display = 'none';
+    guestNotifySuccess.style.display = 'none';
+    
+    if (!name || !email || !message) {
+        guestNotifyError.textContent = "Please fill in all fields.";
+        guestNotifyError.style.display = 'block';
+        return;
+    }
+    
+    if (!email.includes('@') || !email.includes('.')) {
+        guestNotifyError.textContent = "Please enter a valid email address.";
+        guestNotifyError.style.display = 'block';
+        return;
+    }
+    
+    sendGuestNotification.disabled = true;
+    sendGuestNotification.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+    
+    try {
+        // Get active sessions to send notification to all hosts
+        const { data: activeSessions, error: sessionError } = await supabaseClient
+            .from('sessions')
+            .select('session_id, host_id')
+            .eq('is_active', true);
+        
+        if (sessionError) throw sessionError;
+        
+        const userIP = await getRealIP();
+        
+        // Save as visitor note for all active hosts
+        const notificationPromises = [];
+        
+        if (activeSessions && activeSessions.length > 0) {
+            for (const session of activeSessions) {
+                notificationPromises.push(
+                    supabaseClient
+                        .from('visitor_notes')
+                        .insert([{
+                            guest_id: null,
+                            guest_name: name,
+                            session_id: session.session_id,
+                            note_text: `📧 GUEST NOTIFICATION\nFrom: ${name} (${email})\nMessage: ${message}`,
+                            guest_ip: userIP,
+                            created_at: new Date().toISOString(),
+                            read_by_host: false,
+                            is_guest_notification: true
+                        }])
+                );
+                
+                // Also send as system message if possible
+                notificationPromises.push(
+                    supabaseClient
+                        .from('messages')
+                        .insert([{
+                            session_id: session.session_id,
+                            sender_id: 'system',
+                            sender_name: 'System',
+                            message: `📬 Guest notification from ${name} (${email}): ${message}`,
+                            created_at: new Date().toISOString(),
+                            is_notification: true
+                        }])
+                );
+            }
+        }
+        
+        // Also save to a general notifications table if exists, or just a fallback
+        notificationPromises.push(
+            supabaseClient
+                .from('guest_notifications')
+                .insert([{
+                    guest_name: name,
+                    guest_email: email,
+                    message: message,
+                    guest_ip: userIP,
+                    created_at: new Date().toISOString()
+                }])
+                .maybeSingle() // Use maybeSingle to avoid error if table doesn't exist
+        );
+        
+        await Promise.all(notificationPromises);
+        
+        guestNotifySuccess.style.display = 'block';
+        guestNotifySuccess.textContent = "✅ Your message has been sent to the administrator!";
+        
+        setTimeout(() => {
+            guestNotificationModal.style.display = 'none';
+        }, 3000);
+        
+    } catch (error) {
+        console.error("Error sending guest notification:", error);
+        guestNotifyError.textContent = "Failed to send message. Please try again later.";
+        guestNotifyError.style.display = 'block';
+    } finally {
+        sendGuestNotification.disabled = false;
+        sendGuestNotification.innerHTML = '<i class="fas fa-paper-plane"></i> Send Message';
+    }
+}
+
+// ============================================
 // REALTIME SUBSCRIPTIONS
 // ============================================
 
@@ -1464,11 +1613,10 @@ function setupRealtimeSubscriptions() {
                 table: 'messages'
             },
             (payload) => {
-                console.log('📦 Realtime message received:', payload.new?.sender_name, payload.new?.message?.substring(0, 30));
+                console.log('📦 Realtime message received:', payload.new?.sender_name);
                 
                 if (payload.new && payload.new.session_id === appState.currentSessionId) {
                     if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                        console.log('✅ Displaying new message from:', payload.new.sender_name);
                         displayMessage({
                             id: payload.new.id,
                             sender: payload.new.sender_name,
@@ -1493,15 +1641,12 @@ function setupRealtimeSubscriptions() {
         )
         .subscribe((status, err) => {
             console.log('📡 MESSAGES Subscription status:', status);
-            if (status === 'SUBSCRIBED') {
-                console.log('✅ SUCCESS: Subscribed to realtime messages!');
-            }
             if (err) {
                 console.error('❌ Messages subscription error:', err);
             }
         });
     
-    // Typing subscription (simplified)
+    // Typing subscription
     appState.typingSubscription = supabaseClient
         .channel('typing_' + appState.currentSessionId)
         .on(
@@ -1563,7 +1708,7 @@ async function handleTyping() {
             .from('sessions')
             .update({ 
                 typing_user: appState.userName,
-                created_at: new Date().toISOString() // Using created_at as updated_at might not exist
+                created_at: new Date().toISOString()
             })
             .eq('session_id', appState.currentSessionId);
         
@@ -1619,7 +1764,7 @@ async function sendMessage() {
 // Send message to database
 async function sendMessageToDB(text, imageUrl) {
     try {
-        console.log('💾 Saving message to DB. Text:', text?.substring(0, 50), 'Has image:', !!imageUrl);
+        console.log('💾 Saving message to DB');
         
         const messageData = {
             session_id: appState.currentSessionId,
@@ -1692,13 +1837,13 @@ function displayMessage(message) {
         ${message.type === 'sent' && !message.is_historical ? `
         <div class="message-actions">
             <button class="message-action-btn" onclick="editMessage('${message.id}')">
-                <i class="fas fa-edit"></i> Edit
+                <i class="fas fa-edit"></i>
             </button>
             <button class="message-action-btn" onclick="deleteMessage('${message.id}')">
-                <i class="fas fa-trash"></i> Delete
+                <i class="fas fa-trash"></i>
             </button>
             <button class="message-action-btn" onclick="replyToMessage('${message.id}')">
-                <i class="fas fa-reply"></i> Reply
+                <i class="fas fa-reply"></i>
             </button>
         </div>
         ` : ''}
@@ -1733,13 +1878,15 @@ async function loadChatHistory(sessionId = null) {
                 .eq('session_id', sessionId)
                 .single();
             
+            const roomNumber = getStableRoomNumber(sessionId);
+            
             const historyHeader = document.createElement('div');
             historyHeader.className = 'message received historical';
             historyHeader.innerHTML = `
                 <div class="message-sender">System</div>
                 <div class="message-content">
                     <div class="message-text">
-                        <i class="fas fa-door-open"></i> Chat History
+                        <i class="fas fa-door-open"></i> Chat History - Room ${roomNumber}
                         <br><small>Host: ${session.host_name} | Date: ${new Date(session.created_at).toLocaleDateString()}</small>
                     </div>
                     <div class="message-time"></div>
@@ -1834,7 +1981,6 @@ function updateUIAfterConnection() {
             
             loadChatSessions();
             
-            // Load pending guests immediately
             setTimeout(() => {
                 loadPendingGuests();
                 loadVisitorNotes();
@@ -2136,6 +2282,7 @@ async function loadChatSessions() {
         for (let i = 0; i < sessions.length; i++) {
             const session = sessions[i];
             const isActive = session.session_id === appState.currentSessionId && session.is_active;
+            const roomNumber = getStableRoomNumber(session.session_id);
             
             const { data: guests } = await supabaseClient
                 .from('session_guests')
@@ -2172,7 +2319,7 @@ async function loadChatSessions() {
                 <div class="session-card-header">
                     <div class="session-header-left">
                         <div class="session-id" title="${session.session_id}">
-                            <i class="fas fa-door-open"></i> Room ${i + 1}
+                            <i class="fas fa-door-open"></i> Room ${roomNumber}
                         </div>
                         <div class="session-stats">
                             <div class="stat-item guest-count" title="Approved guests">
@@ -2327,7 +2474,7 @@ function returnToActiveChat() {
     loadChatHistory();
 }
 
-// Delete session
+// Delete session - FIXED VERSION
 async function deleteSession(sessionId) {
     if (!appState.isHost) {
         alert("Only hosts can delete sessions.");
@@ -2339,26 +2486,45 @@ async function deleteSession(sessionId) {
     }
     
     try {
-        const { error } = await supabaseClient
+        console.log("🗑️ Deleting session:", sessionId);
+        
+        // First delete messages
+        const { error: messagesError } = await supabaseClient
             .from('messages')
             .delete()
             .eq('session_id', sessionId);
         
-        if (error) throw error;
+        if (messagesError) {
+            console.error("Error deleting messages:", messagesError);
+            throw messagesError;
+        }
         
+        // Then delete session guests
         const { error: guestsError } = await supabaseClient
             .from('session_guests')
             .delete()
             .eq('session_id', sessionId);
         
-        if (guestsError) throw guestsError;
+        if (guestsError) {
+            console.error("Error deleting guests:", guestsError);
+            throw guestsError;
+        }
         
+        // Finally delete the session itself
         const { error: sessionError } = await supabaseClient
             .from('sessions')
             .delete()
             .eq('session_id', sessionId);
         
-        if (sessionError) throw sessionError;
+        if (sessionError) {
+            console.error("Error deleting session:", sessionError);
+            throw sessionError;
+        }
+        
+        console.log("✅ Session deleted successfully!");
+        
+        // Update all sessions list
+        await loadAllSessions();
         
         if (appState.currentSessionId === sessionId) {
             appState.currentSessionId = null;
@@ -2844,7 +3010,7 @@ function searchNotes(searchTerm) {
         (note.guest_ip && note.guest_ip.includes(searchTerm))
     );
     
-    renderNotes(filtered);
+    renderVisitorNotes(filtered);
 }
 
 // Update notes button UI
@@ -3087,30 +3253,6 @@ window.showSessionGuests = async function(sessionId) {
         console.error("Error loading session guests:", error);
         alert("Failed to load guest details.");
     }
-};
-
-// Debug function
-window.debugPendingSystem = async function() {
-    console.log("🔍 Debugging pending guests system...");
-    console.log("Is host:", appState.isHost);
-    console.log("Current session ID:", appState.currentSessionId);
-    console.log("User ID:", appState.userId);
-    
-    const { data: guests, error } = await supabaseClient
-        .from('session_guests')
-        .select('*')
-        .eq('session_id', appState.currentSessionId)
-        .eq('status', 'pending');
-    
-    if (error) {
-        console.error("Error fetching guests:", error);
-    } else {
-        console.log("Pending guests in DB:", guests);
-        appState.pendingGuests = guests || [];
-        updatePendingButtonUI();
-    }
-    
-    return guests;
 };
 
 // Initialize the app
