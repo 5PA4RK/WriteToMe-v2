@@ -292,6 +292,7 @@ async function reconnectToSession() {
                 loadChatHistory();
                 loadPendingGuests();
                 return true;
+                
             }
             return false;
         } else {
@@ -3098,13 +3099,16 @@ function searchUsers(searchTerm) {
 // ============================================
 
 // Load visitor notes for host
+// Replace your existing loadVisitorNotes function with this
 async function loadVisitorNotes() {
-    if (!appState.isHost) return;
+    if (!appState.isHost) {
+        console.log("Not host, skipping notes load");
+        return;
+    }
     
     try {
         console.log("📝 Loading visitor notes...");
         
-        // Get all visitor notes including guest notifications
         const { data: notes, error } = await supabaseClient
             .from('visitor_notes')
             .select('*')
@@ -3116,35 +3120,46 @@ async function loadVisitorNotes() {
             return;
         }
         
+        console.log(`✅ Loaded ${notes?.length || 0} visitor notes:`, notes);
+        
         appState.visitorNotes = notes || [];
         appState.unreadNotesCount = appState.visitorNotes.filter(n => !n.read_by_host).length;
         
-        console.log(`✅ Loaded ${appState.visitorNotes.length} visitor notes (${appState.unreadNotesCount} unread)`);
-        
-        // Check for guest notifications specifically
-        const guestNotifications = appState.visitorNotes.filter(n => n.is_guest_notification);
-        if (guestNotifications.length > 0) {
-            console.log(`📬 Found ${guestNotifications.length} guest notifications`);
-        }
+        console.log(`📊 Unread count: ${appState.unreadNotesCount}`);
         
         updateNotesButtonUI();
-        renderVisitorNotes(appState.visitorNotes);
+        
+        // Always render if panel is open, or just update the button
+        if (appState.showNotesPanel) {
+            renderVisitorNotes(appState.visitorNotes);
+        }
+        
+        // Force a UI update
+        if (notesBtn) {
+            notesBtn.classList.toggle('has-unread', appState.unreadNotesCount > 0);
+        }
         
     } catch (error) {
-        console.error("Error loading visitor notes:", error);
+        console.error("Error in loadVisitorNotes:", error);
     }
 }
 
 // Render visitor notes in panel
+// Replace your existing renderVisitorNotes function with this
 function renderVisitorNotes(notes) {
-    if (!notesList) return;
+    if (!notesList) {
+        console.error("notesList element not found!");
+        return;
+    }
+    
+    console.log("Rendering notes:", notes?.length || 0);
     
     if (!notes || notes.length === 0) {
         notesList.innerHTML = `
             <div class="no-notes-message">
                 <i class="fas fa-sticky-note"></i>
                 <p>No visitor notes yet</p>
-                <small>Notes from guests and notifications will appear here</small>
+                <small>Notes from guests will appear here</small>
             </div>
         `;
         return;
@@ -3153,74 +3168,98 @@ function renderVisitorNotes(notes) {
     notesList.innerHTML = '';
     
     notes.forEach(note => {
-        const noteElement = document.createElement('div');
-        noteElement.className = `visitor-note-item ${note.read_by_host ? 'read' : 'unread'}`;
-        noteElement.dataset.noteId = note.id;
-        
-        const createdDate = new Date(note.created_at).toLocaleString();
-        const isGuestNotification = note.is_guest_notification || note.note_text.includes('GUEST NOTIFICATION');
-        
-        // Parse guest notification data if present
-        let displayName = note.guest_name;
-        let displayMessage = note.note_text;
-        let emailInfo = '';
-        
-        if (isGuestNotification) {
-            // Try to extract name from note text
-            const nameMatch = note.note_text.match(/From: ([^\n]+)/);
-            if (nameMatch) {
-                displayName = nameMatch[1];
+        try {
+            const noteElement = document.createElement('div');
+            noteElement.className = `visitor-note-item ${note.read_by_host ? 'read' : 'unread'}`;
+            noteElement.dataset.noteId = note.id;
+            
+            const createdDate = note.created_at ? new Date(note.created_at).toLocaleString() : 'Unknown date';
+            const isGuestNotification = note.is_guest_notification || 
+                                        (note.note_text && note.note_text.includes('GUEST NOTIFICATION'));
+            
+            // Parse the note text
+            let displayName = note.guest_name || 'Unknown';
+            let displayMessage = note.note_text || 'No message';
+            let emailInfo = '';
+            
+            // If it's a guest notification, try to parse it nicely
+            if (isGuestNotification && note.note_text) {
+                const lines = note.note_text.split('\n');
+                displayName = lines.find(l => l.startsWith('From:'))?.replace('From:', '').trim() || displayName;
+                const emailLine = lines.find(l => l.startsWith('Email:'));
+                if (emailLine) {
+                    emailInfo = `<div class="note-email"><i class="fas fa-envelope"></i> ${emailLine.replace('Email:', '').trim()}</div>`;
+                }
+                const msgLine = lines.find(l => l.startsWith('Message:'));
+                if (msgLine) {
+                    displayMessage = msgLine.replace('Message:', '').trim();
+                }
             }
             
-            // Try to extract email from note text if not stored separately
-            const emailMatch = note.note_text.match(/Email: ([^\n]+)/);
-            if (emailMatch) {
-                emailInfo = `<div class="note-email"><i class="fas fa-envelope"></i> ${emailMatch[1]}</div>`;
-            }
+            noteElement.innerHTML = `
+                <div class="note-header">
+                    <div class="note-guest-info">
+                        <i class="fas ${isGuestNotification ? 'fa-bell' : 'fa-user'}"></i>
+                        <strong>${isGuestNotification ? '📬 Guest Message' : (displayName || 'Anonymous')}</strong>
+                        ${!note.read_by_host ? '<span class="unread-badge">New</span>' : ''}
+                    </div>
+                    <div class="note-time">
+                        <i class="fas fa-clock"></i> ${createdDate}
+                    </div>
+                </div>
+                <div class="note-content">
+                    <div class="note-from"><i class="fas fa-user"></i> From: ${displayName}</div>
+                    ${emailInfo}
+                    <div class="note-text">${escapeHtml(displayMessage)}</div>
+                    ${note.guest_ip ? `<div class="note-ip"><i class="fas fa-network-wired"></i> IP: ${note.guest_ip}</div>` : ''}
+                    ${note.guest_email ? `<div class="note-email"><i class="fas fa-envelope"></i> Email: ${note.guest_email}</div>` : ''}
+                </div>
+                <div class="note-actions">
+                    <button class="btn btn-small btn-success" onclick="markNoteAsRead('${note.id}')" ${note.read_by_host ? 'disabled' : ''}>
+                        <i class="fas fa-check"></i> Mark Read
+                    </button>
+                    <button class="btn btn-small btn-info" onclick="archiveNote('${note.id}')">
+                        <i class="fas fa-archive"></i> Archive
+                    </button>
+                </div>
+            `;
             
-            // Try to extract message
-            const messageMatch = note.note_text.match(/Message: ([^\n]+(?:\n[^\n]+)*)/);
-            if (messageMatch) {
-                displayMessage = messageMatch[1];
-            }
+            notesList.appendChild(noteElement);
+        } catch (e) {
+            console.error("Error rendering note:", e, note);
         }
-        
-        noteElement.innerHTML = `
-            <div class="note-header">
-                <div class="note-guest-info">
-                    <i class="fas ${isGuestNotification ? 'fa-bell' : 'fa-user'}"></i>
-                    <strong>${isGuestNotification ? '📬 Guest Notification' : displayName}</strong>
-                    ${!note.read_by_host ? '<span class="unread-badge">New</span>' : ''}
-                </div>
-                <div class="note-time">
-                    <i class="fas fa-clock"></i> ${createdDate}
-                </div>
-            </div>
-            <div class="note-content">
-                <div class="note-from"><i class="fas fa-user"></i> From: ${displayName}</div>
-                ${emailInfo}
-                <div class="note-text">${escapeHtml(displayMessage)}</div>
-                ${note.guest_ip ? `<div class="note-ip"><i class="fas fa-network-wired"></i> IP: ${note.guest_ip}</div>` : ''}
-                ${note.guest_email ? `<div class="note-email"><i class="fas fa-envelope"></i> Email: ${note.guest_email}</div>` : ''}
-            </div>
-            <div class="note-actions">
-                <button class="btn btn-small btn-success" onclick="markNoteAsRead('${note.id}')" ${note.read_by_host ? 'disabled' : ''}>
-                    <i class="fas fa-check"></i> Mark as Read
-                </button>
-                <button class="btn btn-small btn-info" onclick="archiveNote('${note.id}')">
-                    <i class="fas fa-archive"></i> Archive
-                </button>
-                ${isGuestNotification && note.guest_email ? `
-                <button class="btn btn-small btn-primary" onclick="replyToGuestNotification('${note.id}')">
-                    <i class="fas fa-reply"></i> Reply
-                </button>
-                ` : ''}
-            </div>
-        `;
-        
-        notesList.appendChild(noteElement);
     });
+    
+    console.log("Notes rendered successfully");
 }
+
+// Add this to your browser console to test if notes are loading
+window.testNotesDisplay = async function() {
+    console.log("Testing notes display...");
+    
+    // Force load notes
+    await loadVisitorNotes();
+    
+    // Check what's in appState
+    console.log("appState.visitorNotes:", appState.visitorNotes);
+    console.log("appState.unreadNotesCount:", appState.unreadNotesCount);
+    
+    // Check if notes panel is visible
+    console.log("notesPanel class:", notesPanel?.className);
+    console.log("notesPanel display:", notesPanel?.style.display);
+    
+    // Force show notes panel
+    if (notesPanel) {
+        notesPanel.classList.add('show');
+        appState.showNotesPanel = true;
+        renderVisitorNotes(appState.visitorNotes);
+    }
+    
+    // Check notes button
+    console.log("notesBtn:", notesBtn);
+    console.log("notesCount:", notesCount?.textContent);
+};
+
 
 // Add reply function for guest notifications
 window.replyToGuestNotification = function(noteId) {
@@ -3344,16 +3383,23 @@ function searchNotes(searchTerm) {
 
 // Update notes button UI
 function updateNotesButtonUI() {
-    if (!notesBtn || !notesCount) return;
+    if (!notesBtn || !notesCount) {
+        console.log("Notes button elements not found");
+        return;
+    }
     
-    notesCount.textContent = appState.unreadNotesCount;
+    console.log(`Updating notes button UI. Unread: ${appState.unreadNotesCount}`);
+    
+    notesCount.textContent = appState.unreadNotesCount || 0;
     
     if (appState.unreadNotesCount > 0) {
         notesBtn.classList.add('has-unread');
         notesCount.style.display = 'inline';
+        notesBtn.title = `${appState.unreadNotesCount} unread notification${appState.unreadNotesCount > 1 ? 's' : ''}`;
     } else {
         notesBtn.classList.remove('has-unread');
         notesCount.style.display = 'none';
+        notesBtn.title = 'No unread notifications';
     }
 }
 
@@ -3583,499 +3629,7 @@ window.showSessionGuests = async function(sessionId) {
         alert("Failed to load guest details.");
     }
 };
-// ============================================
-// ENHANCED GUEST NOTIFICATION SYSTEM
-// ============================================
 
-// Load and merge all notification sources
-async function loadAllNotifications() {
-    if (!appState.isHost) return;
-    
-    console.log("📬 Loading all notification sources...");
-    
-    // Initialize visitorNotes if not exists
-    if (!appState.visitorNotes) {
-        appState.visitorNotes = [];
-    }
-    
-    let newNotifications = 0;
-    
-    // SOURCE 1: Load from visitor_notes table (database)
-    try {
-        const { data: dbNotes, error } = await supabaseClient
-            .from('visitor_notes')
-            .select('*')
-            .eq('is_archived', false)
-            .order('created_at', { ascending: false });
-        
-        if (!error && dbNotes) {
-            console.log(`📦 Found ${dbNotes.length} notes in database`);
-            
-            // Merge with existing notes (avoid duplicates)
-            dbNotes.forEach(dbNote => {
-                const exists = appState.visitorNotes.some(n => 
-                    n.id === dbNote.id || 
-                    (n.guest_name === dbNote.guest_name && 
-                     n.created_at === dbNote.created_at &&
-                     n.note_text === dbNote.note_text)
-                );
-                
-                if (!exists) {
-                    appState.visitorNotes.push(dbNote);
-                    if (!dbNote.read_by_host) newNotifications++;
-                }
-            });
-        }
-    } catch (e) {
-        console.log("Error loading from visitor_notes:", e);
-    }
-    
-    // SOURCE 2: Load from guest_notifications table
-    try {
-        const { data: guestNotes, error } = await supabaseClient
-            .from('guest_notifications')
-            .select('*')
-            .order('created_at', { ascending: false });
-        
-        if (!error && guestNotes) {
-            console.log(`📦 Found ${guestNotes.length} notes in guest_notifications`);
-            
-            guestNotes.forEach(gn => {
-                // Convert to visitor note format
-                const noteText = `📬 GUEST NOTIFICATION\nFrom: ${gn.guest_name}\n${gn.guest_email ? 'Email: ' + gn.guest_email + '\n' : ''}Message: ${gn.message}`;
-                
-                const exists = appState.visitorNotes.some(n => 
-                    n.note_text === noteText || 
-                    (n.guest_name === gn.guest_name && 
-                     new Date(n.created_at).getTime() === new Date(gn.created_at).getTime())
-                );
-                
-                if (!exists) {
-                    appState.visitorNotes.push({
-                        id: gn.id || 'gn_' + Date.now() + Math.random(),
-                        guest_name: gn.guest_name,
-                        guest_email: gn.guest_email,
-                        note_text: noteText,
-                        guest_ip: gn.guest_ip,
-                        created_at: gn.created_at,
-                        read_by_host: gn.is_read || false,
-                        is_guest_notification: true,
-                        source: 'guest_notifications'
-                    });
-                    if (!gn.is_read) newNotifications++;
-                }
-            });
-        }
-    } catch (e) {
-        console.log("Error loading from guest_notifications:", e);
-    }
-    
-    // SOURCE 3: Load from localStorage backup
-    try {
-        const stored = localStorage.getItem('guest_notifications_backup');
-        if (stored) {
-            const backups = JSON.parse(stored);
-            console.log(`📦 Found ${backups.length} backup notifications in localStorage`);
-            
-            backups.forEach(backup => {
-                const noteText = `📬 GUEST NOTIFICATION (Backup)\nFrom: ${backup.guest_name}\n${backup.guest_email ? 'Email: ' + backup.guest_email + '\n' : ''}Message: ${backup.message}`;
-                
-                const exists = appState.visitorNotes.some(n => 
-                    n.note_text === noteText || 
-                    (n.guest_name === backup.guest_name && 
-                     new Date(n.created_at).getTime() === new Date(backup.created_at).getTime())
-                );
-                
-                if (!exists) {
-                    appState.visitorNotes.push({
-                        id: backup.id || 'backup_' + Date.now() + Math.random(),
-                        guest_name: backup.guest_name,
-                        guest_email: backup.guest_email,
-                        note_text: noteText,
-                        guest_ip: backup.guest_ip,
-                        created_at: backup.created_at,
-                        read_by_host: backup.is_read || false,
-                        is_guest_notification: true,
-                        source: 'localStorage'
-                    });
-                    if (!backup.is_read) newNotifications++;
-                }
-            });
-        }
-    } catch (e) {
-        console.log("Error loading from localStorage:", e);
-    }
-    
-    // SOURCE 4: Check sessionStorage for this session
-    try {
-        const sessionStored = sessionStorage.getItem('guest_notifications');
-        if (sessionStored) {
-            const sessionNotes = JSON.parse(sessionStored);
-            console.log(`📦 Found ${sessionNotes.length} notifications in sessionStorage`);
-            
-            sessionNotes.forEach(sessionNote => {
-                const noteText = `📬 GUEST NOTIFICATION (Session)\nFrom: ${sessionNote.guest_name}\n${sessionNote.guest_email ? 'Email: ' + sessionNote.guest_email + '\n' : ''}Message: ${sessionNote.message}`;
-                
-                const exists = appState.visitorNotes.some(n => n.note_text === noteText);
-                
-                if (!exists) {
-                    appState.visitorNotes.push({
-                        id: sessionNote.id || 'session_' + Date.now() + Math.random(),
-                        guest_name: sessionNote.guest_name,
-                        guest_email: sessionNote.guest_email,
-                        note_text: noteText,
-                        guest_ip: sessionNote.guest_ip,
-                        created_at: sessionNote.created_at,
-                        read_by_host: false,
-                        is_guest_notification: true,
-                        source: 'sessionStorage'
-                    });
-                    newNotifications++;
-                }
-            });
-        }
-    } catch (e) {
-        console.log("Error loading from sessionStorage:", e);
-    }
-    
-    // Sort by date (newest first)
-    appState.visitorNotes.sort((a, b) => 
-        new Date(b.created_at || 0) - new Date(a.created_at || 0)
-    );
-    
-    // Remove duplicates (keep only first occurrence)
-    const seen = new Set();
-    appState.visitorNotes = appState.visitorNotes.filter(note => {
-        const key = `${note.guest_name}-${note.note_text}-${note.created_at}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
-    
-    // Update unread count
-    appState.unreadNotesCount = appState.visitorNotes.filter(n => !n.read_by_host).length;
-    
-    console.log(`✅ Total notifications after merge: ${appState.visitorNotes.length} (${appState.unreadNotesCount} unread)`);
-    
-    // Update UI
-    updateNotesButtonUI();
-    
-    if (appState.showNotesPanel) {
-        renderVisitorNotes(appState.visitorNotes);
-    }
-    
-    return appState.visitorNotes;
-}
-
-// Override the sendGuestNotificationToAdmin function with a simpler, more reliable version
-async function sendGuestNotificationToAdmin() {
-    const name = guestNotifyName.value.trim();
-    const email = guestNotifyEmail.value.trim();
-    const message = guestNotifyMessage.value.trim();
-    
-    guestNotifyError.style.display = 'none';
-    guestNotifySuccess.style.display = 'none';
-    
-    // Only name and message are required - email is optional
-    if (!name) {
-        guestNotifyError.textContent = "Please enter your name.";
-        guestNotifyError.style.display = 'block';
-        return;
-    }
-    
-    if (!message) {
-        guestNotifyError.textContent = "Please enter a message.";
-        guestNotifyError.style.display = 'block';
-        return;
-    }
-    
-    // Validate email only if provided
-    if (email && (!email.includes('@') || !email.includes('.'))) {
-        guestNotifyError.textContent = "Please enter a valid email address or leave it blank.";
-        guestNotifyError.style.display = 'block';
-        return;
-    }
-    
-    sendGuestNotification.disabled = true;
-    sendGuestNotification.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
-    
-    try {
-        // Get user IP
-        let userIP = "Unknown";
-        try {
-            const response = await fetch('https://api.ipify.org?format=json');
-            const data = await response.json();
-            userIP = data.ip || "Unknown";
-        } catch (ipError) {
-            console.log("Could not get IP, using Unknown");
-        }
-        
-        console.log("Sending guest notification from:", name, email || "no email");
-        
-        const notificationId = 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        const created_at = new Date().toISOString();
-        
-        // Create notification object
-        const notification = {
-            id: notificationId,
-            guest_name: name,
-            guest_email: email || null,
-            message: message,
-            guest_ip: userIP,
-            created_at: created_at,
-            is_read: false
-        };
-        
-        let savedToDB = false;
-        
-        // METHOD 1: Try to save to visitor_notes table (most likely to work)
-        try {
-            const noteText = `📬 GUEST NOTIFICATION\nFrom: ${name}\n${email ? 'Email: ' + email + '\n' : ''}Message: ${message}`;
-            
-            const { error } = await supabaseClient
-                .from('visitor_notes')
-                .insert([{
-                    guest_name: name,
-                    guest_email: email || null,
-                    note_text: noteText,
-                    guest_ip: userIP,
-                    created_at: created_at,
-                    read_by_host: false,
-                    is_guest_notification: true
-                }]);
-            
-            if (!error) {
-                console.log("✅ Saved to visitor_notes");
-                savedToDB = true;
-            }
-        } catch (e) {
-            console.log("visitor_notes error:", e.message);
-        }
-        
-        // METHOD 2: Try to save to guest_notifications table
-        if (!savedToDB) {
-            try {
-                const { error } = await supabaseClient
-                    .from('guest_notifications')
-                    .insert([{
-                        guest_name: name,
-                        guest_email: email || null,
-                        message: message,
-                        guest_ip: userIP,
-                        created_at: created_at,
-                        is_read: false
-                    }]);
-                
-                if (!error) {
-                    console.log("✅ Saved to guest_notifications");
-                    savedToDB = true;
-                }
-            } catch (e) {
-                console.log("guest_notifications error:", e.message);
-            }
-        }
-        
-        // ALWAYS save to localStorage as backup
-        try {
-            // Get existing notifications from localStorage
-            const stored = localStorage.getItem('guest_notifications_backup');
-            let notifications = stored ? JSON.parse(stored) : [];
-            
-            // Add new notification
-            notifications.push(notification);
-            
-            // Keep only last 50 notifications
-            if (notifications.length > 50) {
-                notifications = notifications.slice(-50);
-            }
-            
-            localStorage.setItem('guest_notifications_backup', JSON.stringify(notifications));
-            console.log("✅ Saved to localStorage backup");
-            
-            // Also save to sessionStorage
-            const sessionNotifs = sessionStorage.getItem('guest_notifications') ? 
-                JSON.parse(sessionStorage.getItem('guest_notifications')) : [];
-            sessionNotifs.push(notification);
-            sessionStorage.setItem('guest_notifications', JSON.stringify(sessionNotifs));
-            
-        } catch (e) {
-            console.log("localStorage error:", e.message);
-        }
-        
-        // FORCE ADD TO APPSTATE IMMEDIATELY
-        if (!appState.visitorNotes) {
-            appState.visitorNotes = [];
-        }
-        
-        const noteText = `📬 GUEST NOTIFICATION\nFrom: ${name}\n${email ? 'Email: ' + email + '\n' : ''}Message: ${message}`;
-        
-        // Check if already exists (avoid duplicates)
-        const exists = appState.visitorNotes.some(n => 
-            n.guest_name === name && 
-            n.note_text === noteText &&
-            new Date(n.created_at).getTime() === new Date(created_at).getTime()
-        );
-        
-        if (!exists) {
-            appState.visitorNotes.unshift({
-                id: notificationId,
-                guest_name: name,
-                guest_email: email || null,
-                note_text: noteText,
-                guest_ip: userIP,
-                created_at: created_at,
-                read_by_host: false,
-                is_guest_notification: true,
-                source: 'live'
-            });
-            
-            appState.unreadNotesCount = (appState.unreadNotesCount || 0) + 1;
-            
-            console.log("✅ Added to appState, total notes:", appState.visitorNotes.length);
-            
-            // Update UI
-            updateNotesButtonUI();
-            
-            // If notes panel is open, refresh it
-            if (appState.showNotesPanel) {
-                renderVisitorNotes(appState.visitorNotes);
-            } else {
-                // Flash the notes button to get attention
-                if (notesBtn) {
-                    notesBtn.style.animation = 'pulse 1s 3';
-                    setTimeout(() => {
-                        notesBtn.style.animation = '';
-                    }, 3000);
-                }
-            }
-            
-            // Also show a popup notification if enabled
-            if (appState.soundEnabled) {
-                try {
-                    messageSound.currentTime = 0;
-                    messageSound.play().catch(e => console.log("Sound play failed:", e));
-                } catch (e) {}
-            }
-        }
-        
-        // Show success message
-        guestNotifySuccess.style.display = 'block';
-        guestNotifySuccess.innerHTML = '<i class="fas fa-check-circle"></i> ✅ Your message has been sent to the administrator!';
-        
-        // Clear form
-        guestNotifyName.value = '';
-        guestNotifyEmail.value = '';
-        guestNotifyMessage.value = '';
-        
-        // Close modal after 2 seconds
-        setTimeout(() => {
-            guestNotificationModal.style.display = 'none';
-        }, 2000);
-        
-    } catch (error) {
-        console.error("Error sending guest notification:", error);
-        guestNotifyError.innerHTML = `
-            <i class="fas fa-exclamation-circle"></i> 
-            Failed to send message. Please try again.
-        `;
-        guestNotifyError.style.display = 'block';
-    } finally {
-        sendGuestNotification.disabled = false;
-        sendGuestNotification.innerHTML = '<i class="fas fa-paper-plane"></i> Send Message';
-    }
-}
-
-// Override the loadVisitorNotes function to use our enhanced loader
-const originalLoadVisitorNotes = loadVisitorNotes;
-loadVisitorNotes = async function() {
-    if (!appState.isHost) return;
-    await loadAllNotifications();
-};
-
-// Also call loadAllNotifications when host mode is activated
-const originalUpdateUIAfterConnection = updateUIAfterConnection;
-updateUIAfterConnection = function() {
-    // Call original function
-    originalUpdateUIAfterConnection();
-    
-    // Then load all notifications if host
-    if (appState.isHost) {
-        setTimeout(() => {
-            loadAllNotifications();
-        }, 500);
-    }
-};
-
-// Add manual refresh function
-window.refreshNotifications = function() {
-    if (appState.isHost) {
-        loadAllNotifications();
-        alert("Notifications refreshed!");
-    }
-};
-
-// Add test function to create a test notification
-window.testGuestNotification = function() {
-    if (!appState.isHost) {
-        alert("You must be logged in as host to test notifications");
-        return;
-    }
-    
-    // Create a test notification
-    const testNote = {
-        id: 'test_' + Date.now(),
-        guest_name: 'Test User',
-        guest_email: 'test@example.com',
-        note_text: '📬 GUEST NOTIFICATION\nFrom: Test User\nEmail: test@example.com\nMessage: This is a test notification',
-        guest_ip: '127.0.0.1',
-        created_at: new Date().toISOString(),
-        read_by_host: false,
-        is_guest_notification: true
-    };
-    
-    if (!appState.visitorNotes) appState.visitorNotes = [];
-    appState.visitorNotes.unshift(testNote);
-    appState.unreadNotesCount = (appState.unreadNotesCount || 0) + 1;
-    
-    updateNotesButtonUI();
-    
-    if (appState.showNotesPanel) {
-        renderVisitorNotes(appState.visitorNotes);
-    }
-    
-    alert("Test notification created!");
-};
-
-// Add CSS animation for notes button
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes pulse {
-        0% { transform: scale(1); background-color: var(--accent-primary); }
-        50% { transform: scale(1.1); background-color: var(--success-green); }
-        100% { transform: scale(1); background-color: var(--accent-primary); }
-    }
-    
-    #notesBtn.has-unread {
-        animation: gentlePulse 2s infinite;
-    }
-    
-    @keyframes gentlePulse {
-        0% { box-shadow: 0 0 0 0 rgba(78, 205, 196, 0.7); }
-        70% { box-shadow: 0 0 0 10px rgba(78, 205, 196, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(78, 205, 196, 0); }
-    }
-`;
-document.head.appendChild(style);
-
-// Initialize notification system
-document.addEventListener('DOMContentLoaded', function() {
-    // Add a small delay to ensure everything is loaded
-    setTimeout(() => {
-        if (appState.isHost) {
-            loadAllNotifications();
-        }
-    }, 1000);
-});
 // Initialize the app
 document.addEventListener('DOMContentLoaded', initApp);
 
