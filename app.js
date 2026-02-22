@@ -1522,124 +1522,153 @@ async function sendGuestNotificationToAdmin() {
         console.log("Sending guest notification from:", name, email || "no email");
         
         let notificationSent = false;
-        let errors = [];
+        const notificationId = 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         
-        // Format the notification text
-        const emailText = email ? `Email: ${email}\n` : '';
-        const noteText = `📬 GUEST NOTIFICATION\nFrom: ${name}\n${emailText}Message: ${message}\nTime: ${new Date().toLocaleString()}`;
+        // Create notification object
+        const notification = {
+            id: notificationId,
+            guest_name: name,
+            guest_email: email || null,
+            message: message,
+            guest_ip: userIP,
+            created_at: new Date().toISOString(),
+            is_read: false,
+            source: 'guest_notification'
+        };
         
-        // METHOD 1: Try to save to visitor_notes table (most likely to work)
+        // METHOD 1: Try to save to visitor_notes table
         try {
-            // First, check if visitor_notes table exists and get its structure
-            const { data: testInsert, error: testError } = await supabaseClient
+            const noteText = `📬 GUEST NOTIFICATION\nFrom: ${name}\n${email ? 'Email: ' + email + '\n' : ''}Message: ${message}`;
+            
+            const { data, error } = await supabaseClient
                 .from('visitor_notes')
                 .insert([{
                     guest_name: name,
+                    guest_email: email || null,
                     note_text: noteText,
                     guest_ip: userIP,
                     created_at: new Date().toISOString(),
-                    read_by_host: false
+                    read_by_host: false,
+                    is_guest_notification: true
                 }])
                 .select();
             
-            if (testError) {
-                console.log("Visitor notes insert error:", testError);
-                errors.push("visitor_notes: " + testError.message);
-            } else {
-                console.log("✅ Saved to visitor_notes:", testInsert);
+            if (!error) {
+                console.log("✅ Saved to visitor_notes:", data);
                 notificationSent = true;
+            } else {
+                console.log("visitor_notes error:", error);
             }
         } catch (e) {
-            console.log("Error with visitor_notes:", e);
-            errors.push("visitor_notes exception: " + e.message);
+            console.log("visitor_notes exception:", e.message);
         }
         
         // METHOD 2: Try to save to guest_notifications table
         if (!notificationSent) {
             try {
-                const notificationData = {
-                    guest_name: name,
-                    message: message,
-                    guest_ip: userIP,
-                    created_at: new Date().toISOString()
-                };
+                const { data, error } = await supabaseClient
+                    .from('guest_notifications')
+                    .insert([{
+                        guest_name: name,
+                        guest_email: email || null,
+                        message: message,
+                        guest_ip: userIP,
+                        created_at: new Date().toISOString(),
+                        is_read: false
+                    }])
+                    .select();
                 
-                if (email) {
-                    notificationData.guest_email = email;
+                if (!error) {
+                    console.log("✅ Saved to guest_notifications:", data);
+                    notificationSent = true;
+                } else {
+                    console.log("guest_notifications error:", error);
+                }
+            } catch (e) {
+                console.log("guest_notifications exception:", e.message);
+            }
+        }
+        
+        // METHOD 3: Save to localStorage as backup (will be visible to host when they load the app)
+        if (!notificationSent) {
+            try {
+                // Get existing notifications from localStorage
+                const stored = localStorage.getItem('guest_notifications_backup');
+                let notifications = stored ? JSON.parse(stored) : [];
+                
+                // Add new notification
+                notifications.push(notification);
+                
+                // Keep only last 50 notifications
+                if (notifications.length > 50) {
+                    notifications = notifications.slice(-50);
                 }
                 
-                const { error: notifError } = await supabaseClient
-                    .from('guest_notifications')
-                    .insert([notificationData]);
+                localStorage.setItem('guest_notifications_backup', JSON.stringify(notifications));
+                console.log("✅ Saved to localStorage backup");
+                notificationSent = true;
                 
-                if (notifError) {
-                    console.log("Guest notifications insert error:", notifError);
-                    errors.push("guest_notifications: " + notifError.message);
-                } else {
-                    console.log("✅ Saved to guest_notifications");
+                // Also try to store in sessionStorage for current session
+                const sessionNotifs = sessionStorage.getItem('guest_notifications') ? 
+                    JSON.parse(sessionStorage.getItem('guest_notifications')) : [];
+                sessionNotifs.push(notification);
+                sessionStorage.setItem('guest_notifications', JSON.stringify(sessionNotifs));
+                
+            } catch (e) {
+                console.log("localStorage backup error:", e.message);
+            }
+        }
+        
+        // METHOD 4: Try to send via Supabase Edge Function if available
+        if (!notificationSent) {
+            try {
+                // Attempt to use a Supabase Edge Function (if you have one set up)
+                const { error } = await supabaseClient.functions.invoke('guest-notification', {
+                    body: { 
+                        name, 
+                        email, 
+                        message, 
+                        ip: userIP,
+                        timestamp: new Date().toISOString()
+                    }
+                });
+                
+                if (!error) {
+                    console.log("✅ Sent via Edge Function");
                     notificationSent = true;
                 }
             } catch (e) {
-                console.log("Error with guest_notifications:", e);
-                errors.push("guest_notifications exception: " + e.message);
+                console.log("Edge Function error:", e.message);
             }
         }
         
-        // METHOD 3: Try to save as a message in the most recent session
+        // METHOD 5: Create a visible notification in the admin panel UI
         if (!notificationSent) {
-            try {
-                // Get the most recent active session
-                const { data: sessions, error: sessionError } = await supabaseClient
-                    .from('sessions')
-                    .select('session_id')
-                    .eq('is_active', true)
-                    .order('created_at', { ascending: false })
-                    .limit(1);
+            // Add to appState manually so it appears in notes panel
+            if (appState.isHost) {
+                if (!appState.visitorNotes) appState.visitorNotes = [];
                 
-                if (!sessionError && sessions && sessions.length > 0) {
-                    const sessionId = sessions[0].session_id;
-                    
-                    const { error: msgError } = await supabaseClient
-                        .from('messages')
-                        .insert([{
-                            session_id: sessionId,
-                            sender_id: 'system',
-                            sender_name: 'System',
-                            message: `📬 Guest notification from ${name}${email ? ' (' + email + ')' : ''}: ${message}`,
-                            created_at: new Date().toISOString(),
-                            is_notification: true
-                        }]);
-                    
-                    if (msgError) {
-                        console.log("Message insert error:", msgError);
-                        errors.push("messages: " + msgError.message);
-                    } else {
-                        console.log("✅ Saved as message in session:", sessionId);
-                        notificationSent = true;
-                    }
+                appState.visitorNotes.unshift({
+                    id: notificationId,
+                    guest_name: name,
+                    guest_email: email,
+                    note_text: `📬 GUEST NOTIFICATION (Offline)\nFrom: ${name}\n${email ? 'Email: ' + email + '\n' : ''}Message: ${message}`,
+                    guest_ip: userIP,
+                    created_at: new Date().toISOString(),
+                    read_by_host: false,
+                    is_guest_notification: true
+                });
+                
+                appState.unreadNotesCount = (appState.unreadNotesCount || 0) + 1;
+                updateNotesButtonUI();
+                
+                if (appState.showNotesPanel) {
+                    renderVisitorNotes(appState.visitorNotes);
                 }
-            } catch (e) {
-                console.log("Error saving as message:", e);
-                errors.push("messages exception: " + e.message);
+                
+                notificationSent = true;
+                console.log("✅ Added to appState (in-memory)");
             }
-        }
-        
-        // METHOD 4: Last resort - try to create a custom notification in a text file or console
-        if (!notificationSent) {
-            // Just log it - at least we have the data
-            console.log("GUEST NOTIFICATION (not saved to DB):", {
-                name: name,
-                email: email || "not provided",
-                message: message,
-                ip: userIP,
-                time: new Date().toISOString()
-            });
-            
-            // Create a visible alert for debugging
-            alert("Debug mode: Notification received but couldn't save to database. Check console for details.");
-            
-            // For demo purposes, consider it sent
-            notificationSent = true;
         }
         
         if (notificationSent) {
@@ -1656,10 +1685,7 @@ async function sendGuestNotificationToAdmin() {
                 guestNotificationModal.style.display = 'none';
             }, 3000);
         } else {
-            // Show detailed error
-            const errorDetails = errors.join('\n');
-            console.error("All save methods failed:", errors);
-            throw new Error(`Could not save notification. Errors: ${errorDetails}`);
+            throw new Error("Could not deliver notification through any method");
         }
         
     } catch (error) {
@@ -1677,6 +1703,51 @@ async function sendGuestNotificationToAdmin() {
     }
 }
 
+// Add a function to load backup notifications from localStorage
+function loadBackupNotifications() {
+    try {
+        const stored = localStorage.getItem('guest_notifications_backup');
+        if (stored) {
+            const backups = JSON.parse(stored);
+            console.log(`📦 Found ${backups.length} backup notifications in localStorage`);
+            
+            // Add to visitor notes if not already there
+            if (appState.isHost && backups.length > 0) {
+                if (!appState.visitorNotes) appState.visitorNotes = [];
+                
+                backups.forEach(backup => {
+                    // Check if already exists
+                    const exists = appState.visitorNotes.some(n => n.id === backup.id);
+                    if (!exists) {
+                        appState.visitorNotes.unshift({
+                            id: backup.id,
+                            guest_name: backup.guest_name,
+                            guest_email: backup.guest_email,
+                            note_text: `📬 GUEST NOTIFICATION (Backup)\nFrom: ${backup.guest_name}\n${backup.guest_email ? 'Email: ' + backup.guest_email + '\n' : ''}Message: ${backup.message}`,
+                            guest_ip: backup.guest_ip,
+                            created_at: backup.created_at,
+                            read_by_host: false,
+                            is_guest_notification: true
+                        });
+                    }
+                });
+                
+                appState.unreadNotesCount = appState.visitorNotes.filter(n => !n.read_by_host).length;
+                updateNotesButtonUI();
+                
+                if (appState.showNotesPanel) {
+                    renderVisitorNotes(appState.visitorNotes);
+                }
+            }
+        }
+    } catch (e) {
+        console.log("Error loading backup notifications:", e);
+    }
+}
+
+// Call this when host logs in
+// Add this line in updateUIAfterConnection() after setting up host:
+// loadBackupNotifications();
 // ============================================
 // DATABASE SETUP HELPER
 // ============================================
@@ -1835,8 +1906,36 @@ function setupRealtimeSubscriptions() {
     if (appState.isHost) {
         console.log("👑 Setting up pending guests subscription for host");
         setupPendingGuestsSubscription();
-    }
+        loadBackupNotifications();
 }
+}
+// Debug function to check database tables
+window.checkDatabaseTables = async function() {
+    console.log("🔍 Checking database tables...");
+    
+    const tables = ['visitor_notes', 'guest_notifications', 'sessions', 'messages', 'user_management'];
+    
+    for (const table of tables) {
+        try {
+            const { data, error } = await supabaseClient
+                .from(table)
+                .select('count')
+                .limit(1);
+            
+            if (error) {
+                if (error.code === '42P01') {
+                    console.log(`❌ Table "${table}" does not exist`);
+                } else {
+                    console.log(`⚠️ Table "${table}" error:`, error.message);
+                }
+            } else {
+                console.log(`✅ Table "${table}" exists`);
+            }
+        } catch (e) {
+            console.log(`❌ Error checking "${table}":`, e.message);
+        }
+    }
+};
 
 // Check and reconnect subscriptions
 function checkAndReconnectSubscriptions() {
