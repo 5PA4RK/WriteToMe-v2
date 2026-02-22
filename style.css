@@ -2455,3 +2455,92 @@ footer p {
     50% { transform: scale(1.05); }
     100% { transform: scale(1); }
 }
+/* Guest Notification Section */
+.guest-notification-section {
+    margin-bottom: 25px;
+    padding: 20px;
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.1), rgba(255, 152, 0, 0.1));
+    border-radius: 16px;
+    border: 2px solid #ffc107;
+    position: relative;
+    overflow: hidden;
+}
+
+.guest-notification-section::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 193, 7, 0.1) 0%, transparent 70%);
+    animation: rotate 20s linear infinite;
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.guest-notification-section h3 {
+    color: #ffc107;
+    font-size: 18px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    z-index: 1;
+}
+
+.guest-notification-section p {
+    color: var(--text-secondary);
+    margin-bottom: 15px;
+    font-size: 14px;
+    position: relative;
+    z-index: 1;
+}
+
+/* Success message styling */
+.success-message {
+    color: var(--success-green);
+    padding: 12px;
+    background: rgba(78, 205, 196, 0.15);
+    border-radius: 8px;
+    margin-top: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-left: 3px solid var(--success-green);
+    animation: fadeIn 0.3s ease;
+}
+
+/* Email in notes */
+.note-email {
+    font-size: 12px;
+    color: var(--accent-light);
+    margin-top: 5px;
+    padding: 3px 8px;
+    background: rgba(138, 43, 226, 0.1);
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.note-from {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+/* Primary button for reply */
+.btn-primary {
+    background: linear-gradient(135deg, var(--info-blue), #1e90ff);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #1e90ff, var(--info-blue));
+}
