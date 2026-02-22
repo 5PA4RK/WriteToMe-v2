@@ -1485,14 +1485,22 @@ async function sendGuestNotificationToAdmin() {
     guestNotifyError.style.display = 'none';
     guestNotifySuccess.style.display = 'none';
     
-    if (!name || !email || !message) {
-        guestNotifyError.textContent = "Please fill in all fields.";
+    // Only name and message are required - email is optional
+    if (!name) {
+        guestNotifyError.textContent = "Please enter your name.";
         guestNotifyError.style.display = 'block';
         return;
     }
     
-    if (!email.includes('@') || !email.includes('.')) {
-        guestNotifyError.textContent = "Please enter a valid email address.";
+    if (!message) {
+        guestNotifyError.textContent = "Please enter a message.";
+        guestNotifyError.style.display = 'block';
+        return;
+    }
+    
+    // Validate email only if provided
+    if (email && (!email.includes('@') || !email.includes('.'))) {
+        guestNotifyError.textContent = "Please enter a valid email address or leave it blank.";
         guestNotifyError.style.display = 'block';
         return;
     }
@@ -1519,24 +1527,32 @@ async function sendGuestNotificationToAdmin() {
         
         let notificationSent = false;
         
+        // Format the notification text
+        const emailText = email ? `Email: ${email}\n` : '';
+        const noteText = `📬 GUEST NOTIFICATION\nFrom: ${name}\n${emailText}Message: ${message}`;
+        
         // Save as visitor note for each active session
         if (activeSessions && activeSessions.length > 0) {
             for (const session of activeSessions) {
-                const noteText = `📬 GUEST NOTIFICATION\nFrom: ${name}\nEmail: ${email}\nMessage: ${message}`;
+                const noteData = {
+                    guest_id: null, // No user ID since not logged in
+                    guest_name: name,
+                    session_id: session.session_id,
+                    note_text: noteText,
+                    guest_ip: userIP,
+                    created_at: new Date().toISOString(),
+                    read_by_host: false,
+                    is_guest_notification: true
+                };
+                
+                // Only add email field if it was provided
+                if (email) {
+                    noteData.guest_email = email;
+                }
                 
                 const { error: noteError } = await supabaseClient
                     .from('visitor_notes')
-                    .insert([{
-                        guest_id: null, // No user ID since not logged in
-                        guest_name: name,
-                        session_id: session.session_id,
-                        note_text: noteText,
-                        guest_ip: userIP,
-                        created_at: new Date().toISOString(),
-                        read_by_host: false,
-                        is_guest_notification: true,
-                        guest_email: email // Add email field if it exists in your table
-                    }]);
+                    .insert([noteData]);
                 
                 if (noteError) {
                     console.error("Error saving visitor note:", noteError);
@@ -1544,15 +1560,19 @@ async function sendGuestNotificationToAdmin() {
                     notificationSent = true;
                     console.log(`✅ Visitor note saved for session: ${session.session_id}`);
                     
-                    // Also send as system message to the chat
+                    // Also send as system message to the chat (without email for privacy)
                     try {
+                        const systemMessage = email 
+                            ? `📬 Guest notification from ${name} (${email}): ${message}`
+                            : `📬 Guest notification from ${name}: ${message}`;
+                            
                         await supabaseClient
                             .from('messages')
                             .insert([{
                                 session_id: session.session_id,
                                 sender_id: 'system',
                                 sender_name: 'System',
-                                message: `📬 Guest notification from ${name} (${email}): ${message}`,
+                                message: systemMessage,
                                 created_at: new Date().toISOString(),
                                 is_notification: true
                             }]);
@@ -1565,16 +1585,22 @@ async function sendGuestNotificationToAdmin() {
         
         // Also try to save to a general notifications table if it exists
         try {
+            const notificationData = {
+                guest_name: name,
+                message: message,
+                guest_ip: userIP,
+                created_at: new Date().toISOString(),
+                is_read: false
+            };
+            
+            // Only add email if provided
+            if (email) {
+                notificationData.guest_email = email;
+            }
+            
             const { error: generalError } = await supabaseClient
                 .from('guest_notifications')
-                .insert([{
-                    guest_name: name,
-                    guest_email: email,
-                    message: message,
-                    guest_ip: userIP,
-                    created_at: new Date().toISOString(),
-                    is_read: false
-                }]);
+                .insert([notificationData]);
             
             if (!generalError) {
                 notificationSent = true;
@@ -1597,19 +1623,25 @@ async function sendGuestNotificationToAdmin() {
                 // Create a dummy session ID or use a special value
                 const dummySessionId = `notification_${Date.now()}`;
                 
+                const noteData = {
+                    guest_id: null,
+                    guest_name: name,
+                    session_id: dummySessionId,
+                    note_text: `📬 GUEST NOTIFICATION (No active sessions)\nFrom: ${name}\n${email ? `Email: ${email}\n` : ''}Message: ${message}`,
+                    guest_ip: userIP,
+                    created_at: new Date().toISOString(),
+                    read_by_host: false,
+                    is_guest_notification: true
+                };
+                
+                // Only add email if provided
+                if (email) {
+                    noteData.guest_email = email;
+                }
+                
                 const { error: fallbackError } = await supabaseClient
                     .from('visitor_notes')
-                    .insert([{
-                        guest_id: null,
-                        guest_name: name,
-                        session_id: dummySessionId,
-                        note_text: `📬 GUEST NOTIFICATION (No active sessions)\nFrom: ${name}\nEmail: ${email}\nMessage: ${message}`,
-                        guest_ip: userIP,
-                        created_at: new Date().toISOString(),
-                        read_by_host: false,
-                        is_guest_notification: true,
-                        guest_email: email
-                    }]);
+                    .insert([noteData]);
                 
                 if (!fallbackError) {
                     notificationSent = true;
@@ -1644,7 +1676,6 @@ async function sendGuestNotificationToAdmin() {
         sendGuestNotification.innerHTML = '<i class="fas fa-paper-plane"></i> Send Message';
     }
 }
-
 // ============================================
 // REALTIME SUBSCRIPTIONS
 // ============================================
@@ -2942,7 +2973,6 @@ async function loadVisitorNotes() {
 }
 
 // Render visitor notes in panel
-// Render visitor notes in panel
 function renderVisitorNotes(notes) {
     if (!notesList) return;
     
@@ -2973,6 +3003,12 @@ function renderVisitorNotes(notes) {
         let emailInfo = '';
         
         if (isGuestNotification) {
+            // Try to extract name from note text
+            const nameMatch = note.note_text.match(/From: ([^\n]+)/);
+            if (nameMatch) {
+                displayName = nameMatch[1];
+            }
+            
             // Try to extract email from note text if not stored separately
             const emailMatch = note.note_text.match(/Email: ([^\n]+)/);
             if (emailMatch) {
@@ -2998,7 +3034,7 @@ function renderVisitorNotes(notes) {
                 </div>
             </div>
             <div class="note-content">
-                ${!isGuestNotification ? `<div class="note-from"><i class="fas fa-user"></i> From: ${displayName}</div>` : ''}
+                <div class="note-from"><i class="fas fa-user"></i> From: ${displayName}</div>
                 ${emailInfo}
                 <div class="note-text">${escapeHtml(displayMessage)}</div>
                 ${note.guest_ip ? `<div class="note-ip"><i class="fas fa-network-wired"></i> IP: ${note.guest_ip}</div>` : ''}
@@ -3011,7 +3047,7 @@ function renderVisitorNotes(notes) {
                 <button class="btn btn-small btn-info" onclick="archiveNote('${note.id}')">
                     <i class="fas fa-archive"></i> Archive
                 </button>
-                ${isGuestNotification ? `
+                ${isGuestNotification && note.guest_email ? `
                 <button class="btn btn-small btn-primary" onclick="replyToGuestNotification('${note.id}')">
                     <i class="fas fa-reply"></i> Reply
                 </button>
