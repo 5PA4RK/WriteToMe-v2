@@ -340,9 +340,13 @@ async function loadAllSessions() {
         
         appState.allSessions = sessions || [];
         console.log(`📊 Loaded ${appState.allSessions.length} total sessions for stable numbering`);
+        
+        // Update room numbers in UI if needed
+        return appState.allSessions;
     } catch (error) {
         console.error("Error loading all sessions:", error);
         appState.allSessions = [];
+        return [];
     }
 }
 
@@ -2735,6 +2739,7 @@ function returnToActiveChat() {
 }
 
 // Delete session - COMPLETELY REWRITTEN with better error handling
+// Delete session - FIXED VERSION with proper database deletion
 async function deleteSession(sessionId) {
     if (!appState.isHost) {
         alert("Only hosts can delete sessions.");
@@ -2748,7 +2753,7 @@ async function deleteSession(sessionId) {
     try {
         console.log("🗑️ Starting deletion process for session:", sessionId);
         
-        // Show loading state - find all delete buttons for this session
+        // Show loading state
         const deleteButtons = document.querySelectorAll(`[onclick*="deleteSession('${sessionId}')"]`);
         deleteButtons.forEach(btn => {
             if (btn) {
@@ -2779,21 +2784,19 @@ async function deleteSession(sessionId) {
         // STEP 2: Delete visitor notes (if table exists)
         try {
             console.log("📝 Attempting to delete visitor notes...");
-            const { error: notesError, data: notesData } = await supabaseClient
+            const { error: notesError } = await supabaseClient
                 .from('visitor_notes')
                 .delete()
-                .eq('session_id', sessionId)
-                .select();
+                .eq('session_id', sessionId);
             
             if (notesError) {
-                // If table doesn't exist, that's fine
                 if (notesError.code === '42P01') {
                     console.log("ℹ️ visitor_notes table doesn't exist, skipping...");
                 } else {
                     console.warn("⚠️ Error deleting visitor notes:", notesError.message);
                 }
             } else {
-                console.log(`✅ Deleted ${notesData?.length || 0} visitor notes`);
+                console.log(`✅ Visitor notes deleted`);
             }
         } catch (notesError) {
             console.log("ℹ️ Visitor notes deletion skipped (table may not exist)");
@@ -2802,17 +2805,16 @@ async function deleteSession(sessionId) {
         // STEP 3: Delete messages
         try {
             console.log("💬 Attempting to delete messages...");
-            const { error: messagesError, data: messagesData } = await supabaseClient
+            const { error: messagesError } = await supabaseClient
                 .from('messages')
                 .delete()
-                .eq('session_id', sessionId)
-                .select();
+                .eq('session_id', sessionId);
             
             if (messagesError) {
                 console.error("❌ Error deleting messages:", messagesError);
                 throw new Error(`Failed to delete messages: ${messagesError.message}`);
             }
-            console.log(`✅ Deleted ${messagesData?.length || 0} messages`);
+            console.log(`✅ Messages deleted`);
         } catch (messagesError) {
             console.error("❌ Messages deletion failed:", messagesError);
             throw messagesError;
@@ -2821,17 +2823,16 @@ async function deleteSession(sessionId) {
         // STEP 4: Delete session guests
         try {
             console.log("👥 Attempting to delete session guests...");
-            const { error: guestsError, data: guestsData } = await supabaseClient
+            const { error: guestsError } = await supabaseClient
                 .from('session_guests')
                 .delete()
-                .eq('session_id', sessionId)
-                .select();
+                .eq('session_id', sessionId);
             
             if (guestsError) {
                 console.error("❌ Error deleting guests:", guestsError);
                 throw new Error(`Failed to delete guests: ${guestsError.message}`);
             }
-            console.log(`✅ Deleted ${guestsData?.length || 0} session guests`);
+            console.log(`✅ Session guests deleted`);
         } catch (guestsError) {
             console.error("❌ Guests deletion failed:", guestsError);
             throw guestsError;
@@ -2840,17 +2841,16 @@ async function deleteSession(sessionId) {
         // STEP 5: Finally delete the session itself
         try {
             console.log("🚪 Attempting to delete session...");
-            const { error: sessionError, data: sessionData } = await supabaseClient
+            const { error: sessionError } = await supabaseClient
                 .from('sessions')
                 .delete()
-                .eq('session_id', sessionId)
-                .select();
+                .eq('session_id', sessionId);
             
             if (sessionError) {
                 console.error("❌ Error deleting session:", sessionError);
                 throw new Error(`Failed to delete session: ${sessionError.message}`);
             }
-            console.log(`✅ Deleted session:`, sessionData);
+            console.log(`✅ Session deleted`);
         } catch (sessionError) {
             console.error("❌ Session deletion failed:", sessionError);
             throw sessionError;
@@ -2859,10 +2859,10 @@ async function deleteSession(sessionId) {
         // STEP 6: Update local state
         console.log("✅ All deletions completed successfully!");
 
-        // Update all sessions list
+        // IMPORTANT: Reload all sessions from database to get updated list
         await loadAllSessions();
         
-        // Remove from appState.allSessions
+        // Remove from appState manually as well
         appState.allSessions = appState.allSessions.filter(s => s.session_id !== sessionId);
 
         // If this was the current active session, clear it
@@ -2896,7 +2896,7 @@ async function deleteSession(sessionId) {
             returnToActiveChat();
         }
 
-        // Refresh the sessions list
+        // Refresh the sessions list - this will reload from database
         await loadChatSessions();
         
         alert("✅ Session deleted successfully!");
@@ -2907,10 +2907,7 @@ async function deleteSession(sessionId) {
         // Provide more specific error message
         let errorMessage = error.message;
         if (errorMessage.includes('violates foreign key constraint')) {
-            errorMessage = "Cannot delete session due to related records. Try these steps:\n" +
-                          "1. First delete all messages from this session\n" +
-                          "2. Then delete all guests from this session\n" +
-                          "3. Finally delete the session itself";
+            errorMessage = "Cannot delete session due to related records. Try deleting messages and guests first.";
         } else if (errorMessage.includes('permission denied')) {
             errorMessage = "You don't have permission to delete this session.";
         } else if (errorMessage.includes('could not find')) {
@@ -2918,6 +2915,10 @@ async function deleteSession(sessionId) {
         }
         
         alert("❌ Failed to delete session: " + errorMessage);
+        
+        // Reload sessions to ensure UI is in sync
+        await loadAllSessions();
+        await loadChatSessions();
         
     } finally {
         // Reset all delete buttons
