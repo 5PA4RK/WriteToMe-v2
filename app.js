@@ -2734,74 +2734,140 @@ function returnToActiveChat() {
     loadChatHistory();
 }
 
-// Delete session - FIXED VERSION
+// Delete session - FIXED VERSION with proper error handling and foreign key constraints
 async function deleteSession(sessionId) {
     if (!appState.isHost) {
         alert("Only hosts can delete sessions.");
         return;
     }
     
-    if (!confirm("⚠️ WARNING: Are you sure you want to delete this session?\n\nThis will permanently delete all messages and guest data!\n\nThis action CANNOT be undone!")) {
+    if (!confirm("⚠️ WARNING: Are you sure you want to delete this session?\n\nThis will permanently delete all messages, guest data, and visitor notes!\n\nThis action CANNOT be undone!")) {
         return;
     }
     
     try {
         console.log("🗑️ Deleting session:", sessionId);
         
-        // First delete messages
-        const { error: messagesError } = await supabaseClient
-            .from('messages')
-            .delete()
-            .eq('session_id', sessionId);
+        // Show loading state
+        const deleteBtn = document.querySelector(`[onclick="deleteSession('${sessionId}')"]`);
+        if (deleteBtn) {
+            deleteBtn.disabled = true;
+            deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+        }
         
-        if (messagesError) {
-            console.error("Error deleting messages:", messagesError);
+        // FIRST: Delete visitor notes associated with this session
+        try {
+            const { error: notesError } = await supabaseClient
+                .from('visitor_notes')
+                .delete()
+                .eq('session_id', sessionId);
+            
+            if (notesError) {
+                console.log("Error deleting visitor notes (may not exist):", notesError);
+                // Continue anyway - table might not exist
+            } else {
+                console.log("✅ Visitor notes deleted");
+            }
+        } catch (notesError) {
+            console.log("Visitor notes deletion error (continuing):", notesError);
+        }
+        
+        // SECOND: Delete messages (these reference session_id)
+        try {
+            const { error: messagesError } = await supabaseClient
+                .from('messages')
+                .delete()
+                .eq('session_id', sessionId);
+            
+            if (messagesError) {
+                console.error("Error deleting messages:", messagesError);
+                throw messagesError;
+            }
+            console.log("✅ Messages deleted");
+        } catch (messagesError) {
+            console.error("Messages deletion error:", messagesError);
             throw messagesError;
         }
         
-        // Then delete session guests
-        const { error: guestsError } = await supabaseClient
-            .from('session_guests')
-            .delete()
-            .eq('session_id', sessionId);
-        
-        if (guestsError) {
-            console.error("Error deleting guests:", guestsError);
+        // THIRD: Delete session guests (these reference session_id)
+        try {
+            const { error: guestsError } = await supabaseClient
+                .from('session_guests')
+                .delete()
+                .eq('session_id', sessionId);
+            
+            if (guestsError) {
+                console.error("Error deleting guests:", guestsError);
+                throw guestsError;
+            }
+            console.log("✅ Session guests deleted");
+        } catch (guestsError) {
+            console.error("Guests deletion error:", guestsError);
             throw guestsError;
         }
         
-        // Finally delete the session itself
-        const { error: sessionError } = await supabaseClient
-            .from('sessions')
-            .delete()
-            .eq('session_id', sessionId);
-        
-        if (sessionError) {
-            console.error("Error deleting session:", sessionError);
+        // FOURTH: Finally delete the session itself
+        try {
+            const { error: sessionError } = await supabaseClient
+                .from('sessions')
+                .delete()
+                .eq('session_id', sessionId);
+            
+            if (sessionError) {
+                console.error("Error deleting session:", sessionError);
+                throw sessionError;
+            }
+            console.log("✅ Session deleted successfully!");
+        } catch (sessionError) {
+            console.error("Session deletion error:", sessionError);
             throw sessionError;
         }
-        
-        console.log("✅ Session deleted successfully!");
         
         // Update all sessions list
         await loadAllSessions();
         
+        // If this was the current active session, clear it
         if (appState.currentSessionId === sessionId) {
             appState.currentSessionId = null;
             appState.isConnected = false;
-            chatMessages.innerHTML = '<div class="message received"><div class="message-sender">System</div><div class="message-content"><div class="message-text">Session was deleted. Please reconnect.</div><div class="message-time">Just now</div></div></div>';
+            chatMessages.innerHTML = '<div class="message received"><div class="message-sender">System</div><div class="message-content"><div class="message-text">Your current room was deleted. Please reconnect.</div><div class="message-time">Just now</div></div></div>';
+            
+            // If host, update UI
+            if (appState.isHost) {
+                document.body.classList.remove('host-mode');
+                if (adminSection) adminSection.style.display = 'none';
+                if (pendingGuestsBtn) pendingGuestsBtn.style.display = 'none';
+            }
         }
         
-        alert("Session deleted successfully!");
+        alert("✅ Session deleted successfully!");
+        
+        // Refresh the sessions list
         await loadChatSessions();
         
+        // If viewing this session's history, return to active chat
         if (appState.viewingSessionId === sessionId) {
             returnToActiveChat();
         }
         
     } catch (error) {
         console.error("❌ Error deleting session:", error);
-        alert("Failed to delete session: " + error.message);
+        
+        // Provide more specific error message
+        let errorMessage = error.message;
+        if (errorMessage.includes('violates foreign key constraint')) {
+            errorMessage = "Cannot delete session due to related records. Try deleting messages and guests first.";
+        }
+        
+        alert("Failed to delete session: " + errorMessage);
+        
+    } finally {
+        // Reset button state
+        const deleteBtn = document.querySelector(`[onclick="deleteSession('${sessionId}')"]`);
+        if (deleteBtn) {
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = '<i class="fas fa-trash"></i> Delete';
+        }
     }
 }
 
