@@ -1,3 +1,5 @@
+// app.js - Complete Working Version
+
 // Supabase Configuration
 const SUPABASE_URL = 'https://plqvqenoroacvzwtgoxq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_91IHQ5--y4tDIo8L9X2ZJQ_YeThfdu_';
@@ -144,7 +146,7 @@ const sendReplyBtn = document.getElementById('sendReplyBtn');
 // ============================================
 
 async function initApp() {
-    console.log("🚀 Initializing Enhanced WriteToMira App...");
+    console.log("🚀 Initializing WriteToMira App...");
     
     const mainContainer = document.querySelector('.main-container') || document.querySelector('.app-container');
     if (mainContainer) {
@@ -240,6 +242,26 @@ function hideConnectionModal() {
     }
 }
 
+// Update password hint based on username
+function updatePasswordHint(username) {
+    const passwordHint = document.getElementById('passwordHint');
+    if (!passwordHint) return;
+    
+    const lowerUsername = username.toLowerCase();
+    if (lowerUsername === 'guest') {
+        passwordHint.textContent = "Test password: guest123";
+        passwordHint.style.display = 'block';
+    } else if (lowerUsername === 'host') {
+        passwordHint.textContent = "Test password: host123";
+        passwordHint.style.display = 'block';
+    } else if (lowerUsername === 'admin') {
+        passwordHint.textContent = "Administrator account";
+        passwordHint.style.display = 'block';
+    } else {
+        passwordHint.style.display = 'none';
+    }
+}
+
 // ============================================
 // RECONNECT FUNCTION
 // ============================================
@@ -315,7 +337,8 @@ async function loadAllSessions() {
         if (error) throw error;
         
         appState.allSessions = sessions || [];
-        console.log(`📊 Loaded ${appState.allSessions.length} total sessions`);
+        console.log(`📊 Loaded ${appState.allSessions.length} total sessions for stable numbering`);
+        
         return appState.allSessions;
     } catch (error) {
         console.error("Error loading all sessions:", error);
@@ -339,6 +362,7 @@ function setupEventListeners() {
     if (usernameInput) {
         usernameInput.addEventListener('input', function() {
             if (passwordError) passwordError.style.display = 'none';
+            updatePasswordHint(this.value);
         });
     }
     
@@ -451,14 +475,6 @@ function setupEventListeners() {
         if (emojiPicker && !emojiPicker.contains(e.target) && emojiBtn && !emojiBtn.contains(e.target)) {
             emojiPicker.classList.remove('show');
         }
-        
-        // Close message actions when clicking outside
-        if (appState.activeMessageActions) {
-            const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-            if (actionsMenu && !actionsMenu.contains(e.target)) {
-                closeMessageActions();
-            }
-        }
     });
     
     // Tab switching
@@ -506,6 +522,13 @@ function setupEventListeners() {
         }
     });
     
+    // Click outside to close guest notification modal
+    window.addEventListener('click', (e) => {
+        if (guestNotificationModal && e.target === guestNotificationModal) {
+            guestNotificationModal.style.display = 'none';
+        }
+    });
+    
     // Reply modal
     if (closeReplyModal) {
         closeReplyModal.addEventListener('click', () => {
@@ -522,9 +545,6 @@ function setupEventListeners() {
         if (e.target === replyModal) {
             replyModal.style.display = 'none';
             appState.replyingTo = null;
-        }
-        if (e.target === guestNotificationModal) {
-            guestNotificationModal.style.display = 'none';
         }
     });
 }
@@ -828,7 +848,7 @@ async function connectAsHost(userIP) {
 }
 
 // ============================================
-// CONNECT AS GUEST
+// CONNECT AS GUEST - AUTO-JOIN LATEST ROOM
 // ============================================
 
 async function connectAsGuest(userIP) {
@@ -926,7 +946,7 @@ async function createNewGuestRequest(session, userIP) {
             await supabaseClient
                 .from('sessions')
                 .update({
-                    created_at: new Date().toISOString()
+                    updated_at: new Date().toISOString()
                 })
                 .eq('session_id', session.session_id);
         } catch (updateError) {
@@ -1695,7 +1715,7 @@ function setupRealtimeSubscriptions() {
                             time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                             type: 'received',
                             is_historical: false,
-                            reactions: payload.new.reactions || [],
+                            reactions: [],
                             reply_to: payload.new.reply_to
                         });
                         
@@ -1707,26 +1727,6 @@ function setupRealtimeSubscriptions() {
                                 console.log("Audio error:", e);
                             }
                         }
-                    }
-                }
-            }
-        )
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'messages',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            (payload) => {
-                console.log('📝 Message updated:', payload.new?.id);
-                
-                const messageElement = document.getElementById(`msg-${payload.new.id}`);
-                if (messageElement) {
-                    const reactionsContainer = messageElement.querySelector('.message-reactions');
-                    if (reactionsContainer) {
-                        renderReactions(reactionsContainer, payload.new.reactions || []);
                     }
                 }
             }
@@ -1787,7 +1787,7 @@ function checkAndReconnectSubscriptions() {
 }
 
 // ============================================
-// ENHANCED CHAT FUNCTIONS
+// CHAT FUNCTIONS
 // ============================================
 
 async function handleTyping() {
@@ -1798,7 +1798,7 @@ async function handleTyping() {
             .from('sessions')
             .update({ 
                 typing_user: appState.userName,
-                created_at: new Date().toISOString()
+                updated_at: new Date().toISOString()
             })
             .eq('session_id', appState.currentSessionId);
         
@@ -1811,7 +1811,7 @@ async function handleTyping() {
                 .from('sessions')
                 .update({ 
                     typing_user: null,
-                    created_at: new Date().toISOString()
+                    updated_at: new Date().toISOString()
                 })
                 .eq('session_id', appState.currentSessionId)
                 .catch(e => console.log("Error clearing typing:", e));
@@ -1861,8 +1861,8 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reactions: [],
-            reply_to: appState.replyingTo || null
+            reply_to: appState.replyingTo || null,
+            is_deleted: false
         };
         
         if (imageUrl) {
@@ -1922,7 +1922,7 @@ function displayMessage(message) {
     }
     
     if (message.text) {
-        messageContent += `<div class="message-text">${message.text}</div>`;
+        messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
     }
     
     if (message.image) {
@@ -1942,7 +1942,7 @@ function displayMessage(message) {
                 <button onclick="editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
                 <button onclick="deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
             ` : ''}
-            <button onclick="openReplyModal('${message.id}', '${message.sender}', '${message.text.replace(/'/g, "\\'")}')">
+            <button onclick="openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
                 <i class="fas fa-reply"></i> Reply
             </button>
             <div class="reaction-quick-picker">
@@ -1954,7 +1954,7 @@ function displayMessage(message) {
     `;
     
     messageDiv.innerHTML = `
-        <div class="message-sender">${message.sender}</div>
+        <div class="message-sender">${escapeHtml(message.sender)}</div>
         <div class="message-content">
             ${messageContent}
             ${reactionsHtml}
@@ -1968,34 +1968,12 @@ function displayMessage(message) {
     
     chatMessages.appendChild(messageDiv);
     
-    // Render existing reactions
-    const reactionsContainer = messageDiv.querySelector('.message-reactions');
-    if (message.reactions && message.reactions.length > 0) {
-        renderReactions(reactionsContainer, message.reactions);
-    }
-    
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-function renderReactions(container, reactions) {
-    if (!reactions || reactions.length === 0) {
-        container.innerHTML = '';
-        return;
-    }
-    
-    // Group reactions by emoji
-    const reactionCounts = {};
-    reactions.forEach(r => {
-        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-    });
-    
-    let html = '';
-    for (const [emoji, count] of Object.entries(reactionCounts)) {
-        html += `<span class="reaction-badge" onclick="toggleReaction('${container.closest('.message').id.replace('msg-', '')}', '${emoji}')">${emoji} ${count}</span>`;
-    }
-    
-    container.innerHTML = html;
-}
+// ============================================
+// MESSAGE ACTIONS FUNCTIONS
+// ============================================
 
 function toggleMessageActions(messageId, button) {
     closeMessageActions();
@@ -2007,8 +1985,17 @@ function toggleMessageActions(messageId, button) {
         
         // Position menu near the button
         const rect = button.getBoundingClientRect();
-        menu.style.top = `${rect.top - 100}px`;
-        menu.style.left = `${rect.left - 200}px`;
+        const chatRect = chatMessages.getBoundingClientRect();
+        
+        let top = rect.top - 150;
+        let left = rect.left - 200;
+        
+        // Adjust if out of bounds
+        if (top < chatRect.top) top = rect.bottom + 10;
+        if (left < chatRect.left) left = rect.right + 10;
+        
+        menu.style.top = `${top}px`;
+        menu.style.left = `${left}px`;
     }
 }
 
@@ -2026,57 +2013,69 @@ async function addReaction(messageId, emoji) {
     closeMessageActions();
     
     try {
-        const messageElement = document.getElementById(`msg-${messageId}`);
-        const reactions = await getMessageReactions(messageId);
-        
-        // Check if user already reacted with this emoji
-        const userReaction = reactions.find(r => r.user_id === appState.userId && r.emoji === emoji);
-        
-        if (userReaction) {
-            // Remove reaction
-            await supabaseClient
+        // Check if message_reactions table exists and handle gracefully
+        try {
+            const { data: existingReaction, error: checkError } = await supabaseClient
                 .from('message_reactions')
-                .delete()
-                .eq('id', userReaction.id);
-        } else {
-            // Add reaction
-            await supabaseClient
-                .from('message_reactions')
-                .insert([{
-                    message_id: messageId,
-                    user_id: appState.userId,
-                    user_name: appState.userName,
-                    emoji: emoji,
-                    created_at: new Date().toISOString()
-                }]);
+                .select('*')
+                .eq('message_id', messageId)
+                .eq('user_id', appState.userId)
+                .eq('emoji', emoji)
+                .maybeSingle();
+            
+            if (checkError && checkError.code === '42P01') {
+                // Table doesn't exist, show user-friendly message
+                console.log("Reactions table not set up yet");
+                alert("Reactions feature is being set up. Please try again later.");
+                return;
+            }
+            
+            if (existingReaction) {
+                // Remove reaction
+                const { error } = await supabaseClient
+                    .from('message_reactions')
+                    .delete()
+                    .eq('id', existingReaction.id);
+                
+                if (error) throw error;
+            } else {
+                // Add reaction
+                const { error } = await supabaseClient
+                    .from('message_reactions')
+                    .insert([{
+                        message_id: messageId,
+                        user_id: appState.userId,
+                        user_name: appState.userName,
+                        emoji: emoji,
+                        created_at: new Date().toISOString()
+                    }]);
+                
+                if (error) throw error;
+            }
+            
+            // Show temporary success indicator
+            const messageElement = document.getElementById(`msg-${messageId}`);
+            const reactionsDiv = messageElement.querySelector('.message-reactions');
+            
+            // Add temporary reaction display
+            const tempReaction = document.createElement('span');
+            tempReaction.className = 'reaction-badge temp';
+            tempReaction.textContent = emoji;
+            tempReaction.style.opacity = '0.5';
+            reactionsDiv.appendChild(tempReaction);
+            
+            setTimeout(() => {
+                if (tempReaction.parentNode) {
+                    tempReaction.remove();
+                }
+            }, 2000);
+            
+        } catch (error) {
+            console.error("Error with reaction:", error);
+            // Don't show alert for every reaction error, just log it
         }
-        
-        // Update local display
-        const updatedReactions = await getMessageReactions(messageId);
-        const reactionsContainer = messageElement.querySelector('.message-reactions');
-        renderReactions(reactionsContainer, updatedReactions);
-        
     } catch (error) {
-        console.error("Error adding reaction:", error);
-    }
-}
-
-async function toggleReaction(messageId, emoji) {
-    await addReaction(messageId, emoji);
-}
-
-async function getMessageReactions(messageId) {
-    try {
-        const { data, error } = await supabaseClient
-            .from('message_reactions')
-            .select('*')
-            .eq('message_id', messageId);
-        
-        if (error) throw error;
-        return data || [];
-    } catch (error) {
-        console.error("Error getting reactions:", error);
-        return [];
+        console.error("Error in addReaction:", error);
     }
 }
 
@@ -2101,16 +2100,12 @@ async function sendReply() {
     await sendMessage();
 }
 
-// ============================================
-// MESSAGE EDITING AND DELETING
-// ============================================
-
 async function editMessage(messageId) {
     closeMessageActions();
     
     const messageElement = document.getElementById(`msg-${messageId}`);
     const textElement = messageElement.querySelector('.message-text');
-    const currentText = textElement.textContent;
+    const currentText = textElement ? textElement.textContent : '';
     
     const newText = prompt("Edit your message:", currentText);
     if (newText !== null && newText.trim() !== '') {
@@ -2119,7 +2114,8 @@ async function editMessage(messageId) {
                 .from('messages')
                 .update({
                     message: newText.trim(),
-                    edited_at: new Date().toISOString()
+                    edited_at: new Date().toISOString(),
+                    is_edited: true
                 })
                 .eq('id', messageId)
                 .eq('sender_id', appState.userId);
@@ -2127,7 +2123,7 @@ async function editMessage(messageId) {
             if (error) throw error;
             
             if (textElement) {
-                textElement.innerHTML = `${newText.trim()} <small style="opacity:0.7;">(edited)</small>`;
+                textElement.innerHTML = `${escapeHtml(newText.trim())} <small class="edited-indicator">(edited)</small>`;
             }
         } catch (error) {
             console.error("Error editing message:", error);
@@ -2157,7 +2153,7 @@ async function deleteMessage(messageId) {
         const messageElement = document.getElementById(`msg-${messageId}`);
         if (messageElement) {
             messageElement.innerHTML = `
-                <div class="message-sender">${appState.userName}</div>
+                <div class="message-sender">${escapeHtml(appState.userName)}</div>
                 <div class="message-content">
                     <div class="message-text"><i>Message deleted</i></div>
                     <div class="message-footer">
@@ -2220,10 +2216,7 @@ async function loadChatHistory(sessionId = null) {
             chatMessages.appendChild(historyHeader);
         }
         
-        // Load reactions for all messages
-        for (const msg of messages) {
-            const reactions = await getMessageReactions(msg.id);
-            
+        messages.forEach(msg => {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
             displayMessage({
                 id: msg.id,
@@ -2233,10 +2226,10 @@ async function loadChatHistory(sessionId = null) {
                 time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                 type: messageType,
                 is_historical: !!sessionId,
-                reactions: reactions,
+                reactions: [],
                 reply_to: msg.reply_to
             });
-        }
+        });
         
         chatMessages.scrollTop = chatMessages.scrollHeight;
     } catch (error) {
@@ -2566,6 +2559,13 @@ async function saveMessageToDB(senderName, messageText) {
     }
 }
 
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // ============================================
 // HISTORY & SESSION FUNCTIONS
 // ============================================
@@ -2822,6 +2822,16 @@ async function deleteSession(sessionId) {
                 supabaseClient.removeChannel(appState.pendingSubscription);
                 appState.pendingSubscription = null;
             }
+        }
+
+        try {
+            await supabaseClient
+                .from('message_reactions')
+                .delete()
+                .eq('message_id', sessionId);
+            console.log("✅ Message reactions deleted");
+        } catch (e) {
+            console.log("Message reactions deletion skipped:", e.message);
         }
 
         try {
@@ -3326,12 +3336,6 @@ function renderVisitorNotes(notes) {
     console.log("Notes rendered successfully");
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 window.markNoteAsRead = async function(noteId) {
     if (!appState.isHost) return;
     
@@ -3587,11 +3591,10 @@ window.kickGuest = kickGuest;
 window.viewSessionHistory = viewSessionHistory;
 window.deleteSession = deleteSession;
 window.editUserModalOpen = editUserModalOpen;
+window.toggleMessageActions = toggleMessageActions;
 window.editMessage = editMessage;
 window.deleteMessage = deleteMessage;
 window.addReaction = addReaction;
-window.toggleReaction = toggleReaction;
-window.toggleMessageActions = toggleMessageActions;
 window.openReplyModal = openReplyModal;
 
 // Initialize the app
