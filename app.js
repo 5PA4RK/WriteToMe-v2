@@ -2868,7 +2868,9 @@ async function deleteSession(sessionId) {
         }
 
         await loadChatSessions();
-        alert("✅ Session deleted successfully!");
+
+        // Optional - Can be deleted: Add a subtle notification instead
+        addSystemMessage("✅ Session deleted successfully", true);
         
     } catch (error) {
         console.error("❌ Error deleting session:", error);
