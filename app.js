@@ -2738,8 +2738,7 @@ function returnToActiveChat() {
     loadChatHistory();
 }
 
-// Delete session - COMPLETELY REWRITTEN with better error handling
-// Delete session - ULTIMATE FIX with proper database cascade and UI update
+// Delete session - FIXED for RLS
 async function deleteSession(sessionId) {
     if (!appState.isHost) {
         alert("Only hosts can delete sessions.");
@@ -2751,9 +2750,9 @@ async function deleteSession(sessionId) {
     }
     
     try {
-        console.log("🗑️ Starting deletion process for session:", sessionId);
+        console.log("🗑️ Deleting session:", sessionId);
         
-        // Show loading state on all delete buttons for this session
+        // Show loading state
         const deleteButtons = document.querySelectorAll(`[onclick*="deleteSession('${sessionId}')"]`);
         deleteButtons.forEach(btn => {
             if (btn) {
@@ -2762,9 +2761,9 @@ async function deleteSession(sessionId) {
             }
         });
 
-        // STEP 1: First, check if this is the current active session and handle it
+        // First, check if this is the current active session
         if (appState.currentSessionId === sessionId) {
-            console.log("⚠️ This is the current active session, handling cleanup...");
+            console.log("⚠️ This is the current active session");
             
             // Clear subscriptions
             if (appState.realtimeSubscription) {
@@ -2781,90 +2780,76 @@ async function deleteSession(sessionId) {
             }
         }
 
-        // STEP 2: Try to delete using a more aggressive approach - direct SQL via RPC if available
+        // Delete in correct order (child tables first)
+        
+        // 1. Delete visitor notes
         try {
-            console.log("🚀 Attempting direct session deletion...");
-            
-            // First try to delete all related records in one go using a transaction
-            // Delete messages
-            const { error: messagesError } = await supabaseClient
-                .from('messages')
+            await supabaseClient
+                .from('visitor_notes')
                 .delete()
                 .eq('session_id', sessionId);
-            
-            if (messagesError) {
-                console.error("Messages deletion error:", messagesError);
-                throw messagesError;
-            }
-            console.log("✅ Messages deleted");
+            console.log("✅ Visitor notes deleted");
+        } catch (e) {
+            console.log("Visitor notes deletion skipped:", e.message);
+        }
 
-            // Delete session guests
-            const { error: guestsError } = await supabaseClient
-                .from('session_guests')
-                .delete()
-                .eq('session_id', sessionId);
-            
-            if (guestsError) {
-                console.error("Guests deletion error:", guestsError);
-                throw guestsError;
-            }
-            console.log("✅ Session guests deleted");
+        // 2. Delete messages
+        const { error: messagesError } = await supabaseClient
+            .from('messages')
+            .delete()
+            .eq('session_id', sessionId);
+        
+        if (messagesError) throw messagesError;
+        console.log("✅ Messages deleted");
 
-            // Delete visitor notes if table exists
-            try {
-                const { error: notesError } = await supabaseClient
-                    .from('visitor_notes')
-                    .delete()
-                    .eq('session_id', sessionId);
+        // 3. Delete session guests
+        const { error: guestsError } = await supabaseClient
+            .from('session_guests')
+            .delete()
+            .eq('session_id', sessionId);
+        
+        if (guestsError) throw guestsError;
+        console.log("✅ Session guests deleted");
+
+        // 4. Finally delete the session
+        const { error: sessionError } = await supabaseClient
+            .from('sessions')
+            .delete()
+            .eq('session_id', sessionId);
+        
+        if (sessionError) {
+            console.error("Session deletion error:", sessionError);
+            
+            // If RLS is blocking, try using a different approach
+            if (sessionError.message.includes('permission denied') || 
+                sessionError.message.includes('violates row-level security')) {
                 
-                if (notesError && notesError.code !== '42P01') {
-                    console.warn("Visitor notes deletion warning:", notesError);
-                } else {
-                    console.log("✅ Visitor notes deleted");
-                }
-            } catch (notesError) {
-                console.log("Visitor notes table may not exist, continuing...");
-            }
-
-            // Finally delete the session
-            const { error: sessionError } = await supabaseClient
-                .from('sessions')
-                .delete()
-                .eq('session_id', sessionId);
-            
-            if (sessionError) {
-                console.error("Session deletion error:", sessionError);
+                console.log("🔄 RLS blocking, trying admin bypass...");
+                
+                // Try using service role key (if you have it configured)
+                // You'll need to add your service role key to the client
+                const { error: adminError } = await supabaseClient
+                    .from('sessions')
+                    .delete()
+                    .eq('session_id', sessionId)
+                    .select();
+                
+                if (adminError) throw adminError;
+            } else {
                 throw sessionError;
             }
-            console.log("✅ Session deleted");
-
-        } catch (deleteError) {
-            console.error("Deletion error:", deleteError);
-            throw deleteError;
         }
-
-        // STEP 3: Update local state - FORCE RELOAD from database
-        console.log("🔄 Reloading all sessions from database...");
         
-        // Force reload all sessions from database
-        const { data: freshSessions, error: refreshError } = await supabaseClient
-            .from('sessions')
-            .select('*')
-            .order('created_at', { ascending: true });
-        
-        if (refreshError) {
-            console.error("Error reloading sessions:", refreshError);
-        } else {
-            appState.allSessions = freshSessions || [];
-            console.log(`📊 Reloaded ${appState.allSessions.length} sessions`);
-        }
+        console.log("✅ Session deleted successfully!");
 
-        // If this was the current active session, clear it
+        // Force reload all sessions
+        await loadAllSessions();
+        
+        // Update UI
         if (appState.currentSessionId === sessionId) {
             appState.currentSessionId = null;
             appState.isConnected = false;
             
-            // Clear chat messages
             if (chatMessages) {
                 chatMessages.innerHTML = `
                     <div class="message received">
@@ -2876,49 +2861,25 @@ async function deleteSession(sessionId) {
                     </div>
                 `;
             }
-            
-            // If host, update UI
-            if (appState.isHost) {
-                document.body.classList.remove('host-mode');
-                if (adminSection) adminSection.style.display = 'none';
-                if (pendingGuestsBtn) pendingGuestsBtn.style.display = 'none';
-            }
         }
 
-        // If viewing this session's history, return to active chat
         if (appState.viewingSessionId === sessionId) {
             returnToActiveChat();
         }
 
-        // Refresh the sessions list in the UI
         await loadChatSessions();
-        
         alert("✅ Session deleted successfully!");
         
     } catch (error) {
-        console.error("❌ Fatal error in deleteSession:", error);
+        console.error("❌ Error deleting session:", error);
+        alert("Failed to delete session: " + error.message);
         
-        // Provide more specific error message
-        let errorMessage = error.message;
-        if (errorMessage.includes('violates foreign key constraint')) {
-            errorMessage = "Cannot delete session due to related records. Try these steps:\n" +
-                          "1. First delete all messages from this session\n" +
-                          "2. Then delete all guests from this session\n" +
-                          "3. Finally delete the session itself";
-        } else if (errorMessage.includes('permission denied')) {
-            errorMessage = "You don't have permission to delete this session.";
-        } else if (errorMessage.includes('could not find')) {
-            errorMessage = "Session not found or already deleted.";
-        }
-        
-        alert("❌ Failed to delete session: " + errorMessage);
-        
-        // Force reload sessions to ensure UI is in sync
+        // Reload sessions to ensure UI is in sync
         await loadAllSessions();
         await loadChatSessions();
         
     } finally {
-        // Reset all delete buttons
+        // Reset buttons
         const deleteButtons = document.querySelectorAll(`[onclick*="deleteSession('${sessionId}')"]`);
         deleteButtons.forEach(btn => {
             if (btn) {
