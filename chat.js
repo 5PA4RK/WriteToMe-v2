@@ -110,22 +110,26 @@ const ChatModule = (function() {
         const actionButton = `<button class="message-action-dots" onclick="window.ChatModule.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
         
         // Actions menu (initially hidden)
-        const actionsMenu = `
-            <div class="message-actions-menu" id="actions-${message.id}">
-                ${message.sender === appState.userName ? `
-                    <button onclick="window.ChatModule.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
-                    <button onclick="window.ChatModule.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
-                ` : ''}
-                <button onclick="window.ChatModule.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
-                    <i class="fas fa-reply"></i> Reply
-                </button>
-                <div class="reaction-quick-picker">
-                    ${reactionEmojis.map(emoji => 
-                        `<button onclick="window.ChatModule.addReaction('${message.id}', '${emoji}')">${emoji}</button>`
-                    ).join('')}
-                </div>
+// Actions menu (initially hidden)
+const actionsMenu = `
+    <div class="message-actions-menu" id="actions-${message.id}">
+        ${message.sender === appState.userName ? `
+            <button onclick="window.ChatModule.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
+            <button onclick="window.ChatModule.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
+        ` : ''}
+        <button onclick="window.ChatModule.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
+            <i class="fas fa-reply"></i> Reply
+        </button>
+        <div class="reaction-section">
+            <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+            <div class="reaction-quick-picker">
+                ${reactionEmojis.map(emoji => 
+                    `<button onclick="window.ChatModule.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                ).join('')}
             </div>
-        `;
+        </div>
+    </div>
+`;
         
         messageDiv.innerHTML = `
             <div class="message-sender">${escapeHtml(message.sender)}</div>
@@ -217,19 +221,39 @@ const ChatModule = (function() {
             const messageElement = document.getElementById(`msg-${messageId}`);
             const reactions = await getMessageReactions(messageId);
             
-            // Check if user already reacted with this emoji
-            const userReaction = reactions.find(r => r.user_id === appState.userId && r.emoji === emoji);
+            // Check if user already reacted with ANY emoji on this message
+            const userReaction = reactions.find(r => r.user_id === appState.userId);
             
             if (userReaction) {
-                // Remove reaction
-                const { error } = await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
-                
-                if (error) throw error;
+                // If user already reacted with a different emoji, remove the old one first
+                if (userReaction.emoji !== emoji) {
+                    // Remove old reaction
+                    await supabaseClient
+                        .from('message_reactions')
+                        .delete()
+                        .eq('id', userReaction.id);
+                    
+                    // Add new reaction
+                    const { error } = await supabaseClient
+                        .from('message_reactions')
+                        .insert([{
+                            message_id: messageId,
+                            user_id: appState.userId,
+                            user_name: appState.userName,
+                            emoji: emoji,
+                            created_at: new Date().toISOString()
+                        }]);
+                    
+                    if (error) throw error;
+                } else {
+                    // User clicked the same emoji - remove it (toggle off)
+                    await supabaseClient
+                        .from('message_reactions')
+                        .delete()
+                        .eq('id', userReaction.id);
+                }
             } else {
-                // Add reaction
+                // No existing reaction, add new one
                 const { error } = await supabaseClient
                     .from('message_reactions')
                     .insert([{
