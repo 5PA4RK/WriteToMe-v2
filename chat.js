@@ -106,25 +106,24 @@ const ChatModule = (function() {
         // Add reactions section
         const reactionsHtml = `<div class="message-reactions"></div>`;
         
-        // Add action button (three dots)
-        const actionButton = `<button class="message-action-dots" onclick="window.ChatModule.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
-        
-        // Actions menu (initially hidden)
+// Add action button (three dots)
+const actionButton = `<button class="message-action-dots" onclick="toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
+
 // Actions menu (initially hidden)
 const actionsMenu = `
     <div class="message-actions-menu" id="actions-${message.id}">
         ${message.sender === appState.userName ? `
-            <button onclick="window.ChatModule.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
-            <button onclick="window.ChatModule.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
+            <button onclick="editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
+            <button onclick="deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
         ` : ''}
-        <button onclick="window.ChatModule.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
+        <button onclick="openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
             <i class="fas fa-reply"></i> Reply
         </button>
         <div class="reaction-section">
             <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
             <div class="reaction-quick-picker">
                 ${reactionEmojis.map(emoji => 
-                    `<button onclick="window.ChatModule.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                    `<button onclick="addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
                 ).join('')}
             </div>
         </div>
@@ -156,26 +155,26 @@ const actionsMenu = `
     }
 
     // Render reactions for a message
-    function renderReactions(container, reactions) {
-        if (!reactions || reactions.length === 0) {
-            container.innerHTML = '';
-            return;
-        }
-        
-        // Group reactions by emoji
-        const reactionCounts = {};
-        reactions.forEach(r => {
-            reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-        });
-        
-        let html = '';
-        for (const [emoji, count] of Object.entries(reactionCounts)) {
-            const messageId = container.closest('.message').id.replace('msg-', '');
-            html += `<span class="reaction-badge" onclick="window.ChatModule.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
-        }
-        
-        container.innerHTML = html;
+function renderReactions(container, reactions) {
+    if (!reactions || reactions.length === 0) {
+        container.innerHTML = '';
+        return;
     }
+    
+    // Group reactions by emoji
+    const reactionCounts = {};
+    reactions.forEach(r => {
+        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+    });
+    
+    let html = '';
+    for (const [emoji, count] of Object.entries(reactionCounts)) {
+        const messageId = container.closest('.message').id.replace('msg-', '');
+        html += `<span class="reaction-badge" onclick="toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+    }
+    
+    container.innerHTML = html;
+}
 
     // Toggle message actions menu
     function toggleMessageActions(messageId, button) {
@@ -509,5 +508,34 @@ const actionsMenu = `
     };
 })();
 
-// Make it globally available
+// Make sure all functions are globally available
 window.ChatModule = ChatModule;
+
+// Expose individual functions directly for onclick handlers
+window.toggleMessageActions = function(messageId, button) {
+    ChatModule.toggleMessageActions(messageId, button);
+};
+
+window.addReaction = function(messageId, emoji) {
+    ChatModule.addReaction(messageId, emoji);
+};
+
+window.toggleReaction = function(messageId, emoji) {
+    ChatModule.toggleReaction(messageId, emoji);
+};
+
+window.openReplyModal = function(messageId, senderName, messageText) {
+    ChatModule.openReplyModal(messageId, senderName, messageText);
+};
+
+window.editMessage = function(messageId) {
+    ChatModule.editMessage(messageId);
+};
+
+window.deleteMessage = function(messageId) {
+    ChatModule.deleteMessage(messageId);
+};
+
+window.showFullImage = function(src) {
+    ChatModule.showFullImage(src);
+};
