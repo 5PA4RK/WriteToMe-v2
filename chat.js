@@ -23,6 +23,7 @@ const ChatModule = (function() {
 
     // Initialize the chat module
     function init(state, supabase, elements) {
+        console.log("ChatModule initializing...");
         appState = state;
         supabaseClient = supabase;
         
@@ -41,6 +42,7 @@ const ChatModule = (function() {
         closeReplyModal = elements.closeReplyModal;
 
         setupEventListeners();
+        console.log("ChatModule initialized successfully");
     }
 
     // Setup event listeners
@@ -65,7 +67,7 @@ const ChatModule = (function() {
 
         // Close message actions when clicking outside
         document.addEventListener('click', (e) => {
-            if (appState.activeMessageActions) {
+            if (appState && appState.activeMessageActions) {
                 const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
                 if (actionsMenu && !actionsMenu.contains(e.target) && 
                     !e.target.closest('.message-action-dots')) {
@@ -100,35 +102,36 @@ const ChatModule = (function() {
         }
         
         if (message.image) {
-            messageContent += `<img src="${message.image}" class="message-image" onclick="window.ChatModule.showFullImage('${message.image}')">`;
+            messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
         }
         
         // Add reactions section
         const reactionsHtml = `<div class="message-reactions"></div>`;
         
-// Add action button (three dots)
-const actionButton = `<button class="message-action-dots" onclick="toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
-
-// Actions menu (initially hidden)
-const actionsMenu = `
-    <div class="message-actions-menu" id="actions-${message.id}">
-        ${message.sender === appState.userName ? `
-            <button onclick="editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
-            <button onclick="deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
-        ` : ''}
-        <button onclick="openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
-            <i class="fas fa-reply"></i> Reply
-        </button>
-        <div class="reaction-section">
-            <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
-            <div class="reaction-quick-picker">
-                ${reactionEmojis.map(emoji => 
-                    `<button onclick="addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
-                ).join('')}
+        // Add action button (three dots) - using direct function call
+        const actionButton = `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
+        
+        // Actions menu (initially hidden) - using direct function calls
+        const actionsMenu = `
+            <div class="message-actions-menu" id="actions-${message.id}">
+                ${message.sender === appState.userName ? `
+                    <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
+                    <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
+                ` : ''}
+                <button onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
+                    <i class="fas fa-reply"></i> Reply
+                </button>
+                <div class="menu-divider"></div>
+                <div class="reaction-section">
+                    <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+                    <div class="reaction-quick-picker">
+                        ${reactionEmojis.map(emoji => 
+                            `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                        ).join('')}
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
-`;
+        `;
         
         messageDiv.innerHTML = `
             <div class="message-sender">${escapeHtml(message.sender)}</div>
@@ -155,55 +158,91 @@ const actionsMenu = `
     }
 
     // Render reactions for a message
-function renderReactions(container, reactions) {
-    if (!reactions || reactions.length === 0) {
-        container.innerHTML = '';
-        return;
+    function renderReactions(container, reactions) {
+        if (!reactions || reactions.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+        
+        // Group reactions by emoji
+        const reactionCounts = {};
+        reactions.forEach(r => {
+            reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+        });
+        
+        let html = '';
+        for (const [emoji, count] of Object.entries(reactionCounts)) {
+            const messageId = container.closest('.message').id.replace('msg-', '');
+            html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+        }
+        
+        container.innerHTML = html;
     }
-    
-    // Group reactions by emoji
-    const reactionCounts = {};
-    reactions.forEach(r => {
-        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-    });
-    
-    let html = '';
-    for (const [emoji, count] of Object.entries(reactionCounts)) {
-        const messageId = container.closest('.message').id.replace('msg-', '');
-        html += `<span class="reaction-badge" onclick="toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
-    }
-    
-    container.innerHTML = html;
-}
 
     // Toggle message actions menu
     function toggleMessageActions(messageId, button) {
+        console.log('Toggle message actions called for message:', messageId);
+        
+        // Close any open menus first
         closeMessageActions();
         
         const menu = document.getElementById(`actions-${messageId}`);
         if (menu) {
+            console.log('Menu found, showing it');
+            
+            // Toggle the menu
             menu.classList.add('show');
             appState.activeMessageActions = messageId;
             
             // Position menu near the button
             const rect = button.getBoundingClientRect();
-            const chatRect = chatMessages.getBoundingClientRect();
             
-            let top = rect.top - 150;
-            let left = rect.left - 200;
+            // Get viewport dimensions
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
             
-            // Adjust if out of bounds
-            if (top < chatRect.top) top = rect.bottom + 10;
-            if (left < chatRect.left) left = rect.right + 10;
+            // Default position (below and to the right of the button)
+            let top = rect.bottom + 5;
+            let left = rect.left;
+            
+            // Get menu dimensions (approximate)
+            const menuWidth = 220;
+            const menuHeight = 300;
+            
+            // Adjust if menu would go off screen to the right
+            if (left + menuWidth > viewportWidth) {
+                left = viewportWidth - menuWidth - 10;
+            }
+            
+            // Adjust if menu would go off screen to the bottom
+            if (top + menuHeight > viewportHeight) {
+                top = rect.top - menuHeight - 5;
+            }
+            
+            // Ensure menu is not off screen to the left
+            if (left < 10) {
+                left = 10;
+            }
+            
+            // Ensure menu is not off screen to the top
+            if (top < 10) {
+                top = 10;
+            }
             
             menu.style.top = `${top}px`;
             menu.style.left = `${left}px`;
+            menu.style.position = 'fixed';
+            
+            console.log('Menu positioned at:', top, left);
+        } else {
+            console.log('Menu not found for message:', messageId);
         }
     }
 
     // Close message actions menu
     function closeMessageActions() {
-        if (appState.activeMessageActions) {
+        if (appState && appState.activeMessageActions) {
+            console.log('Closing menu for:', appState.activeMessageActions);
             const oldMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
             if (oldMenu) {
                 oldMenu.classList.remove('show');
@@ -214,10 +253,16 @@ function renderReactions(container, reactions) {
 
     // Add or remove reaction
     async function addReaction(messageId, emoji) {
+        console.log('Adding reaction:', emoji, 'to message:', messageId);
         closeMessageActions();
         
         try {
             const messageElement = document.getElementById(`msg-${messageId}`);
+            if (!messageElement) {
+                console.error('Message element not found');
+                return;
+            }
+            
             const reactions = await getMessageReactions(messageId);
             
             // Check if user already reacted with ANY emoji on this message
@@ -280,7 +325,9 @@ function renderReactions(container, reactions) {
             
             // Update UI
             const reactionsContainer = messageElement.querySelector('.message-reactions');
-            renderReactions(reactionsContainer, updatedReactions);
+            if (reactionsContainer) {
+                renderReactions(reactionsContainer, updatedReactions);
+            }
             
             // Also update local appState if it exists
             if (window.appState && window.appState.messages) {
@@ -290,8 +337,11 @@ function renderReactions(container, reactions) {
                 }
             }
             
+            console.log('Reaction added successfully');
+            
         } catch (error) {
             console.error("Error adding reaction:", error);
+            alert("Failed to add reaction: " + error.message);
         }
     }
 
@@ -318,7 +368,14 @@ function renderReactions(container, reactions) {
 
     // Open reply modal
     function openReplyModal(messageId, senderName, messageText) {
-        replyToName.textContent = senderName;
+        console.log('Opening reply modal for message:', messageId);
+        
+        if (!replyModal || !replyToName || !replyToContent || !replyInput) {
+            console.error('Reply modal elements not found');
+            return;
+        }
+        
+        replyToName.textContent = senderName || 'Unknown';
         replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
         replyInput.value = '';
         
@@ -336,19 +393,29 @@ function renderReactions(container, reactions) {
         messageInput.value = replyText;
         replyModal.style.display = 'none';
         
-        // Trigger send message
-        if (window.mainApp && window.mainApp.sendMessage) {
-            await window.mainApp.sendMessage();
+        // Trigger send message - you'll need to implement this in your main app
+        if (window.sendMessage) {
+            await window.sendMessage();
+        } else if (window.appState && window.appState.sendMessage) {
+            await window.appState.sendMessage();
+        } else {
+            console.warn('No sendMessage function found');
         }
     }
 
     // Edit message
     async function editMessage(messageId) {
+        console.log('Editing message:', messageId);
         closeMessageActions();
         
         const messageElement = document.getElementById(`msg-${messageId}`);
+        if (!messageElement) {
+            console.error('Message element not found');
+            return;
+        }
+        
         const textElement = messageElement.querySelector('.message-text');
-        const currentText = textElement ? textElement.textContent : '';
+        const currentText = textElement ? textElement.textContent.replace(/\s*\(edited\)\s*$/, '') : '';
         
         const newText = prompt("Edit your message:", currentText);
         if (newText !== null && newText.trim() !== '') {
@@ -368,15 +435,18 @@ function renderReactions(container, reactions) {
                 if (textElement) {
                     textElement.innerHTML = `${escapeHtml(newText.trim())} <small class="edited-indicator">(edited)</small>`;
                 }
+                
+                console.log('Message edited successfully');
             } catch (error) {
                 console.error("Error editing message:", error);
-                alert("Failed to edit message.");
+                alert("Failed to edit message: " + error.message);
             }
         }
     }
 
     // Delete message
     async function deleteMessage(messageId) {
+        console.log('Deleting message:', messageId);
         closeMessageActions();
         
         if (!confirm("Are you sure you want to delete this message?")) return;
@@ -417,9 +487,11 @@ function renderReactions(container, reactions) {
                 const actionsMenu = document.getElementById(`actions-${messageId}`);
                 if (actionsMenu) actionsMenu.remove();
             }
+            
+            console.log('Message deleted successfully');
         } catch (error) {
             console.error("Error deleting message:", error);
-            alert("Failed to delete message.");
+            alert("Failed to delete message: " + error.message);
         }
     }
 
@@ -471,6 +543,7 @@ function renderReactions(container, reactions) {
 
     // Show full image
     function showFullImage(src) {
+        console.log('Showing full image:', src);
         const imageModal = document.getElementById('imageModal');
         const fullSizeImage = document.getElementById('fullSizeImage');
         if (imageModal && fullSizeImage) {
@@ -513,29 +586,39 @@ window.ChatModule = ChatModule;
 
 // Expose individual functions directly for onclick handlers
 window.toggleMessageActions = function(messageId, button) {
+    console.log('Global toggleMessageActions called');
     ChatModule.toggleMessageActions(messageId, button);
 };
 
 window.addReaction = function(messageId, emoji) {
+    console.log('Global addReaction called');
     ChatModule.addReaction(messageId, emoji);
 };
 
 window.toggleReaction = function(messageId, emoji) {
+    console.log('Global toggleReaction called');
     ChatModule.toggleReaction(messageId, emoji);
 };
 
 window.openReplyModal = function(messageId, senderName, messageText) {
+    console.log('Global openReplyModal called');
     ChatModule.openReplyModal(messageId, senderName, messageText);
 };
 
 window.editMessage = function(messageId) {
+    console.log('Global editMessage called');
     ChatModule.editMessage(messageId);
 };
 
 window.deleteMessage = function(messageId) {
+    console.log('Global deleteMessage called');
     ChatModule.deleteMessage(messageId);
 };
 
 window.showFullImage = function(src) {
+    console.log('Global showFullImage called');
     ChatModule.showFullImage(src);
 };
+
+// Log that chat.js has loaded
+console.log('Chat.js loaded and functions exposed globally');
