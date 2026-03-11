@@ -243,10 +243,29 @@ const ChatModule = (function() {
                 if (error) throw error;
             }
             
-            // Update local display
+            // Get updated reactions
             const updatedReactions = await getMessageReactions(messageId);
+            
+            // Update the reactions array in the messages table for persistence
+            await supabaseClient
+                .from('messages')
+                .update({ 
+                    reactions: updatedReactions,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', messageId);
+            
+            // Update UI
             const reactionsContainer = messageElement.querySelector('.message-reactions');
             renderReactions(reactionsContainer, updatedReactions);
+            
+            // Also update local appState if it exists
+            if (window.appState && window.appState.messages) {
+                const messageIndex = window.appState.messages.findIndex(m => m.id === messageId);
+                if (messageIndex !== -1) {
+                    window.appState.messages[messageIndex].reactions = updatedReactions;
+                }
+            }
             
         } catch (error) {
             console.error("Error adding reaction:", error);
