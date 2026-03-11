@@ -1932,23 +1932,28 @@ function displayMessage(message) {
     // Add reactions section
     const reactionsHtml = `<div class="message-reactions"></div>`;
     
-    // Add action button (three dots)
+    // Add action button (three dots) - this will show the menu with emojis
     const actionButton = `<button class="message-action-dots" onclick="toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
     
-    // Actions menu (initially hidden)
+    // Actions menu with emojis (initially hidden)
     const actionsMenu = `
         <div class="message-actions-menu" id="actions-${message.id}">
             ${message.sender === appState.userName ? `
                 <button onclick="editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
                 <button onclick="deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
+                <div class="menu-divider"></div>
             ` : ''}
             <button onclick="openReplyModal('${message.id}', '${message.sender}', '${message.text.replace(/'/g, "\\'")}')">
                 <i class="fas fa-reply"></i> Reply
             </button>
-            <div class="reaction-quick-picker">
-                ${appState.reactionEmojis.map(emoji => 
-                    `<button onclick="addReaction('${message.id}', '${emoji}')">${emoji}</button>`
-                ).join('')}
+            <div class="menu-divider"></div>
+            <div class="reaction-section">
+                <div class="reaction-title"><i class="fas fa-smile"></i> Add Reaction</div>
+                <div class="reaction-quick-picker">
+                    ${appState.reactionEmojis.map(emoji => 
+                        `<button class="reaction-emoji-btn" onclick="addReaction('${message.id}', '${emoji}')" title="Add ${emoji} reaction">${emoji}</button>`
+                    ).join('')}
+                </div>
             </div>
         </div>
     `;
@@ -2036,39 +2041,29 @@ async function addReaction(messageId, emoji) {
         const messageElement = document.getElementById(`msg-${messageId}`);
         const reactions = await getMessageReactions(messageId);
         
-        // Check if user already reacted with ANY emoji on this message
-        const userReaction = reactions.find(r => r.user_id === appState.userId);
+        // Check if user already reacted with this emoji
+        const userReaction = reactions.find(r => r.user_id === appState.userId && r.emoji === emoji);
         
         if (userReaction) {
-            // If user already reacted with a different emoji, remove the old one first
-            if (userReaction.emoji !== emoji) {
-                // Remove old reaction
-                await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
-                
-                // Add new reaction
-                const { error } = await supabaseClient
-                    .from('message_reactions')
-                    .insert([{
-                        message_id: messageId,
-                        user_id: appState.userId,
-                        user_name: appState.userName,
-                        emoji: emoji,
-                        created_at: new Date().toISOString()
-                    }]);
-                
-                if (error) throw error;
-            } else {
-                // User clicked the same emoji - remove it (toggle off)
-                await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
-            }
+            // If already reacted with this emoji, remove it (toggle off)
+            const { error } = await supabaseClient
+                .from('message_reactions')
+                .delete()
+                .eq('id', userReaction.id);
+            
+            if (error) throw error;
         } else {
-            // No existing reaction, add new one
+            // Remove any existing reaction from this user (only allow one reaction per user)
+            // Comment this out if you want users to be able to add multiple different emojis
+            const userReactions = reactions.filter(r => r.user_id === appState.userId);
+            for (const reaction of userReactions) {
+                await supabaseClient
+                    .from('message_reactions')
+                    .delete()
+                    .eq('id', reaction.id);
+            }
+            
+            // Add new reaction
             const { error } = await supabaseClient
                 .from('message_reactions')
                 .insert([{
