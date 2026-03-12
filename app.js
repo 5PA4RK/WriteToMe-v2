@@ -45,7 +45,7 @@ window.getMessageReactions = async function(messageId) {
 // Make sendMessage globally available
 window.sendMessage = sendMessage;
 
-// Update the sendReply function
+// Update the sendReply function 
 async function sendReply() {
     if (window.ChatModule) {
         await window.ChatModule.sendReply();
@@ -53,8 +53,15 @@ async function sendReply() {
         const replyText = replyInput.value.trim();
         if (!replyText) return;
         
+        // Store the replyingTo ID before clearing
+        const replyToId = appState.replyingTo;
+        
         messageInput.value = replyText;
         replyModal.style.display = 'none';
+        
+        // Make sure replyingTo is still set when sending
+        appState.replyingTo = replyToId;
+        
         await sendMessage();
     }
 }
@@ -1981,7 +1988,7 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to: appState.replyingTo || null
+            reply_to: appState.replyingTo || null  // Make sure this is included
         };
         
         if (imageUrl) {
@@ -2014,7 +2021,7 @@ async function sendMessageToDB(text, imageUrl) {
             type: 'sent',
             is_historical: false,
             reactions: [],
-            reply_to: repliedToId
+            reply_to: repliedToId  // Include this
         });
         
         return { success: true, data };
