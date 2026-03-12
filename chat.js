@@ -89,6 +89,11 @@ const ChatModule = (function() {
             return;
         }
         
+        // Check if message already exists
+        if (document.getElementById(`msg-${message.id}`)) {
+            return;
+        }
+        
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${message.type}`;
         if (message.is_historical) {
@@ -161,6 +166,11 @@ const ChatModule = (function() {
             renderReactions(reactionsContainer, message.reactions);
         }
         
+        // Store in appState.messages if available
+        if (appState && appState.messages) {
+            appState.messages.push(message);
+        }
+        
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
@@ -189,70 +199,42 @@ const ChatModule = (function() {
     }
 
     // Toggle message actions menu
-// Toggle message actions menu
-function toggleMessageActions(messageId, button) {
-    console.log('=== TOGGLE MESSAGE ACTIONS CALLED ===');
-    console.log('Message ID:', messageId);
-    console.log('Button:', button);
-    
-    // Close any open menus first
-    closeMessageActions();
-    
-    const menu = document.getElementById(`actions-${messageId}`);
-    console.log('Menu element found:', menu);
-    
-    if (menu) {
-        // Log current menu state
-        console.log('Current menu classes:', menu.className);
-        console.log('Current menu display:', menu.style.display);
-        console.log('Current menu has show class:', menu.classList.contains('show'));
+    function toggleMessageActions(messageId, button) {
+        console.log('Toggle message actions called for message:', messageId);
         
-        // Toggle the menu
-        if (menu.classList.contains('show')) {
-            console.log('Hiding menu');
-            menu.classList.remove('show');
-            menu.style.display = 'none';
-        } else {
-            console.log('Showing menu');
-            menu.classList.add('show');
-            menu.style.display = 'block';
-            if (appState) appState.activeMessageActions = messageId;
-            
-            // Position menu near the button
-            const rect = button.getBoundingClientRect();
-            console.log('Button position:', rect);
-            
-            menu.style.position = 'fixed';
-            menu.style.top = (rect.bottom + 5) + 'px';
-            menu.style.left = rect.left + 'px';
-            menu.style.zIndex = '9999';
-            
-            // Ensure menu stays within viewport
-            const menuRect = menu.getBoundingClientRect();
-            console.log('Menu position after set:', menuRect);
-            
-            if (menuRect.right > window.innerWidth) {
-                menu.style.left = (window.innerWidth - menuRect.width - 10) + 'px';
-                console.log('Adjusted left position:', menu.style.left);
+        // Close any open menus first
+        closeMessageActions();
+        
+        const menu = document.getElementById(`actions-${messageId}`);
+        if (menu) {
+            // Toggle the menu
+            if (menu.classList.contains('show')) {
+                menu.classList.remove('show');
+                menu.style.display = 'none';
+            } else {
+                menu.classList.add('show');
+                menu.style.display = 'block';
+                if (appState) appState.activeMessageActions = messageId;
+                
+                // Position menu near the button
+                const rect = button.getBoundingClientRect();
+                
+                menu.style.position = 'fixed';
+                menu.style.top = (rect.bottom + 5) + 'px';
+                menu.style.left = rect.left + 'px';
+                menu.style.zIndex = '9999';
+                
+                // Ensure menu stays within viewport
+                const menuRect = menu.getBoundingClientRect();
+                if (menuRect.right > window.innerWidth) {
+                    menu.style.left = (window.innerWidth - menuRect.width - 10) + 'px';
+                }
+                if (menuRect.bottom > window.innerHeight) {
+                    menu.style.top = (rect.top - menuRect.height - 5) + 'px';
+                }
             }
-            if (menuRect.bottom > window.innerHeight) {
-                menu.style.top = (rect.top - menuRect.height - 5) + 'px';
-                console.log('Adjusted top position:', menu.style.top);
-            }
-        }
-    } else {
-        console.error('Menu not found for message:', messageId);
-        console.log('Expected menu ID:', `actions-${messageId}`);
-        
-        // Check if the message element exists
-        const messageEl = document.getElementById(`msg-${messageId}`);
-        console.log('Message element exists:', messageEl);
-        
-        if (messageEl) {
-            console.log('Message HTML:', messageEl.innerHTML);
         }
     }
-}
 
     // Close message actions menu
     function closeMessageActions() {
@@ -271,14 +253,12 @@ function toggleMessageActions(messageId, button) {
         console.log('Adding reaction:', emoji, 'to message:', messageId);
         closeMessageActions();
         
-        // Check if supabaseClient is available
         if (!supabaseClient) {
             console.error('Supabase client not initialized');
             alert('Cannot add reaction: Database connection not initialized');
             return;
         }
         
-        // Check if user is logged in
         if (!appState || !appState.userId) {
             console.error('User not logged in');
             alert('You must be logged in to add reactions');
@@ -301,15 +281,13 @@ function toggleMessageActions(messageId, button) {
                 // If user already reacted with a different emoji, remove the old one first
                 if (userReaction.emoji !== emoji) {
                     // Remove old reaction
-                    const { error: deleteError } = await supabaseClient
+                    await supabaseClient
                         .from('message_reactions')
                         .delete()
                         .eq('id', userReaction.id);
                     
-                    if (deleteError) throw deleteError;
-                    
                     // Add new reaction
-                    const { error: insertError } = await supabaseClient
+                    await supabaseClient
                         .from('message_reactions')
                         .insert([{
                             message_id: messageId,
@@ -318,20 +296,16 @@ function toggleMessageActions(messageId, button) {
                             emoji: emoji,
                             created_at: new Date().toISOString()
                         }]);
-                    
-                    if (insertError) throw insertError;
                 } else {
                     // User clicked the same emoji - remove it (toggle off)
-                    const { error: deleteError } = await supabaseClient
+                    await supabaseClient
                         .from('message_reactions')
                         .delete()
                         .eq('id', userReaction.id);
-                    
-                    if (deleteError) throw deleteError;
                 }
             } else {
                 // No existing reaction, add new one
-                const { error: insertError } = await supabaseClient
+                await supabaseClient
                     .from('message_reactions')
                     .insert([{
                         message_id: messageId,
@@ -340,8 +314,6 @@ function toggleMessageActions(messageId, button) {
                         emoji: emoji,
                         created_at: new Date().toISOString()
                     }]);
-                
-                if (insertError) throw insertError;
             }
             
             // Get updated reactions
@@ -406,31 +378,24 @@ function toggleMessageActions(messageId, button) {
         replyInput.focus();
     }
 
-// Send reply
-async function sendReply() {
-    const replyText = replyInput.value.trim();
-    if (!replyText) return;
-    
-    if (messageInput) {
-        messageInput.value = replyText;
+    // Send reply
+    async function sendReply() {
+        const replyText = replyInput.value.trim();
+        if (!replyText) return;
+        
+        if (messageInput) {
+            messageInput.value = replyText;
+        }
+        replyModal.style.display = 'none';
+        
+        // Trigger send message
+        if (typeof window.sendMessage === 'function') {
+            await window.sendMessage();
+        } else {
+            console.warn('No sendMessage function found');
+            alert('Cannot send reply: Message function not available');
+        }
     }
-    replyModal.style.display = 'none';
-    
-    // Clear the replyingTo state
-    if (appState) {
-        appState.replyingTo = null;
-    }
-    
-    // Try multiple ways to send the message
-    if (typeof window.sendMessage === 'function') {
-        await window.sendMessage();
-    } else if (window.appState && typeof window.sendMessageToDB === 'function') {
-        await window.sendMessageToDB(replyText, null);
-    } else {
-        console.warn('No sendMessage function found');
-        alert('Cannot send reply: Message function not available');
-    }
-}
 
     // Edit message
     async function editMessage(messageId) {
@@ -455,7 +420,7 @@ async function sendReply() {
         const newText = prompt("Edit your message:", currentText);
         if (newText !== null && newText.trim() !== '') {
             try {
-                const { error } = await supabaseClient
+                await supabaseClient
                     .from('messages')
                     .update({
                         message: newText.trim(),
@@ -464,8 +429,6 @@ async function sendReply() {
                     })
                     .eq('id', messageId)
                     .eq('sender_id', appState?.userId);
-                
-                if (error) throw error;
                 
                 if (textElement) {
                     textElement.innerHTML = `${escapeHtml(newText.trim())} <small class="edited-indicator">(edited)</small>`;
@@ -500,7 +463,7 @@ async function sendReply() {
                 .eq('message_id', messageId);
             
             // Then delete/update message
-            const { error } = await supabaseClient
+            await supabaseClient
                 .from('messages')
                 .update({
                     is_deleted: true,
@@ -509,8 +472,6 @@ async function sendReply() {
                 })
                 .eq('id', messageId)
                 .eq('sender_id', appState?.userId);
-            
-            if (error) throw error;
             
             const messageElement = document.getElementById(`msg-${messageId}`);
             if (messageElement) {
@@ -628,39 +589,31 @@ window.ChatModule = ChatModule;
 
 // Expose individual functions directly for onclick handlers
 window.toggleMessageActions = function(messageId, button) {
-    console.log('Global toggleMessageActions called');
     ChatModule.toggleMessageActions(messageId, button);
 };
 
 window.addReaction = function(messageId, emoji) {
-    console.log('Global addReaction called');
     ChatModule.addReaction(messageId, emoji);
 };
 
 window.toggleReaction = function(messageId, emoji) {
-    console.log('Global toggleReaction called');
     ChatModule.toggleReaction(messageId, emoji);
 };
 
 window.openReplyModal = function(messageId, senderName, messageText) {
-    console.log('Global openReplyModal called');
     ChatModule.openReplyModal(messageId, senderName, messageText);
 };
 
 window.editMessage = function(messageId) {
-    console.log('Global editMessage called');
     ChatModule.editMessage(messageId);
 };
 
 window.deleteMessage = function(messageId) {
-    console.log('Global deleteMessage called');
     ChatModule.deleteMessage(messageId);
 };
 
 window.showFullImage = function(src) {
-    console.log('Global showFullImage called');
     ChatModule.showFullImage(src);
 };
 
-// Log that chat.js has loaded
 console.log('Chat.js loaded and functions exposed globally');
