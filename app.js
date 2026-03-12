@@ -42,6 +42,22 @@ window.getMessageReactions = async function(messageId) {
     }
     return [];
 };
+// Make sendMessage globally available
+window.sendMessage = sendMessage;
+
+// Update the sendReply function
+async function sendReply() {
+    if (window.ChatModule) {
+        await window.ChatModule.sendReply();
+    } else {
+        const replyText = replyInput.value.trim();
+        if (!replyText) return;
+        
+        messageInput.value = replyText;
+        replyModal.style.display = 'none';
+        await sendMessage();
+    }
+}
 
 // DOM Elements
 const connectionModal = document.getElementById('connectionModal');
@@ -1960,6 +1976,9 @@ function displayMessage(message) {
 // ============================================
 // LOAD CHAT HISTORY
 // ============================================
+// ============================================
+// LOAD CHAT HISTORY
+// ============================================
 async function loadChatHistory(sessionId = null) {
     const targetSessionId = sessionId || appState.currentSessionId;
     if (!targetSessionId) {
@@ -1975,7 +1994,7 @@ async function loadChatHistory(sessionId = null) {
             .select('*')
             .eq('session_id', targetSessionId)
             .eq('is_deleted', false)
-            .order('created_at', { ascending: true }); // Make sure this is ascending for oldest first
+            .order('created_at', { ascending: true });
         
         if (error) {
             console.error('Error loading messages:', error);
@@ -2030,22 +2049,16 @@ async function loadChatHistory(sessionId = null) {
             return;
         }
         
-        // Load reactions for all messages
-        for (const msg of messages) {
-            let reactions = [];
-            
-            // Try to get reactions from ChatModule
-            if (window.ChatModule && typeof window.ChatModule.getMessageReactions === 'function') {
-                try {
-                    reactions = await window.ChatModule.getMessageReactions(msg.id);
-                } catch (e) {
-                    console.log('Error getting reactions from ChatModule:', e);
-                }
-            }
-            
+        // Load all reactions first (more efficient)
+        const reactionPromises = messages.map(msg => 
+            window.ChatModule?.getMessageReactions(msg.id) || []
+        );
+        const allReactions = await Promise.all(reactionPromises);
+        
+        // Display all messages at once
+        messages.forEach((msg, index) => {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
             
-            // Use displayMessage from ChatModule if available
             if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
                 window.ChatModule.displayMessage({
                     id: msg.id,
@@ -2055,16 +2068,11 @@ async function loadChatHistory(sessionId = null) {
                     time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                     type: messageType,
                     is_historical: !!sessionId,
-                    reactions: reactions,
+                    reactions: allReactions[index] || [],
                     reply_to: msg.reply_to
                 });
-                
-                // Add a small delay between messages to ensure they appear in order
-                await new Promise(resolve => setTimeout(resolve, 10));
-            } else {
-                console.warn('ChatModule displayMessage not available');
             }
-        }
+        });
         
         if (chatMessages) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
