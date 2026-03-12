@@ -229,6 +229,7 @@ function toggleMessageActions(messageId, button) {
     }
 
     // Add or remove reaction
+// Add or remove reaction
 async function addReaction(messageId, emoji) {
     console.log('Adding reaction:', emoji, 'to message:', messageId);
     closeMessageActions();
@@ -290,8 +291,6 @@ async function addReaction(messageId, emoji) {
         
         // Get updated reactions
         const updatedReactions = await getMessageReactions(messageId);
-        
-        // REMOVED: Update the reactions array in the messages table
         
         // Update UI
         const reactionsContainer = messageElement.querySelector('.message-reactions');
