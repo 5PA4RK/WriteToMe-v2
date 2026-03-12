@@ -1951,8 +1951,7 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            // REMOVED: reactions: [],
-            reply_to: appState.replyingTo || null
+            reply_to: appState.replyingTo || null // Make sure this is included
         };
         
         if (imageUrl) {
@@ -1972,6 +1971,19 @@ async function sendMessageToDB(text, imageUrl) {
         
         console.log('✅ Message saved to DB:', data.id);
         
+        // Get the original message being replied to
+        let replyToContent = null;
+        if (appState.replyingTo) {
+            const originalMsg = appState.messages.find(m => m.id === appState.replyingTo);
+            if (originalMsg) {
+                replyToContent = {
+                    id: originalMsg.id,
+                    sender: originalMsg.sender,
+                    text: originalMsg.text
+                };
+            }
+        }
+        
         displayMessage({
             id: data.id,
             sender: appState.userName,
@@ -1980,9 +1992,13 @@ async function sendMessageToDB(text, imageUrl) {
             time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             type: 'sent',
             is_historical: false,
-            reactions: [], // Keep this for display
-            reply_to: appState.replyingTo
+            reactions: [],
+            reply_to: appState.replyingTo,
+            reply_to_content: replyToContent // Add this for display
         });
+        
+        // Clear replyingTo after sending
+        appState.replyingTo = null;
         
         return { success: true, data };
     } catch (error) {
