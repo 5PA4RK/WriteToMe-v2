@@ -180,64 +180,41 @@ const ChatModule = (function() {
     }
 
     // Toggle message actions menu
-    function toggleMessageActions(messageId, button) {
-        console.log('Toggle message actions called for message:', messageId);
+// Toggle message actions menu
+function toggleMessageActions(messageId, button) {
+    console.log('Toggle message actions called for message:', messageId);
+    
+    // Close any open menus first
+    closeMessageActions();
+    
+    const menu = document.getElementById(`actions-${messageId}`);
+    if (menu) {
+        console.log('Menu found, showing it');
         
-        // Close any open menus first
-        closeMessageActions();
+        // First, make sure menu is visible
+        menu.style.display = 'block';
+        menu.classList.add('show');
+        appState.activeMessageActions = messageId;
         
-        const menu = document.getElementById(`actions-${messageId}`);
-        if (menu) {
-            console.log('Menu found, showing it');
-            
-            // Toggle the menu
-            menu.classList.add('show');
-            appState.activeMessageActions = messageId;
-            
-            // Position menu near the button
-            const rect = button.getBoundingClientRect();
-            
-            // Get viewport dimensions
-            const viewportWidth = window.innerWidth;
-            const viewportHeight = window.innerHeight;
-            
-            // Default position (below and to the right of the button)
-            let top = rect.bottom + 5;
-            let left = rect.left;
-            
-            // Get menu dimensions (approximate)
-            const menuWidth = 220;
-            const menuHeight = 300;
-            
-            // Adjust if menu would go off screen to the right
-            if (left + menuWidth > viewportWidth) {
-                left = viewportWidth - menuWidth - 10;
-            }
-            
-            // Adjust if menu would go off screen to the bottom
-            if (top + menuHeight > viewportHeight) {
-                top = rect.top - menuHeight - 5;
-            }
-            
-            // Ensure menu is not off screen to the left
-            if (left < 10) {
-                left = 10;
-            }
-            
-            // Ensure menu is not off screen to the top
-            if (top < 10) {
-                top = 10;
-            }
-            
-            menu.style.top = `${top}px`;
-            menu.style.left = `${left}px`;
-            menu.style.position = 'fixed';
-            
-            console.log('Menu positioned at:', top, left);
-        } else {
-            console.log('Menu not found for message:', messageId);
+        // Position menu near the button
+        const rect = button.getBoundingClientRect();
+        
+        // Simple positioning - place menu below the button
+        menu.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+        menu.style.left = (rect.left + window.scrollX) + 'px';
+        menu.style.position = 'absolute';
+        
+        // Ensure menu stays within viewport
+        const menuRect = menu.getBoundingClientRect();
+        if (menuRect.right > window.innerWidth) {
+            menu.style.left = (window.innerWidth - menuRect.width - 10) + 'px';
         }
+        
+        console.log('Menu positioned at:', menu.style.top, menu.style.left);
+    } else {
+        console.log('Menu not found for message:', messageId);
     }
+}
 
     // Close message actions menu
     function closeMessageActions() {
@@ -252,52 +229,32 @@ const ChatModule = (function() {
     }
 
     // Add or remove reaction
-    async function addReaction(messageId, emoji) {
-        console.log('Adding reaction:', emoji, 'to message:', messageId);
-        closeMessageActions();
+async function addReaction(messageId, emoji) {
+    console.log('Adding reaction:', emoji, 'to message:', messageId);
+    closeMessageActions();
+    
+    try {
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        if (!messageElement) {
+            console.error('Message element not found');
+            return;
+        }
         
-        try {
-            const messageElement = document.getElementById(`msg-${messageId}`);
-            if (!messageElement) {
-                console.error('Message element not found');
-                return;
-            }
-            
-            const reactions = await getMessageReactions(messageId);
-            
-            // Check if user already reacted with ANY emoji on this message
-            const userReaction = reactions.find(r => r.user_id === appState.userId);
-            
-            if (userReaction) {
-                // If user already reacted with a different emoji, remove the old one first
-                if (userReaction.emoji !== emoji) {
-                    // Remove old reaction
-                    await supabaseClient
-                        .from('message_reactions')
-                        .delete()
-                        .eq('id', userReaction.id);
-                    
-                    // Add new reaction
-                    const { error } = await supabaseClient
-                        .from('message_reactions')
-                        .insert([{
-                            message_id: messageId,
-                            user_id: appState.userId,
-                            user_name: appState.userName,
-                            emoji: emoji,
-                            created_at: new Date().toISOString()
-                        }]);
-                    
-                    if (error) throw error;
-                } else {
-                    // User clicked the same emoji - remove it (toggle off)
-                    await supabaseClient
-                        .from('message_reactions')
-                        .delete()
-                        .eq('id', userReaction.id);
-                }
-            } else {
-                // No existing reaction, add new one
+        const reactions = await getMessageReactions(messageId);
+        
+        // Check if user already reacted with ANY emoji on this message
+        const userReaction = reactions.find(r => r.user_id === appState.userId);
+        
+        if (userReaction) {
+            // If user already reacted with a different emoji, remove the old one first
+            if (userReaction.emoji !== emoji) {
+                // Remove old reaction
+                await supabaseClient
+                    .from('message_reactions')
+                    .delete()
+                    .eq('id', userReaction.id);
+                
+                // Add new reaction
                 const { error } = await supabaseClient
                     .from('message_reactions')
                     .insert([{
@@ -309,41 +266,46 @@ const ChatModule = (function() {
                     }]);
                 
                 if (error) throw error;
+            } else {
+                // User clicked the same emoji - remove it (toggle off)
+                await supabaseClient
+                    .from('message_reactions')
+                    .delete()
+                    .eq('id', userReaction.id);
             }
+        } else {
+            // No existing reaction, add new one
+            const { error } = await supabaseClient
+                .from('message_reactions')
+                .insert([{
+                    message_id: messageId,
+                    user_id: appState.userId,
+                    user_name: appState.userName,
+                    emoji: emoji,
+                    created_at: new Date().toISOString()
+                }]);
             
-            // Get updated reactions
-            const updatedReactions = await getMessageReactions(messageId);
-            
-            // Update the reactions array in the messages table for persistence
-            await supabaseClient
-                .from('messages')
-                .update({ 
-                    reactions: updatedReactions,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', messageId);
-            
-            // Update UI
-            const reactionsContainer = messageElement.querySelector('.message-reactions');
-            if (reactionsContainer) {
-                renderReactions(reactionsContainer, updatedReactions);
-            }
-            
-            // Also update local appState if it exists
-            if (window.appState && window.appState.messages) {
-                const messageIndex = window.appState.messages.findIndex(m => m.id === messageId);
-                if (messageIndex !== -1) {
-                    window.appState.messages[messageIndex].reactions = updatedReactions;
-                }
-            }
-            
-            console.log('Reaction added successfully');
-            
-        } catch (error) {
-            console.error("Error adding reaction:", error);
-            alert("Failed to add reaction: " + error.message);
+            if (error) throw error;
         }
+        
+        // Get updated reactions
+        const updatedReactions = await getMessageReactions(messageId);
+        
+        // REMOVED: Update the reactions array in the messages table
+        
+        // Update UI
+        const reactionsContainer = messageElement.querySelector('.message-reactions');
+        if (reactionsContainer) {
+            renderReactions(reactionsContainer, updatedReactions);
+        }
+        
+        console.log('Reaction added successfully');
+        
+    } catch (error) {
+        console.error("Error adding reaction:", error);
+        alert("Failed to add reaction: " + error.message);
     }
+}
 
     // Toggle reaction (wrapper for addReaction)
     async function toggleReaction(messageId, emoji) {
