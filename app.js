@@ -35,6 +35,14 @@ const appState = {
     activeMessageActions: null
 };
 
+// Helper function to escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // Make getMessageReactions available globally for loadChatHistory
 window.getMessageReactions = async function(messageId) {
     if (window.ChatModule) {
