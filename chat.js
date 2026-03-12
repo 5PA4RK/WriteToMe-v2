@@ -166,10 +166,10 @@ const ChatModule = (function() {
             renderReactions(reactionsContainer, message.reactions);
         }
         
-        // Store in appState.messages if available
-        if (appState && appState.messages) {
-            appState.messages.push(message);
-        }
+// Store in appState.messages if available
+if (appState && appState.messages && Array.isArray(appState.messages)) {
+    appState.messages.push(message);
+}
         
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
