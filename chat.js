@@ -46,44 +46,46 @@ const ChatModule = (function() {
     }
 
     // Setup event listeners
-// Setup event listeners
-function setupEventListeners() {
-    if (sendReplyBtn) {
-        sendReplyBtn.addEventListener('click', sendReply);
-    }
+    function setupEventListeners() {
+        if (sendReplyBtn) {
+            sendReplyBtn.addEventListener('click', sendReply);
+        }
 
-    if (closeReplyModal) {
-        closeReplyModal.addEventListener('click', () => {
-            replyModal.style.display = 'none';
-            appState.replyingTo = null;
+        if (closeReplyModal) {
+            closeReplyModal.addEventListener('click', () => {
+                replyModal.style.display = 'none';
+                if (appState) appState.replyingTo = null;
+            });
+        }
+
+        window.addEventListener('click', (e) => {
+            if (e.target === replyModal) {
+                replyModal.style.display = 'none';
+                if (appState) appState.replyingTo = null;
+            }
+        });
+
+        // Close message actions when clicking outside
+        document.addEventListener('click', (e) => {
+            if (appState && appState.activeMessageActions) {
+                const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
+                if (actionsMenu && 
+                    !actionsMenu.contains(e.target) && 
+                    !e.target.closest('.message-action-dots')) {
+                    closeMessageActions();
+                }
+            }
         });
     }
 
-    window.addEventListener('click', (e) => {
-        if (e.target === replyModal) {
-            replyModal.style.display = 'none';
-            appState.replyingTo = null;
-        }
-    });
-
-    // Close message actions when clicking outside
-    document.addEventListener('click', (e) => {
-        if (appState && appState.activeMessageActions) {
-            const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-            // Don't close if clicking the menu or the three dots button
-            if (actionsMenu && 
-                !actionsMenu.contains(e.target) && 
-                !e.target.closest('.message-action-dots')) {
-                closeMessageActions();
-            }
-        }
-    });
-}
-
-
     // Display a message in the chat
     function displayMessage(message) {
-        if (appState.isViewingHistory && message.is_historical === false) {
+        if (!chatMessages) {
+            console.error('Chat messages container not found');
+            return;
+        }
+        
+        if (appState && appState.isViewingHistory && message.is_historical === false) {
             return;
         }
         
@@ -112,31 +114,31 @@ function setupEventListeners() {
         // Add reactions section
         const reactionsHtml = `<div class="message-reactions"></div>`;
         
-        // Add action button (three dots) - using direct function call
+        // Add action button (three dots)
         const actionButton = `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
         
-        // Actions menu (initially hidden) - using direct function calls
-const actionsMenu = `
-    <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
-        ${message.sender === appState.userName ? `
-            <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
-            <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
-            <div class="menu-divider"></div>
-        ` : ''}
-        <button onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
-            <i class="fas fa-reply"></i> Reply
-        </button>
-        <div class="menu-divider"></div>
-        <div class="reaction-section">
-            <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
-            <div class="reaction-quick-picker">
-                ${reactionEmojis.map(emoji => 
-                    `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
-                ).join('')}
+        // Actions menu (initially hidden)
+        const actionsMenu = `
+            <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
+                ${message.sender === (appState ? appState.userName : '') ? `
+                    <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
+                    <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
+                    <div class="menu-divider"></div>
+                ` : ''}
+                <button onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
+                    <i class="fas fa-reply"></i> Reply
+                </button>
+                <div class="menu-divider"></div>
+                <div class="reaction-section">
+                    <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+                    <div class="reaction-quick-picker">
+                        ${reactionEmojis.map(emoji => 
+                            `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                        ).join('')}
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
-`;
+        `;
         
         messageDiv.innerHTML = `
             <div class="message-sender">${escapeHtml(message.sender)}</div>
@@ -144,7 +146,7 @@ const actionsMenu = `
                 ${messageContent}
                 ${reactionsHtml}
                 <div class="message-footer">
-                    <div class="message-time">${message.time}</div>
+                    <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
                     ${actionButton}
                 </div>
             </div>
@@ -164,6 +166,8 @@ const actionsMenu = `
 
     // Render reactions for a message
     function renderReactions(container, reactions) {
+        if (!container) return;
+        
         if (!reactions || reactions.length === 0) {
             container.innerHTML = '';
             return;
@@ -177,94 +181,131 @@ const actionsMenu = `
         
         let html = '';
         for (const [emoji, count] of Object.entries(reactionCounts)) {
-            const messageId = container.closest('.message').id.replace('msg-', '');
+            const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
             html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
         }
         
         container.innerHTML = html;
     }
 
-// Toggle message actions menu
-function toggleMessageActions(messageId, button) {
-    console.log('Toggle message actions called for message:', messageId);
-    
-    // Close any open menus first
-    closeMessageActions();
-    
-    const menu = document.getElementById(`actions-${messageId}`);
-    if (menu) {
-        console.log('Menu found, toggling visibility');
+    // Toggle message actions menu
+    function toggleMessageActions(messageId, button) {
+        console.log('Toggle message actions called for message:', messageId);
         
-        // Toggle the menu
-        if (menu.classList.contains('show')) {
-            menu.classList.remove('show');
-            menu.style.display = 'none';
-        } else {
-            menu.classList.add('show');
-            menu.style.display = 'block';
-            appState.activeMessageActions = messageId;
+        // Close any open menus first
+        closeMessageActions();
+        
+        const menu = document.getElementById(`actions-${messageId}`);
+        if (menu) {
+            console.log('Menu found, toggling visibility');
             
-            // Position menu near the button - simple positioning
-            const rect = button.getBoundingClientRect();
-            menu.style.position = 'absolute';
-            menu.style.top = (rect.bottom + window.scrollY + 5) + 'px';
-            menu.style.left = (rect.left + window.scrollX) + 'px';
-            menu.style.zIndex = '9999';
+            // Toggle the menu
+            if (menu.classList.contains('show')) {
+                menu.classList.remove('show');
+                menu.style.display = 'none';
+            } else {
+                menu.classList.add('show');
+                menu.style.display = 'block';
+                if (appState) appState.activeMessageActions = messageId;
+                
+                // Position menu near the button
+                const rect = button.getBoundingClientRect();
+                menu.style.position = 'fixed';
+                menu.style.top = (rect.bottom + 5) + 'px';
+                menu.style.left = rect.left + 'px';
+                menu.style.zIndex = '9999';
+                
+                // Ensure menu stays within viewport
+                const menuRect = menu.getBoundingClientRect();
+                if (menuRect.right > window.innerWidth) {
+                    menu.style.left = (window.innerWidth - menuRect.width - 10) + 'px';
+                }
+                if (menuRect.bottom > window.innerHeight) {
+                    menu.style.top = (rect.top - menuRect.height - 5) + 'px';
+                }
+            }
+        } else {
+            console.log('Menu not found for message:', messageId);
         }
-    } else {
-        console.log('Menu not found for message:', messageId);
     }
-}
 
     // Close message actions menu
     function closeMessageActions() {
         if (appState && appState.activeMessageActions) {
-            console.log('Closing menu for:', appState.activeMessageActions);
             const oldMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
             if (oldMenu) {
                 oldMenu.classList.remove('show');
+                oldMenu.style.display = 'none';
             }
             appState.activeMessageActions = null;
         }
     }
 
-
-// Add or remove reaction
-async function addReaction(messageId, emoji) {
-    console.log('Adding reaction:', emoji, 'to message:', messageId);
-    closeMessageActions();
-    
-    // Check if supabaseClient is available
-    if (!supabaseClient) {
-        console.error('Supabase client not initialized');
-        alert('Cannot add reaction: Database connection not initialized');
-        return;
-    }
-    
-    try {
-        const messageElement = document.getElementById(`msg-${messageId}`);
-        if (!messageElement) {
-            console.error('Message element not found');
+    // Add or remove reaction
+    async function addReaction(messageId, emoji) {
+        console.log('Adding reaction:', emoji, 'to message:', messageId);
+        closeMessageActions();
+        
+        // Check if supabaseClient is available
+        if (!supabaseClient) {
+            console.error('Supabase client not initialized');
+            alert('Cannot add reaction: Database connection not initialized');
             return;
         }
         
-        const reactions = await getMessageReactions(messageId);
+        // Check if user is logged in
+        if (!appState || !appState.userId) {
+            console.error('User not logged in');
+            alert('You must be logged in to add reactions');
+            return;
+        }
         
-        // Check if user already reacted with ANY emoji on this message
-        const userReaction = reactions.find(r => r.user_id === appState.userId);
-        
-        if (userReaction) {
-            // If user already reacted with a different emoji, remove the old one first
-            if (userReaction.emoji !== emoji) {
-                // Remove old reaction
-                const { error: deleteError } = await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
-                
-                if (deleteError) throw deleteError;
-                
-                // Add new reaction
+        try {
+            const messageElement = document.getElementById(`msg-${messageId}`);
+            if (!messageElement) {
+                console.error('Message element not found');
+                return;
+            }
+            
+            const reactions = await getMessageReactions(messageId);
+            
+            // Check if user already reacted with ANY emoji on this message
+            const userReaction = reactions.find(r => r.user_id === appState.userId);
+            
+            if (userReaction) {
+                // If user already reacted with a different emoji, remove the old one first
+                if (userReaction.emoji !== emoji) {
+                    // Remove old reaction
+                    const { error: deleteError } = await supabaseClient
+                        .from('message_reactions')
+                        .delete()
+                        .eq('id', userReaction.id);
+                    
+                    if (deleteError) throw deleteError;
+                    
+                    // Add new reaction
+                    const { error: insertError } = await supabaseClient
+                        .from('message_reactions')
+                        .insert([{
+                            message_id: messageId,
+                            user_id: appState.userId,
+                            user_name: appState.userName,
+                            emoji: emoji,
+                            created_at: new Date().toISOString()
+                        }]);
+                    
+                    if (insertError) throw insertError;
+                } else {
+                    // User clicked the same emoji - remove it (toggle off)
+                    const { error: deleteError } = await supabaseClient
+                        .from('message_reactions')
+                        .delete()
+                        .eq('id', userReaction.id);
+                    
+                    if (deleteError) throw deleteError;
+                }
+            } else {
+                // No existing reaction, add new one
                 const { error: insertError } = await supabaseClient
                     .from('message_reactions')
                     .insert([{
@@ -276,72 +317,50 @@ async function addReaction(messageId, emoji) {
                     }]);
                 
                 if (insertError) throw insertError;
-            } else {
-                // User clicked the same emoji - remove it (toggle off)
-                const { error: deleteError } = await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
-                
-                if (deleteError) throw deleteError;
             }
-        } else {
-            // No existing reaction, add new one
-            const { error: insertError } = await supabaseClient
-                .from('message_reactions')
-                .insert([{
-                    message_id: messageId,
-                    user_id: appState.userId,
-                    user_name: appState.userName,
-                    emoji: emoji,
-                    created_at: new Date().toISOString()
-                }]);
             
-            if (insertError) throw insertError;
+            // Get updated reactions
+            const updatedReactions = await getMessageReactions(messageId);
+            
+            // Update UI
+            const reactionsContainer = messageElement.querySelector('.message-reactions');
+            if (reactionsContainer) {
+                renderReactions(reactionsContainer, updatedReactions);
+            }
+            
+            console.log('Reaction added successfully');
+            
+        } catch (error) {
+            console.error("Error adding reaction:", error);
+            alert("Failed to add reaction: " + error.message);
         }
-        
-        // Get updated reactions
-        const updatedReactions = await getMessageReactions(messageId);
-        
-        // Update UI
-        const reactionsContainer = messageElement.querySelector('.message-reactions');
-        if (reactionsContainer) {
-            renderReactions(reactionsContainer, updatedReactions);
-        }
-        
-        console.log('Reaction added successfully');
-        
-    } catch (error) {
-        console.error("Error adding reaction:", error);
-        alert("Failed to add reaction: " + error.message);
     }
-}
 
     // Toggle reaction (wrapper for addReaction)
     async function toggleReaction(messageId, emoji) {
         await addReaction(messageId, emoji);
     }
 
-// Get reactions for a message
-async function getMessageReactions(messageId) {
-    if (!supabaseClient) {
-        console.error('Supabase client not initialized');
-        return [];
-    }
-    
-    try {
-        const { data, error } = await supabaseClient
-            .from('message_reactions')
-            .select('*')
-            .eq('message_id', messageId);
+    // Get reactions for a message
+    async function getMessageReactions(messageId) {
+        if (!supabaseClient) {
+            console.error('Supabase client not initialized');
+            return [];
+        }
         
-        if (error) throw error;
-        return data || [];
-    } catch (error) {
-        console.error("Error getting reactions:", error);
-        return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('message_reactions')
+                .select('*')
+                .eq('message_id', messageId);
+            
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("Error getting reactions:", error);
+            return [];
+        }
     }
-}
 
     // Open reply modal
     function openReplyModal(messageId, senderName, messageText) {
@@ -356,7 +375,7 @@ async function getMessageReactions(messageId) {
         replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
         replyInput.value = '';
         
-        appState.replyingTo = messageId;
+        if (appState) appState.replyingTo = messageId;
         
         replyModal.style.display = 'flex';
         replyInput.focus();
@@ -367,14 +386,14 @@ async function getMessageReactions(messageId) {
         const replyText = replyInput.value.trim();
         if (!replyText) return;
         
-        messageInput.value = replyText;
+        if (messageInput) {
+            messageInput.value = replyText;
+        }
         replyModal.style.display = 'none';
         
-        // Trigger send message - you'll need to implement this in your main app
+        // Trigger send message - check for sendMessage function
         if (window.sendMessage) {
             await window.sendMessage();
-        } else if (window.appState && window.appState.sendMessage) {
-            await window.appState.sendMessage();
         } else {
             console.warn('No sendMessage function found');
         }
@@ -384,6 +403,12 @@ async function getMessageReactions(messageId) {
     async function editMessage(messageId) {
         console.log('Editing message:', messageId);
         closeMessageActions();
+        
+        if (!supabaseClient) {
+            console.error('Supabase client not initialized');
+            alert('Cannot edit message: Database connection not initialized');
+            return;
+        }
         
         const messageElement = document.getElementById(`msg-${messageId}`);
         if (!messageElement) {
@@ -405,7 +430,7 @@ async function getMessageReactions(messageId) {
                         is_edited: true
                     })
                     .eq('id', messageId)
-                    .eq('sender_id', appState.userId);
+                    .eq('sender_id', appState?.userId);
                 
                 if (error) throw error;
                 
@@ -426,6 +451,12 @@ async function getMessageReactions(messageId) {
         console.log('Deleting message:', messageId);
         closeMessageActions();
         
+        if (!supabaseClient) {
+            console.error('Supabase client not initialized');
+            alert('Cannot delete message: Database connection not initialized');
+            return;
+        }
+        
         if (!confirm("Are you sure you want to delete this message?")) return;
         
         try {
@@ -441,17 +472,17 @@ async function getMessageReactions(messageId) {
                 .update({
                     is_deleted: true,
                     deleted_at: new Date().toISOString(),
-                    deleted_by: appState.userId
+                    deleted_by: appState?.userId
                 })
                 .eq('id', messageId)
-                .eq('sender_id', appState.userId);
+                .eq('sender_id', appState?.userId);
             
             if (error) throw error;
             
             const messageElement = document.getElementById(`msg-${messageId}`);
             if (messageElement) {
                 messageElement.innerHTML = `
-                    <div class="message-sender">${escapeHtml(appState.userName)}</div>
+                    <div class="message-sender">${escapeHtml(appState?.userName || 'User')}</div>
                     <div class="message-content">
                         <div class="message-text"><i>Message deleted</i></div>
                         <div class="message-footer">
@@ -474,7 +505,8 @@ async function getMessageReactions(messageId) {
 
     // Handle typing indicator
     async function handleTyping() {
-        if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) return;
+        if (!appState || !appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) return;
+        if (!supabaseClient) return;
         
         try {
             await supabaseClient
