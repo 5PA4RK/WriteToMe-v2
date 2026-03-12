@@ -378,24 +378,28 @@ if (appState && appState.messages && Array.isArray(appState.messages)) {
         replyInput.focus();
     }
 
-    // Send reply
-    async function sendReply() {
-        const replyText = replyInput.value.trim();
-        if (!replyText) return;
-        
-        if (messageInput) {
-            messageInput.value = replyText;
-        }
-        replyModal.style.display = 'none';
-        
-        // Trigger send message
-        if (typeof window.sendMessage === 'function') {
-            await window.sendMessage();
-        } else {
-            console.warn('No sendMessage function found');
-            alert('Cannot send reply: Message function not available');
-        }
+
+// Send reply
+async function sendReply() {
+    const replyText = replyInput.value.trim();
+    if (!replyText) return;
+    
+    if (messageInput) {
+        messageInput.value = replyText;
     }
+    replyModal.style.display = 'none';
+    
+    // Trigger send message
+    if (typeof window.sendMessage === 'function') {
+        await window.sendMessage();
+    } else if (window.appState && typeof window.sendMessageToDB === 'function') {
+        // Fallback
+        await window.sendMessageToDB(replyText, null);
+    } else {
+        console.warn('No sendMessage function found');
+        alert('Cannot send reply: Message function not available');
+    }
+}
 
     // Edit message
     async function editMessage(messageId) {
