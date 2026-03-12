@@ -189,45 +189,70 @@ const ChatModule = (function() {
     }
 
     // Toggle message actions menu
-    function toggleMessageActions(messageId, button) {
-        console.log('Toggle message actions called for message:', messageId);
+// Toggle message actions menu
+function toggleMessageActions(messageId, button) {
+    console.log('=== TOGGLE MESSAGE ACTIONS CALLED ===');
+    console.log('Message ID:', messageId);
+    console.log('Button:', button);
+    
+    // Close any open menus first
+    closeMessageActions();
+    
+    const menu = document.getElementById(`actions-${messageId}`);
+    console.log('Menu element found:', menu);
+    
+    if (menu) {
+        // Log current menu state
+        console.log('Current menu classes:', menu.className);
+        console.log('Current menu display:', menu.style.display);
+        console.log('Current menu has show class:', menu.classList.contains('show'));
         
-        // Close any open menus first
-        closeMessageActions();
-        
-        const menu = document.getElementById(`actions-${messageId}`);
-        if (menu) {
-            console.log('Menu found, toggling visibility');
-            
-            // Toggle the menu
-            if (menu.classList.contains('show')) {
-                menu.classList.remove('show');
-                menu.style.display = 'none';
-            } else {
-                menu.classList.add('show');
-                menu.style.display = 'block';
-                if (appState) appState.activeMessageActions = messageId;
-                
-                // Position menu near the button
-                const rect = button.getBoundingClientRect();
-                menu.style.position = 'fixed';
-                menu.style.top = (rect.bottom + 5) + 'px';
-                menu.style.left = rect.left + 'px';
-                menu.style.zIndex = '9999';
-                
-                // Ensure menu stays within viewport
-                const menuRect = menu.getBoundingClientRect();
-                if (menuRect.right > window.innerWidth) {
-                    menu.style.left = (window.innerWidth - menuRect.width - 10) + 'px';
-                }
-                if (menuRect.bottom > window.innerHeight) {
-                    menu.style.top = (rect.top - menuRect.height - 5) + 'px';
-                }
-            }
+        // Toggle the menu
+        if (menu.classList.contains('show')) {
+            console.log('Hiding menu');
+            menu.classList.remove('show');
+            menu.style.display = 'none';
         } else {
-            console.log('Menu not found for message:', messageId);
+            console.log('Showing menu');
+            menu.classList.add('show');
+            menu.style.display = 'block';
+            if (appState) appState.activeMessageActions = messageId;
+            
+            // Position menu near the button
+            const rect = button.getBoundingClientRect();
+            console.log('Button position:', rect);
+            
+            menu.style.position = 'fixed';
+            menu.style.top = (rect.bottom + 5) + 'px';
+            menu.style.left = rect.left + 'px';
+            menu.style.zIndex = '9999';
+            
+            // Ensure menu stays within viewport
+            const menuRect = menu.getBoundingClientRect();
+            console.log('Menu position after set:', menuRect);
+            
+            if (menuRect.right > window.innerWidth) {
+                menu.style.left = (window.innerWidth - menuRect.width - 10) + 'px';
+                console.log('Adjusted left position:', menu.style.left);
+            }
+            if (menuRect.bottom > window.innerHeight) {
+                menu.style.top = (rect.top - menuRect.height - 5) + 'px';
+                console.log('Adjusted top position:', menu.style.top);
+            }
+        }
+    } else {
+        console.error('Menu not found for message:', messageId);
+        console.log('Expected menu ID:', `actions-${messageId}`);
+        
+        // Check if the message element exists
+        const messageEl = document.getElementById(`msg-${messageId}`);
+        console.log('Message element exists:', messageEl);
+        
+        if (messageEl) {
+            console.log('Message HTML:', messageEl.innerHTML);
         }
     }
+}
 
     // Close message actions menu
     function closeMessageActions() {
