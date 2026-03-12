@@ -401,14 +401,23 @@ function openReplyModal(messageId, senderName, messageText) {
 
 
 // Send reply
+// Update the sendReply function in chat.js
 async function sendReply() {
     const replyText = replyInput.value.trim();
     if (!replyText) return;
+    
+    // Store the replyTo ID
+    const replyToId = appState ? appState.replyingTo : null;
     
     if (messageInput) {
         messageInput.value = replyText;
     }
     replyModal.style.display = 'none';
+    
+    // Make sure appState.replyingTo is still set
+    if (appState) {
+        appState.replyingTo = replyToId;
+    }
     
     // Trigger send message
     if (typeof window.sendMessage === 'function') {
