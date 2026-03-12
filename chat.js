@@ -228,11 +228,18 @@ function toggleMessageActions(messageId, button) {
         }
     }
 
-    // Add or remove reaction
+
 // Add or remove reaction
 async function addReaction(messageId, emoji) {
     console.log('Adding reaction:', emoji, 'to message:', messageId);
     closeMessageActions();
+    
+    // Check if supabaseClient is available
+    if (!supabaseClient) {
+        console.error('Supabase client not initialized');
+        alert('Cannot add reaction: Database connection not initialized');
+        return;
+    }
     
     try {
         const messageElement = document.getElementById(`msg-${messageId}`);
@@ -250,13 +257,15 @@ async function addReaction(messageId, emoji) {
             // If user already reacted with a different emoji, remove the old one first
             if (userReaction.emoji !== emoji) {
                 // Remove old reaction
-                await supabaseClient
+                const { error: deleteError } = await supabaseClient
                     .from('message_reactions')
                     .delete()
                     .eq('id', userReaction.id);
                 
+                if (deleteError) throw deleteError;
+                
                 // Add new reaction
-                const { error } = await supabaseClient
+                const { error: insertError } = await supabaseClient
                     .from('message_reactions')
                     .insert([{
                         message_id: messageId,
@@ -266,17 +275,19 @@ async function addReaction(messageId, emoji) {
                         created_at: new Date().toISOString()
                     }]);
                 
-                if (error) throw error;
+                if (insertError) throw insertError;
             } else {
                 // User clicked the same emoji - remove it (toggle off)
-                await supabaseClient
+                const { error: deleteError } = await supabaseClient
                     .from('message_reactions')
                     .delete()
                     .eq('id', userReaction.id);
+                
+                if (deleteError) throw deleteError;
             }
         } else {
             // No existing reaction, add new one
-            const { error } = await supabaseClient
+            const { error: insertError } = await supabaseClient
                 .from('message_reactions')
                 .insert([{
                     message_id: messageId,
@@ -286,7 +297,7 @@ async function addReaction(messageId, emoji) {
                     created_at: new Date().toISOString()
                 }]);
             
-            if (error) throw error;
+            if (insertError) throw insertError;
         }
         
         // Get updated reactions
@@ -311,21 +322,26 @@ async function addReaction(messageId, emoji) {
         await addReaction(messageId, emoji);
     }
 
-    // Get reactions for a message
-    async function getMessageReactions(messageId) {
-        try {
-            const { data, error } = await supabaseClient
-                .from('message_reactions')
-                .select('*')
-                .eq('message_id', messageId);
-            
-            if (error) throw error;
-            return data || [];
-        } catch (error) {
-            console.error("Error getting reactions:", error);
-            return [];
-        }
+// Get reactions for a message
+async function getMessageReactions(messageId) {
+    if (!supabaseClient) {
+        console.error('Supabase client not initialized');
+        return [];
     }
+    
+    try {
+        const { data, error } = await supabaseClient
+            .from('message_reactions')
+            .select('*')
+            .eq('message_id', messageId);
+        
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error("Error getting reactions:", error);
+        return [];
+    }
+}
 
     // Open reply modal
     function openReplyModal(messageId, senderName, messageText) {
