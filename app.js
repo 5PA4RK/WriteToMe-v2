@@ -473,19 +473,24 @@ function setupEventListeners() {
     }
     
     // Click outside emoji picker to close
-    document.addEventListener('click', (e) => {
-        if (emojiPicker && !emojiPicker.contains(e.target) && emojiBtn && !emojiBtn.contains(e.target)) {
+// Click outside emoji picker to close
+document.addEventListener('click', (e) => {
+    // Close emoji picker when clicking outside
+    if (emojiPicker && emojiPicker.classList.contains('show')) {
+        if (!emojiPicker.contains(e.target) && emojiBtn && !emojiBtn.contains(e.target)) {
             emojiPicker.classList.remove('show');
         }
-        
-        // Close message actions when clicking outside
-        if (appState.activeMessageActions) {
-            const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-            if (actionsMenu && !actionsMenu.contains(e.target)) {
-                closeMessageActions();
-            }
+    }
+    
+    // Close message actions when clicking outside
+    if (appState.activeMessageActions) {
+        const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
+        if (actionsMenu && !actionsMenu.contains(e.target) && 
+            !e.target.closest('.message-action-dots')) {
+            closeMessageActions();
         }
-    });
+    }
+});
     
     // Tab switching
     if (historyTabBtn) {
@@ -2015,242 +2020,7 @@ function displayMessage(message) {
     }
 }
 
-function renderReactions(container, reactions) {
-    if (!reactions || reactions.length === 0) {
-        container.innerHTML = '';
-        return;
-    }
-    
-    // Group reactions by emoji
-    const reactionCounts = {};
-    reactions.forEach(r => {
-        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-    });
-    
-    let html = '';
-    for (const [emoji, count] of Object.entries(reactionCounts)) {
-        const messageId = container.closest('.message').id.replace('msg-', '');
-        html += `<span class="reaction-badge" onclick="toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
-    }
-    
-    container.innerHTML = html;
-    
-    // Store reactions in the message element for persistence
-    const messageElement = container.closest('.message');
-    if (messageElement) {
-        messageElement.dataset.reactions = JSON.stringify(reactions);
-    }
-}
 
-function toggleMessageActions(messageId, button) {
-    closeMessageActions();
-    
-    const menu = document.getElementById(`actions-${messageId}`);
-    if (menu) {
-        menu.classList.add('show');
-        appState.activeMessageActions = messageId;
-        
-        // Position menu near the button
-        const rect = button.getBoundingClientRect();
-        menu.style.top = `${rect.top - 100}px`;
-        menu.style.left = `${rect.left - 200}px`;
-    }
-}
-
-function closeMessageActions() {
-    if (appState.activeMessageActions) {
-        const oldMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-        if (oldMenu) {
-            oldMenu.classList.remove('show');
-        }
-        appState.activeMessageActions = null;
-    }
-}
-
-async function addReaction(messageId, emoji) {
-    closeMessageActions();
-    
-    try {
-        const messageElement = document.getElementById(`msg-${messageId}`);
-        const reactions = await getMessageReactions(messageId);
-        
-        // Check if user already reacted with this emoji
-        const userReaction = reactions.find(r => r.user_id === appState.userId && r.emoji === emoji);
-        
-        if (userReaction) {
-            // If already reacted with this emoji, remove it (toggle off)
-            const { error } = await supabaseClient
-                .from('message_reactions')
-                .delete()
-                .eq('id', userReaction.id);
-            
-            if (error) throw error;
-        } else {
-            // Remove any existing reaction from this user (only allow one reaction per user)
-            // Comment this out if you want users to be able to add multiple different emojis
-            const userReactions = reactions.filter(r => r.user_id === appState.userId);
-            for (const reaction of userReactions) {
-                await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', reaction.id);
-            }
-            
-            // Add new reaction
-            const { error } = await supabaseClient
-                .from('message_reactions')
-                .insert([{
-                    message_id: messageId,
-                    user_id: appState.userId,
-                    user_name: appState.userName,
-                    emoji: emoji,
-                    created_at: new Date().toISOString()
-                }]);
-            
-            if (error) throw error;
-        }
-        
-        // Get updated reactions
-        const updatedReactions = await getMessageReactions(messageId);
-        
-        // Update the message in the messages array
-        const messageIndex = appState.messages.findIndex(m => m.id === messageId);
-        if (messageIndex !== -1) {
-            appState.messages[messageIndex].reactions = updatedReactions;
-        }
-        
-        // Update the UI
-        const reactionsContainer = messageElement.querySelector('.message-reactions');
-        renderReactions(reactionsContainer, updatedReactions);
-        
-        // Also update the message in the database's reactions array for better persistence
-        await supabaseClient
-            .from('messages')
-            .update({ 
-                reactions: updatedReactions,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', messageId);
-        
-    } catch (error) {
-        console.error("Error adding reaction:", error);
-    }
-}
-
-async function toggleReaction(messageId, emoji) {
-    await addReaction(messageId, emoji);
-}
-
-async function getMessageReactions(messageId) {
-    try {
-        const { data, error } = await supabaseClient
-            .from('message_reactions')
-            .select('*')
-            .eq('message_id', messageId);
-        
-        if (error) throw error;
-        return data || [];
-    } catch (error) {
-        console.error("Error getting reactions:", error);
-        return [];
-    }
-}
-
-function openReplyModal(messageId, senderName, messageText) {
-    replyToName.textContent = senderName;
-    replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
-    replyInput.value = '';
-    
-    appState.replyingTo = messageId;
-    
-    replyModal.style.display = 'flex';
-    replyInput.focus();
-}
-
-async function sendReply() {
-    const replyText = replyInput.value.trim();
-    if (!replyText) return;
-    
-    messageInput.value = replyText;
-    replyModal.style.display = 'none';
-    
-    await sendMessage();
-}
-
-// ============================================
-// MESSAGE EDITING AND DELETING
-// ============================================
-
-async function editMessage(messageId) {
-    closeMessageActions();
-    
-    const messageElement = document.getElementById(`msg-${messageId}`);
-    const textElement = messageElement.querySelector('.message-text');
-    const currentText = textElement.textContent;
-    
-    const newText = prompt("Edit your message:", currentText);
-    if (newText !== null && newText.trim() !== '') {
-        try {
-            const { error } = await supabaseClient
-                .from('messages')
-                .update({
-                    message: newText.trim(),
-                    edited_at: new Date().toISOString()
-                })
-                .eq('id', messageId)
-                .eq('sender_id', appState.userId);
-            
-            if (error) throw error;
-            
-            if (textElement) {
-                textElement.innerHTML = `${newText.trim()} <small style="opacity:0.7;">(edited)</small>`;
-            }
-        } catch (error) {
-            console.error("Error editing message:", error);
-            alert("Failed to edit message.");
-        }
-    }
-}
-
-async function deleteMessage(messageId) {
-    closeMessageActions();
-    
-    if (!confirm("Are you sure you want to delete this message?")) return;
-    
-    try {
-        const { error } = await supabaseClient
-            .from('messages')
-            .update({
-                is_deleted: true,
-                deleted_at: new Date().toISOString(),
-                deleted_by: appState.userId
-            })
-            .eq('id', messageId)
-            .eq('sender_id', appState.userId);
-        
-        if (error) throw error;
-        
-        const messageElement = document.getElementById(`msg-${messageId}`);
-        if (messageElement) {
-            messageElement.innerHTML = `
-                <div class="message-sender">${appState.userName}</div>
-                <div class="message-content">
-                    <div class="message-text"><i>Message deleted</i></div>
-                    <div class="message-footer">
-                        <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                    </div>
-                </div>
-            `;
-            
-            // Remove actions menu
-            const actionsMenu = document.getElementById(`actions-${messageId}`);
-            if (actionsMenu) actionsMenu.remove();
-        }
-    } catch (error) {
-        console.error("Error deleting message:", error);
-        alert("Failed to delete message.");
-    }
-}
 
 // ============================================
 // LOAD CHAT HISTORY
@@ -3675,19 +3445,36 @@ window.showSessionGuests = async function(sessionId) {
     }
 };
 
-// Make functions global
+// Make functions global (these will call ChatModule)
 window.approveGuest = approveGuest;
 window.denyGuest = denyGuest;
 window.kickGuest = kickGuest;
 window.viewSessionHistory = viewSessionHistory;
 window.deleteSession = deleteSession;
 window.editUserModalOpen = editUserModalOpen;
-window.editMessage = editMessage;
-window.deleteMessage = deleteMessage;
-window.addReaction = addReaction;
-window.toggleReaction = toggleReaction;
-window.toggleMessageActions = toggleMessageActions;
-window.openReplyModal = openReplyModal;
+
+// These are now handled by ChatModule, but keep them as references
+window.editMessage = function(messageId) {
+    if (window.ChatModule) window.ChatModule.editMessage(messageId);
+};
+window.deleteMessage = function(messageId) {
+    if (window.ChatModule) window.ChatModule.deleteMessage(messageId);
+};
+window.addReaction = function(messageId, emoji) {
+    if (window.ChatModule) window.ChatModule.addReaction(messageId, emoji);
+};
+window.toggleReaction = function(messageId, emoji) {
+    if (window.ChatModule) window.ChatModule.toggleReaction(messageId, emoji);
+};
+window.toggleMessageActions = function(messageId, button) {
+    if (window.ChatModule) window.ChatModule.toggleMessageActions(messageId, button);
+};
+window.openReplyModal = function(messageId, senderName, messageText) {
+    if (window.ChatModule) window.ChatModule.openReplyModal(messageId, senderName, messageText);
+};
+window.sendReply = function() {
+    if (window.ChatModule) window.ChatModule.sendReply();
+};
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', initApp);
