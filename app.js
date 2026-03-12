@@ -1945,78 +1945,7 @@ function displayMessage(message) {
     if (window.ChatModule) {
         window.ChatModule.displayMessage(message);
     } else {
-        // Fallback to local display if ChatModule not available
-        if (appState.isViewingHistory && message.is_historical === false) {
-            return;
-        }
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${message.type}`;
-        if (message.is_historical) {
-            messageDiv.classList.add('historical');
-        }
-        messageDiv.id = `msg-${message.id}`;
-        
-        let messageContent = '';
-        
-        if (message.reply_to) {
-            messageContent += `<div class="message-reply-ref"><i class="fas fa-reply"></i> Replying to a message</div>`;
-        }
-        
-        if (message.text) {
-            messageContent += `<div class="message-text">${message.text}</div>`;
-        }
-        
-        if (message.image) {
-            messageContent += `<img src="${message.image}" class="message-image" onclick="showFullImage('${message.image}')">`;
-        }
-        
-        const reactionsHtml = `<div class="message-reactions"></div>`;
-        const actionButton = `<button class="message-action-dots" onclick="toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
-        
-        const actionsMenu = `
-            <div class="message-actions-menu" id="actions-${message.id}">
-                ${message.sender === appState.userName ? `
-                    <button onclick="editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
-                    <button onclick="deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
-                    <div class="menu-divider"></div>
-                ` : ''}
-                <button onclick="openReplyModal('${message.id}', '${message.sender}', '${message.text.replace(/'/g, "\\'")}')">
-                    <i class="fas fa-reply"></i> Reply
-                </button>
-                <div class="menu-divider"></div>
-                <div class="reaction-section">
-                    <div class="reaction-title"><i class="fas fa-smile"></i> Add Reaction</div>
-                    <div class="reaction-quick-picker">
-                        ${appState.reactionEmojis.map(emoji => 
-                            `<button class="reaction-emoji-btn" onclick="addReaction('${message.id}', '${emoji}')" title="Add ${emoji} reaction">${emoji}</button>`
-                        ).join('')}
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        messageDiv.innerHTML = `
-            <div class="message-sender">${message.sender}</div>
-            <div class="message-content">
-                ${messageContent}
-                ${reactionsHtml}
-                <div class="message-footer">
-                    <div class="message-time">${message.time}</div>
-                    ${actionButton}
-                </div>
-            </div>
-            ${actionsMenu}
-        `;
-        
-        chatMessages.appendChild(messageDiv);
-        
-        const reactionsContainer = messageDiv.querySelector('.message-reactions');
-        if (message.reactions && message.reactions.length > 0) {
-            renderReactions(reactionsContainer, message.reactions);
-        }
-        
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        console.warn('ChatModule not available, message not displayed');
     }
 }
 
@@ -2040,7 +1969,10 @@ async function loadChatHistory(sessionId = null) {
         
         if (error) throw error;
         
-        chatMessages.innerHTML = '';
+        // Clear chat messages container
+        if (chatMessages) {
+            chatMessages.innerHTML = '';
+        }
         appState.messages = [];
         
         if (sessionId) {
@@ -2084,7 +2016,9 @@ async function loadChatHistory(sessionId = null) {
             });
         }
         
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        if (chatMessages) {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
     } catch (error) {
         console.error("Error loading chat history:", error);
     }
