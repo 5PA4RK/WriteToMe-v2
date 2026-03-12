@@ -1780,16 +1780,35 @@ function setupRealtimeSubscriptions() {
         (payload) => {
             console.log('📝 Message updated:', payload.new?.id);
             
-            // Don't try to update reactions from messages table
-            // Instead, fetch fresh reactions
-            if (payload.new) {
+            const messageElement = document.getElementById(`msg-${payload.new.id}`);
+            if (messageElement) {
+                if (payload.new.is_deleted) {
+                    // Handle deleted message
+                    messageElement.innerHTML = `
+                        <div class="message-sender">${escapeHtml(payload.new.sender_name)}</div>
+                        <div class="message-content">
+                            <div class="message-text"><i>Message deleted</i></div>
+                            <div class="message-footer">
+                                <div class="message-time">${new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                            </div>
+                        </div>
+                    `;
+                    // Remove actions menu
+                    const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
+                    if (actionsMenu) actionsMenu.remove();
+                } else {
+                    // Handle edited message
+                    const textElement = messageElement.querySelector('.message-text');
+                    if (textElement && !textElement.innerHTML.includes('Message deleted')) {
+                        textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
+                    }
+                }
+                
+                // Update reactions
                 getMessageReactions(payload.new.id).then(reactions => {
-                    const messageElement = document.getElementById(`msg-${payload.new.id}`);
-                    if (messageElement) {
-                        const reactionsContainer = messageElement.querySelector('.message-reactions');
-                        if (reactionsContainer) {
-                            renderReactions(reactionsContainer, reactions);
-                        }
+                    const reactionsContainer = messageElement.querySelector('.message-reactions');
+                    if (reactionsContainer && window.ChatModule) {
+                        window.ChatModule.renderReactions(reactionsContainer, reactions);
                     }
                 });
             }
@@ -1801,6 +1820,14 @@ function setupRealtimeSubscriptions() {
             console.error('❌ Messages subscription error:', err);
         }
     });
+
+    // Helper function to escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
     
     appState.typingSubscription = supabaseClient
         .channel('typing_' + appState.currentSessionId)
