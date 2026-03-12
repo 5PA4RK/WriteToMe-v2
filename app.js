@@ -1960,7 +1960,6 @@ function displayMessage(message) {
 // ============================================
 // LOAD CHAT HISTORY
 // ============================================
-
 async function loadChatHistory(sessionId = null) {
     const targetSessionId = sessionId || appState.currentSessionId;
     if (!targetSessionId) {
@@ -1976,7 +1975,7 @@ async function loadChatHistory(sessionId = null) {
             .select('*')
             .eq('session_id', targetSessionId)
             .eq('is_deleted', false)
-            .order('created_at', { ascending: true });
+            .order('created_at', { ascending: true }); // Make sure this is ascending for oldest first
         
         if (error) {
             console.error('Error loading messages:', error);
@@ -1991,6 +1990,7 @@ async function loadChatHistory(sessionId = null) {
         }
         appState.messages = [];
         
+        // Add history header if viewing a past session
         if (sessionId) {
             const { data: session } = await supabaseClient
                 .from('sessions')
@@ -2058,6 +2058,9 @@ async function loadChatHistory(sessionId = null) {
                     reactions: reactions,
                     reply_to: msg.reply_to
                 });
+                
+                // Add a small delay between messages to ensure they appear in order
+                await new Promise(resolve => setTimeout(resolve, 10));
             } else {
                 console.warn('ChatModule displayMessage not available');
             }
