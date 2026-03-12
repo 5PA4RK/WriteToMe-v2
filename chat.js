@@ -46,36 +46,40 @@ const ChatModule = (function() {
     }
 
     // Setup event listeners
-    function setupEventListeners() {
-        if (sendReplyBtn) {
-            sendReplyBtn.addEventListener('click', sendReply);
-        }
+// Setup event listeners
+function setupEventListeners() {
+    if (sendReplyBtn) {
+        sendReplyBtn.addEventListener('click', sendReply);
+    }
 
-        if (closeReplyModal) {
-            closeReplyModal.addEventListener('click', () => {
-                replyModal.style.display = 'none';
-                appState.replyingTo = null;
-            });
-        }
-
-        window.addEventListener('click', (e) => {
-            if (e.target === replyModal) {
-                replyModal.style.display = 'none';
-                appState.replyingTo = null;
-            }
-        });
-
-        // Close message actions when clicking outside
-        document.addEventListener('click', (e) => {
-            if (appState && appState.activeMessageActions) {
-                const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-                if (actionsMenu && !actionsMenu.contains(e.target) && 
-                    !e.target.closest('.message-action-dots')) {
-                    closeMessageActions();
-                }
-            }
+    if (closeReplyModal) {
+        closeReplyModal.addEventListener('click', () => {
+            replyModal.style.display = 'none';
+            appState.replyingTo = null;
         });
     }
+
+    window.addEventListener('click', (e) => {
+        if (e.target === replyModal) {
+            replyModal.style.display = 'none';
+            appState.replyingTo = null;
+        }
+    });
+
+    // Close message actions when clicking outside
+    document.addEventListener('click', (e) => {
+        if (appState && appState.activeMessageActions) {
+            const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
+            // Don't close if clicking the menu or the three dots button
+            if (actionsMenu && 
+                !actionsMenu.contains(e.target) && 
+                !e.target.closest('.message-action-dots')) {
+                closeMessageActions();
+            }
+        }
+    });
+}
+
 
     // Display a message in the chat
     function displayMessage(message) {
@@ -112,26 +116,27 @@ const ChatModule = (function() {
         const actionButton = `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
         
         // Actions menu (initially hidden) - using direct function calls
-        const actionsMenu = `
-            <div class="message-actions-menu" id="actions-${message.id}">
-                ${message.sender === appState.userName ? `
-                    <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
-                    <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
-                ` : ''}
-                <button onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
-                    <i class="fas fa-reply"></i> Reply
-                </button>
-                <div class="menu-divider"></div>
-                <div class="reaction-section">
-                    <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
-                    <div class="reaction-quick-picker">
-                        ${reactionEmojis.map(emoji => 
-                            `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
-                        ).join('')}
-                    </div>
-                </div>
+const actionsMenu = `
+    <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
+        ${message.sender === appState.userName ? `
+            <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
+            <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
+            <div class="menu-divider"></div>
+        ` : ''}
+        <button onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
+            <i class="fas fa-reply"></i> Reply
+        </button>
+        <div class="menu-divider"></div>
+        <div class="reaction-section">
+            <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+            <div class="reaction-quick-picker">
+                ${reactionEmojis.map(emoji => 
+                    `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                ).join('')}
             </div>
-        `;
+        </div>
+    </div>
+`;
         
         messageDiv.innerHTML = `
             <div class="message-sender">${escapeHtml(message.sender)}</div>
@@ -179,7 +184,6 @@ const ChatModule = (function() {
         container.innerHTML = html;
     }
 
-    // Toggle message actions menu
 // Toggle message actions menu
 function toggleMessageActions(messageId, button) {
     console.log('Toggle message actions called for message:', messageId);
@@ -189,28 +193,24 @@ function toggleMessageActions(messageId, button) {
     
     const menu = document.getElementById(`actions-${messageId}`);
     if (menu) {
-        console.log('Menu found, showing it');
+        console.log('Menu found, toggling visibility');
         
-        // First, make sure menu is visible
-        menu.style.display = 'block';
-        menu.classList.add('show');
-        appState.activeMessageActions = messageId;
-        
-        // Position menu near the button
-        const rect = button.getBoundingClientRect();
-        
-        // Simple positioning - place menu below the button
-        menu.style.top = (rect.bottom + window.scrollY + 5) + 'px';
-        menu.style.left = (rect.left + window.scrollX) + 'px';
-        menu.style.position = 'absolute';
-        
-        // Ensure menu stays within viewport
-        const menuRect = menu.getBoundingClientRect();
-        if (menuRect.right > window.innerWidth) {
-            menu.style.left = (window.innerWidth - menuRect.width - 10) + 'px';
+        // Toggle the menu
+        if (menu.classList.contains('show')) {
+            menu.classList.remove('show');
+            menu.style.display = 'none';
+        } else {
+            menu.classList.add('show');
+            menu.style.display = 'block';
+            appState.activeMessageActions = messageId;
+            
+            // Position menu near the button - simple positioning
+            const rect = button.getBoundingClientRect();
+            menu.style.position = 'absolute';
+            menu.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+            menu.style.left = (rect.left + window.scrollX) + 'px';
+            menu.style.zIndex = '9999';
         }
-        
-        console.log('Menu positioned at:', menu.style.top, menu.style.left);
     } else {
         console.log('Menu not found for message:', messageId);
     }
