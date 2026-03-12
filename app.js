@@ -1674,19 +1674,21 @@ function setupRealtimeSubscriptions() {
     }
     
     appState.realtimeSubscription = supabaseClient
-        .channel('messages_' + appState.currentSessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages'
-            },
-            (payload) => {
-                console.log('📦 Realtime message received:', payload.new?.sender_name);
-                
-                if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                    if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+    .channel('messages_' + appState.currentSessionId)
+    .on(
+        'postgres_changes',
+        {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages'
+        },
+        (payload) => {
+            console.log('📦 Realtime message received:', payload.new?.sender_name);
+            
+            if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                    // Get reactions for this message
+                    getMessageReactions(payload.new.id).then(reactions => {
                         displayMessage({
                             id: payload.new.id,
                             sender: payload.new.sender_name,
@@ -1695,48 +1697,55 @@ function setupRealtimeSubscriptions() {
                             time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                             type: 'received',
                             is_historical: false,
-                            reactions: payload.new.reactions || [],
+                            reactions: reactions,
                             reply_to: payload.new.reply_to
                         });
-                        
-                        if (appState.soundEnabled && !payload.new.is_notification) {
-                            try {
-                                messageSound.currentTime = 0;
-                                messageSound.play().catch(e => console.log("Audio play failed:", e));
-                            } catch (e) {
-                                console.log("Audio error:", e);
-                            }
+                    });
+                    
+                    if (appState.soundEnabled && !payload.new.is_notification) {
+                        try {
+                            messageSound.currentTime = 0;
+                            messageSound.play().catch(e => console.log("Audio play failed:", e));
+                        } catch (e) {
+                            console.log("Audio error:", e);
                         }
                     }
                 }
             }
-        )
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'messages',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            (payload) => {
-                console.log('📝 Message updated:', payload.new?.id);
-                
-                const messageElement = document.getElementById(`msg-${payload.new.id}`);
-                if (messageElement) {
-                    const reactionsContainer = messageElement.querySelector('.message-reactions');
-                    if (reactionsContainer) {
-                        renderReactions(reactionsContainer, payload.new.reactions || []);
+        }
+    )
+    .on(
+        'postgres_changes',
+        {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'messages',
+            filter: `session_id=eq.${appState.currentSessionId}`
+        },
+        (payload) => {
+            console.log('📝 Message updated:', payload.new?.id);
+            
+            // Don't try to update reactions from messages table
+            // Instead, fetch fresh reactions
+            if (payload.new) {
+                getMessageReactions(payload.new.id).then(reactions => {
+                    const messageElement = document.getElementById(`msg-${payload.new.id}`);
+                    if (messageElement) {
+                        const reactionsContainer = messageElement.querySelector('.message-reactions');
+                        if (reactionsContainer) {
+                            renderReactions(reactionsContainer, reactions);
+                        }
                     }
-                }
+                });
             }
-        )
-        .subscribe((status, err) => {
-            console.log('📡 MESSAGES Subscription status:', status);
-            if (err) {
-                console.error('❌ Messages subscription error:', err);
-            }
-        });
+        }
+    )
+    .subscribe((status, err) => {
+        console.log('📡 MESSAGES Subscription status:', status);
+        if (err) {
+            console.error('❌ Messages subscription error:', err);
+        }
+    });
     
     appState.typingSubscription = supabaseClient
         .channel('typing_' + appState.currentSessionId)
@@ -1850,7 +1859,6 @@ async function sendMessage() {
     messageInput.style.height = 'auto';
     appState.replyingTo = null;
 }
-
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
@@ -1861,7 +1869,7 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reactions: [],
+            // REMOVED: reactions: [],
             reply_to: appState.replyingTo || null
         };
         
@@ -1890,7 +1898,7 @@ async function sendMessageToDB(text, imageUrl) {
             time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             type: 'sent',
             is_historical: false,
-            reactions: [],
+            reactions: [], // Keep this for display
             reply_to: appState.replyingTo
         });
         
