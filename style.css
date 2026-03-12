@@ -797,3 +797,218 @@ header {
         flex-direction: column;
     }
 }
+/* ========== MOBILE OPTIMIZATIONS ========== */
+@media (max-width: 768px) {
+    .container {
+        padding: 8px;
+    }
+    
+    .header-content {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .logo h1 {
+        font-size: 1.2rem;
+    }
+    
+    .header-controls {
+        flex-wrap: wrap;
+        justify-content: center;
+        width: 100%;
+    }
+    
+    .user-status {
+        padding: 4px 8px;
+        font-size: 0.8rem;
+    }
+    
+    .btn {
+        padding: 6px 12px;
+        font-size: 0.8rem;
+    }
+    
+    /* Chat section */
+    .chat-section {
+        height: calc(100vh - 120px);
+        margin: 0 -8px;
+        border-radius: 0;
+    }
+    
+    .section-header {
+        padding: 8px 12px;
+    }
+    
+    .section-header h2 {
+        font-size: 0.9rem;
+    }
+    
+    .chat-messages {
+        padding: 8px;
+    }
+    
+    .message {
+        max-width: 85%;
+        padding: 8px 12px;
+    }
+    
+    .message-sender {
+        font-size: 0.7rem;
+    }
+    
+    .message-text {
+        font-size: 0.85rem;
+    }
+    
+    .message-time {
+        font-size: 0.6rem;
+    }
+    
+    /* Chat input area - FIXED for mobile */
+    .chat-input-area {
+        padding: 8px;
+        gap: 8px;
+        flex-direction: column;
+    }
+    
+    .chat-input-wrapper {
+        width: 100%;
+    }
+    
+    .message-input {
+        min-height: 40px;
+        max-height: 80px;
+        font-size: 0.9rem;
+        padding: 8px;
+    }
+    
+    #sendMessageBtn {
+        width: 100%;
+        padding: 10px;
+    }
+    
+    .input-actions {
+        padding-right: 4px;
+    }
+    
+    .file-input-label {
+        padding: 6px;
+    }
+    
+    /* Emoji picker for mobile */
+    .emoji-picker {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        top: auto;
+        width: 100%;
+        grid-template-columns: repeat(6, 1fr);
+        border-radius: 12px 12px 0 0;
+        padding: 12px;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    
+    /* Message actions menu for mobile */
+    .message-actions-menu {
+        position: fixed !important;
+        max-width: 90%;
+        left: 50% !important;
+        top: 50% !important;
+        transform: translate(-50%, -50%);
+    }
+    
+    /* Notes panel for mobile */
+    .notes-panel {
+        width: 100%;
+    }
+    
+    /* History cards for mobile */
+    .history-cards {
+        grid-template-columns: 1fr;
+    }
+    
+    .session-card {
+        padding: 12px;
+    }
+    
+    .session-stats {
+        flex-wrap: wrap;
+    }
+    
+    /* Modals for mobile */
+    .modal-content {
+        max-width: 95%;
+        margin: 10px;
+        max-height: 85vh;
+    }
+    
+    .modal-header {
+        padding: 12px;
+    }
+    
+    .modal-header h2 {
+        font-size: 1rem;
+    }
+    
+    .modal-body {
+        padding: 12px;
+    }
+    
+    /* Form elements for mobile */
+    .form-input {
+        padding: 10px;
+        font-size: 16px; /* Prevents zoom on iOS */
+    }
+    
+    /* Pending guests for mobile */
+    .pending-guest {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .guest-actions {
+        width: 100%;
+        flex-direction: row;
+        justify-content: flex-end;
+    }
+    
+    .guest-actions .btn {
+        flex: 1;
+    }
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+    .message {
+        max-width: 90%;
+    }
+    
+    .reaction-quick-picker {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .reaction-emoji-btn {
+        font-size: 18px !important;
+        padding: 6px !important;
+    }
+    
+    .admin-tabs {
+        flex-wrap: wrap;
+    }
+    
+    .admin-tab {
+        flex: 1;
+        padding: 8px;
+        font-size: 0.8rem;
+    }
+    
+    .guest-actions {
+        flex-direction: column;
+    }
+    
+    .guest-actions .btn {
+        width: 100%;
+    }
+}
