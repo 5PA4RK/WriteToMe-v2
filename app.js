@@ -139,6 +139,32 @@ const replyToContent = document.getElementById('replyToContent');
 const replyInput = document.getElementById('replyInput');
 const sendReplyBtn = document.getElementById('sendReplyBtn');
 
+// Initialize ChatModule with appState and supabaseClient
+document.addEventListener('DOMContentLoaded', () => {
+    // After DOM is loaded, initialize ChatModule
+    setTimeout(() => {
+        if (window.ChatModule) {
+            window.ChatModule.init(appState, supabaseClient, {
+                chatMessages: document.getElementById('chatMessages'),
+                messageInput: document.getElementById('messageInput'),
+                sendMessageBtn: document.getElementById('sendMessageBtn'),
+                messageSound: document.getElementById('messageSound'),
+                typingIndicator: document.getElementById('typingIndicator'),
+                typingUser: document.getElementById('typingUser'),
+                replyModal: document.getElementById('replyModal'),
+                replyToName: document.getElementById('replyToName'),
+                replyToContent: document.getElementById('replyToContent'),
+                replyInput: document.getElementById('replyInput'),
+                sendReplyBtn: document.getElementById('sendReplyBtn'),
+                closeReplyModal: document.getElementById('closeReplyModal')
+            });
+            console.log('ChatModule initialized with appState and supabaseClient');
+        }
+    }, 100); // Small delay to ensure DOM is ready
+});
+
+
+
 // ============================================
 // INITIALIZATION
 // ============================================
@@ -1911,83 +1937,82 @@ async function sendMessageToDB(text, imageUrl) {
 }
 
 function displayMessage(message) {
-    if (appState.isViewingHistory && message.is_historical === false) {
-        return;
-    }
-    
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${message.type}`;
-    if (message.is_historical) {
-        messageDiv.classList.add('historical');
-    }
-    messageDiv.id = `msg-${message.id}`;
-    
-    let messageContent = '';
-    
-    // Add reply reference if this is a reply
-    if (message.reply_to) {
-        messageContent += `<div class="message-reply-ref"><i class="fas fa-reply"></i> Replying to a message</div>`;
-    }
-    
-    if (message.text) {
-        messageContent += `<div class="message-text">${message.text}</div>`;
-    }
-    
-    if (message.image) {
-        messageContent += `<img src="${message.image}" class="message-image" onclick="showFullImage('${message.image}')">`;
-    }
-    
-    // Add reactions section
-    const reactionsHtml = `<div class="message-reactions"></div>`;
-    
-    // Add action button (three dots) - this will show the menu with emojis
-    const actionButton = `<button class="message-action-dots" onclick="toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
-    
-    // Actions menu with emojis (initially hidden)
-    const actionsMenu = `
-        <div class="message-actions-menu" id="actions-${message.id}">
-            ${message.sender === appState.userName ? `
-                <button onclick="editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
-                <button onclick="deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
+    if (window.ChatModule) {
+        window.ChatModule.displayMessage(message);
+    } else {
+        // Fallback to local display if ChatModule not available
+        if (appState.isViewingHistory && message.is_historical === false) {
+            return;
+        }
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${message.type}`;
+        if (message.is_historical) {
+            messageDiv.classList.add('historical');
+        }
+        messageDiv.id = `msg-${message.id}`;
+        
+        let messageContent = '';
+        
+        if (message.reply_to) {
+            messageContent += `<div class="message-reply-ref"><i class="fas fa-reply"></i> Replying to a message</div>`;
+        }
+        
+        if (message.text) {
+            messageContent += `<div class="message-text">${message.text}</div>`;
+        }
+        
+        if (message.image) {
+            messageContent += `<img src="${message.image}" class="message-image" onclick="showFullImage('${message.image}')">`;
+        }
+        
+        const reactionsHtml = `<div class="message-reactions"></div>`;
+        const actionButton = `<button class="message-action-dots" onclick="toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
+        
+        const actionsMenu = `
+            <div class="message-actions-menu" id="actions-${message.id}">
+                ${message.sender === appState.userName ? `
+                    <button onclick="editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
+                    <button onclick="deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
+                    <div class="menu-divider"></div>
+                ` : ''}
+                <button onclick="openReplyModal('${message.id}', '${message.sender}', '${message.text.replace(/'/g, "\\'")}')">
+                    <i class="fas fa-reply"></i> Reply
+                </button>
                 <div class="menu-divider"></div>
-            ` : ''}
-            <button onclick="openReplyModal('${message.id}', '${message.sender}', '${message.text.replace(/'/g, "\\'")}')">
-                <i class="fas fa-reply"></i> Reply
-            </button>
-            <div class="menu-divider"></div>
-            <div class="reaction-section">
-                <div class="reaction-title"><i class="fas fa-smile"></i> Add Reaction</div>
-                <div class="reaction-quick-picker">
-                    ${appState.reactionEmojis.map(emoji => 
-                        `<button class="reaction-emoji-btn" onclick="addReaction('${message.id}', '${emoji}')" title="Add ${emoji} reaction">${emoji}</button>`
-                    ).join('')}
+                <div class="reaction-section">
+                    <div class="reaction-title"><i class="fas fa-smile"></i> Add Reaction</div>
+                    <div class="reaction-quick-picker">
+                        ${appState.reactionEmojis.map(emoji => 
+                            `<button class="reaction-emoji-btn" onclick="addReaction('${message.id}', '${emoji}')" title="Add ${emoji} reaction">${emoji}</button>`
+                        ).join('')}
+                    </div>
                 </div>
             </div>
-        </div>
-    `;
-    
-    messageDiv.innerHTML = `
-        <div class="message-sender">${message.sender}</div>
-        <div class="message-content">
-            ${messageContent}
-            ${reactionsHtml}
-            <div class="message-footer">
-                <div class="message-time">${message.time}</div>
-                ${actionButton}
+        `;
+        
+        messageDiv.innerHTML = `
+            <div class="message-sender">${message.sender}</div>
+            <div class="message-content">
+                ${messageContent}
+                ${reactionsHtml}
+                <div class="message-footer">
+                    <div class="message-time">${message.time}</div>
+                    ${actionButton}
+                </div>
             </div>
-        </div>
-        ${actionsMenu}
-    `;
-    
-    chatMessages.appendChild(messageDiv);
-    
-    // Render existing reactions
-    const reactionsContainer = messageDiv.querySelector('.message-reactions');
-    if (message.reactions && message.reactions.length > 0) {
-        renderReactions(reactionsContainer, message.reactions);
+            ${actionsMenu}
+        `;
+        
+        chatMessages.appendChild(messageDiv);
+        
+        const reactionsContainer = messageDiv.querySelector('.message-reactions');
+        if (message.reactions && message.reactions.length > 0) {
+            renderReactions(reactionsContainer, message.reactions);
+        }
+        
+        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
-    
-    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 function renderReactions(container, reactions) {
@@ -2339,6 +2364,25 @@ function updateUIAfterConnection() {
     }
     
     if (sendMessageBtn) sendMessageBtn.disabled = false;
+    
+    // Re-initialize ChatModule with updated appState
+    if (window.ChatModule) {
+        window.ChatModule.init(appState, supabaseClient, {
+            chatMessages: document.getElementById('chatMessages'),
+            messageInput: document.getElementById('messageInput'),
+            sendMessageBtn: document.getElementById('sendMessageBtn'),
+            messageSound: document.getElementById('messageSound'),
+            typingIndicator: document.getElementById('typingIndicator'),
+            typingUser: document.getElementById('typingUser'),
+            replyModal: document.getElementById('replyModal'),
+            replyToName: document.getElementById('replyToName'),
+            replyToContent: document.getElementById('replyToContent'),
+            replyInput: document.getElementById('replyInput'),
+            sendReplyBtn: document.getElementById('sendReplyBtn'),
+            closeReplyModal: document.getElementById('closeReplyModal')
+        });
+        console.log('ChatModule re-initialized after connection');
+    }
     
     if (adminSection) {
         if (appState.isHost) {
