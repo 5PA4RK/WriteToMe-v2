@@ -1599,7 +1599,6 @@ footer {
         flex: 1;
     }
 }
-
 /* Add to your style.css */
 .message-actions-menu {
     position: fixed;
@@ -1670,4 +1669,17 @@ footer {
 .reaction-emoji-btn:hover {
     background-color: var(--border-light) !important;
     transform: scale(1.1);
+}
+/* Debug styles - add temporarily to see if menu exists */
+.message-actions-menu {
+    display: none !important;
+    background: red !important;
+    color: white !important;
+    padding: 20px !important;
+    position: fixed !important;
+    z-index: 999999 !important;
+}
+
+.message-actions-menu.show {
+    display: block !important;
 }
