@@ -1717,118 +1717,129 @@ function setupRealtimeSubscriptions() {
     
     console.log("📡 Setting up real-time subscriptions for session:", appState.currentSessionId);
     
+    // Clean up existing subscriptions
     if (appState.realtimeSubscription) {
-        console.log("Removing old subscription");
         supabaseClient.removeChannel(appState.realtimeSubscription);
-        appState.realtimeSubscription = null;
     }
-    
     if (appState.typingSubscription) {
         supabaseClient.removeChannel(appState.typingSubscription);
-        appState.typingSubscription = null;
+    }
+    if (appState.reactionSubscription) {
+        supabaseClient.removeChannel(appState.reactionSubscription);
     }
     
+    // Messages subscription
     appState.realtimeSubscription = supabaseClient
-    .channel('messages_' + appState.currentSessionId)
-    .on(
-        'postgres_changes',
-        {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'messages'
-        },
-        (payload) => {
-            console.log('📦 Realtime message received:', payload.new?.sender_name);
-            
-            if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                    // Get reactions for this message
-                    getMessageReactions(payload.new.id).then(reactions => {
-                        displayMessage({
-                            id: payload.new.id,
-                            sender: payload.new.sender_name,
-                            text: payload.new.message,
-                            image: payload.new.image_url,
-                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                            type: 'received',
-                            is_historical: false,
-                            reactions: reactions,
-                            reply_to: payload.new.reply_to
+        .channel('messages_' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                console.log('📦 New message:', payload.new);
+                
+                if (payload.new && !appState.isViewingHistory) {
+                    // Don't show own messages twice
+                    if (payload.new.sender_id !== appState.userId) {
+                        // Get reactions for this message
+                        getMessageReactions(payload.new.id).then(reactions => {
+                            displayMessage({
+                                id: payload.new.id,
+                                sender: payload.new.sender_name,
+                                text: payload.new.message,
+                                image: payload.new.image_url,
+                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                                type: 'received',
+                                is_historical: false,
+                                reactions: reactions,
+                                reply_to: payload.new.reply_to
+                            });
                         });
-                    });
-                    
-                    if (appState.soundEnabled && !payload.new.is_notification) {
-                        try {
-                            messageSound.currentTime = 0;
-                            messageSound.play().catch(e => console.log("Audio play failed:", e));
-                        } catch (e) {
-                            console.log("Audio error:", e);
+                        
+                        if (appState.soundEnabled) {
+                            messageSound.play().catch(e => console.log("Audio error:", e));
                         }
                     }
                 }
             }
-        }
-    )
-    .on(
-        'postgres_changes',
-        {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'messages',
-            filter: `session_id=eq.${appState.currentSessionId}`
-        },
-        (payload) => {
-            console.log('📝 Message updated:', payload.new?.id);
-            
-            const messageElement = document.getElementById(`msg-${payload.new.id}`);
-            if (messageElement) {
-                if (payload.new.is_deleted) {
-                    // Handle deleted message
-                    messageElement.innerHTML = `
-                        <div class="message-sender">${escapeHtml(payload.new.sender_name)}</div>
-                        <div class="message-content">
-                            <div class="message-text"><i>Message deleted</i></div>
-                            <div class="message-footer">
-                                <div class="message-time">${new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+        )
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'messages',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                console.log('📝 Message updated:', payload.new);
+                
+                const messageElement = document.getElementById(`msg-${payload.new.id}`);
+                if (messageElement) {
+                    if (payload.new.is_deleted) {
+                        // Handle deleted message
+                        const senderName = messageElement.querySelector('.message-sender')?.textContent || 'User';
+                        messageElement.innerHTML = `
+                            <div class="message-sender">${escapeHtml(senderName)}</div>
+                            <div class="message-content">
+                                <div class="message-text"><i>Message deleted</i></div>
+                                <div class="message-footer">
+                                    <div class="message-time">${new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                </div>
                             </div>
-                        </div>
-                    `;
-                    // Remove actions menu
-                    const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
-                    if (actionsMenu) actionsMenu.remove();
-                } else {
-                    // Handle edited message
-                    const textElement = messageElement.querySelector('.message-text');
-                    if (textElement && !textElement.innerHTML.includes('Message deleted')) {
-                        textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
+                        `;
+                        // Remove actions menu
+                        const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
+                        if (actionsMenu) actionsMenu.remove();
+                    } else if (payload.new.message) {
+                        // Handle edited message
+                        const textElement = messageElement.querySelector('.message-text');
+                        if (textElement && !textElement.innerHTML.includes('Message deleted')) {
+                            textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
+                        }
                     }
                 }
+            }
+        )
+        .subscribe();
+    
+    // Reactions subscription - separate channel for real-time reactions
+    appState.reactionSubscription = supabaseClient
+        .channel('reactions_' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'message_reactions'
+            },
+            async (payload) => {
+                console.log('🔔 Reaction event:', payload.eventType, payload.new || payload.old);
                 
-                // Update reactions
-                getMessageReactions(payload.new.id).then(reactions => {
+                // Get the message ID from the reaction
+                const messageId = payload.new?.message_id || payload.old?.message_id;
+                if (!messageId) return;
+                
+                // Get updated reactions
+                const reactions = await getMessageReactions(messageId);
+                
+                // Update the message's reactions in the UI
+                const messageElement = document.getElementById(`msg-${messageId}`);
+                if (messageElement && window.ChatModule) {
                     const reactionsContainer = messageElement.querySelector('.message-reactions');
-                    if (reactionsContainer && window.ChatModule) {
+                    if (reactionsContainer) {
                         window.ChatModule.renderReactions(reactionsContainer, reactions);
                     }
-                });
+                }
             }
-        }
-    )
-    .subscribe((status, err) => {
-        console.log('📡 MESSAGES Subscription status:', status);
-        if (err) {
-            console.error('❌ Messages subscription error:', err);
-        }
-    });
-
-    // Helper function to escape HTML
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+        )
+        .subscribe();
     
+    // Typing subscription
     appState.typingSubscription = supabaseClient
         .channel('typing_' + appState.currentSessionId)
         .on(
@@ -1944,6 +1955,7 @@ async function sendMessage() {
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
+        console.log('Replying to:', appState.replyingTo);
         
         const messageData = {
             session_id: appState.currentSessionId,
@@ -1951,7 +1963,7 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to: appState.replyingTo || null // Make sure this is included
+            reply_to: appState.replyingTo || null
         };
         
         if (imageUrl) {
@@ -1971,18 +1983,9 @@ async function sendMessageToDB(text, imageUrl) {
         
         console.log('✅ Message saved to DB:', data.id);
         
-        // Get the original message being replied to
-        let replyToContent = null;
-        if (appState.replyingTo) {
-            const originalMsg = appState.messages.find(m => m.id === appState.replyingTo);
-            if (originalMsg) {
-                replyToContent = {
-                    id: originalMsg.id,
-                    sender: originalMsg.sender,
-                    text: originalMsg.text
-                };
-            }
-        }
+        // Clear replyingTo after sending
+        const repliedToId = appState.replyingTo;
+        appState.replyingTo = null;
         
         displayMessage({
             id: data.id,
@@ -1993,12 +1996,8 @@ async function sendMessageToDB(text, imageUrl) {
             type: 'sent',
             is_historical: false,
             reactions: [],
-            reply_to: appState.replyingTo,
-            reply_to_content: replyToContent // Add this for display
+            reply_to: repliedToId
         });
-        
-        // Clear replyingTo after sending
-        appState.replyingTo = null;
         
         return { success: true, data };
     } catch (error) {
@@ -2337,6 +2336,12 @@ async function handleLogout() {
     appState.replyingTo = null;
     
     showConnectionModal();
+
+    // cleanup for reaction subscription
+if (appState.reactionSubscription) {
+    supabaseClient.removeChannel(appState.reactionSubscription);
+    appState.reactionSubscription = null;
+}
 }
 
 // ============================================
