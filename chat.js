@@ -406,7 +406,6 @@ function toggleMessageActions(messageId, button) {
         replyInput.focus();
     }
 
-    // Send reply
 // Send reply
 async function sendReply() {
     const replyText = replyInput.value.trim();
@@ -417,11 +416,15 @@ async function sendReply() {
     }
     replyModal.style.display = 'none';
     
+    // Clear the replyingTo state
+    if (appState) {
+        appState.replyingTo = null;
+    }
+    
     // Try multiple ways to send the message
     if (typeof window.sendMessage === 'function') {
         await window.sendMessage();
     } else if (window.appState && typeof window.sendMessageToDB === 'function') {
-        // If sendMessage isn't available, try to call sendMessageToDB directly
         await window.sendMessageToDB(replyText, null);
     } else {
         console.warn('No sendMessage function found');
