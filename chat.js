@@ -407,22 +407,27 @@ function toggleMessageActions(messageId, button) {
     }
 
     // Send reply
-    async function sendReply() {
-        const replyText = replyInput.value.trim();
-        if (!replyText) return;
-        
-        if (messageInput) {
-            messageInput.value = replyText;
-        }
-        replyModal.style.display = 'none';
-        
-        // Trigger send message - check for sendMessage function
-        if (window.sendMessage) {
-            await window.sendMessage();
-        } else {
-            console.warn('No sendMessage function found');
-        }
+// Send reply
+async function sendReply() {
+    const replyText = replyInput.value.trim();
+    if (!replyText) return;
+    
+    if (messageInput) {
+        messageInput.value = replyText;
     }
+    replyModal.style.display = 'none';
+    
+    // Try multiple ways to send the message
+    if (typeof window.sendMessage === 'function') {
+        await window.sendMessage();
+    } else if (window.appState && typeof window.sendMessageToDB === 'function') {
+        // If sendMessage isn't available, try to call sendMessageToDB directly
+        await window.sendMessageToDB(replyText, null);
+    } else {
+        console.warn('No sendMessage function found');
+        alert('Cannot send reply: Message function not available');
+    }
+}
 
     // Edit message
     async function editMessage(messageId) {
