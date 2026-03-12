@@ -35,6 +35,14 @@ const appState = {
     activeMessageActions: null
 };
 
+// Make getMessageReactions available globally for loadChatHistory
+window.getMessageReactions = async function(messageId) {
+    if (window.ChatModule) {
+        return await window.ChatModule.getMessageReactions(messageId);
+    }
+    return [];
+};
+
 // DOM Elements
 const connectionModal = document.getElementById('connectionModal');
 const connectBtn = document.getElementById('connectBtn');
@@ -1949,15 +1957,18 @@ function displayMessage(message) {
     }
 }
 
-
-
 // ============================================
 // LOAD CHAT HISTORY
 // ============================================
 
 async function loadChatHistory(sessionId = null) {
     const targetSessionId = sessionId || appState.currentSessionId;
-    if (!targetSessionId) return;
+    if (!targetSessionId) {
+        console.log('No target session ID for loading chat history');
+        return;
+    }
+    
+    console.log('Loading chat history for session:', targetSessionId);
     
     try {
         const { data: messages, error } = await supabaseClient
@@ -1967,7 +1978,12 @@ async function loadChatHistory(sessionId = null) {
             .eq('is_deleted', false)
             .order('created_at', { ascending: true });
         
-        if (error) throw error;
+        if (error) {
+            console.error('Error loading messages:', error);
+            throw error;
+        }
+        
+        console.log(`Loaded ${messages?.length || 0} messages from database`);
         
         // Clear chat messages container
         if (chatMessages) {
@@ -1982,45 +1998,91 @@ async function loadChatHistory(sessionId = null) {
                 .eq('session_id', sessionId)
                 .single();
             
-            const roomNumber = getStableRoomNumber(sessionId);
-            
-            const historyHeader = document.createElement('div');
-            historyHeader.className = 'message received historical';
-            historyHeader.innerHTML = `
+            if (session) {
+                const roomNumber = getStableRoomNumber(sessionId);
+                
+                const historyHeader = document.createElement('div');
+                historyHeader.className = 'message received historical';
+                historyHeader.innerHTML = `
+                    <div class="message-sender">System</div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            <i class="fas fa-door-open"></i> Chat History - Room ${roomNumber}
+                            <br><small>Host: ${session.host_name} | Date: ${new Date(session.created_at).toLocaleDateString()}</small>
+                        </div>
+                    </div>
+                `;
+                chatMessages.appendChild(historyHeader);
+            }
+        }
+        
+        // If no messages, show a system message
+        if (!messages || messages.length === 0) {
+            const emptyMessage = document.createElement('div');
+            emptyMessage.className = 'message received';
+            emptyMessage.innerHTML = `
                 <div class="message-sender">System</div>
                 <div class="message-content">
-                    <div class="message-text">
-                        <i class="fas fa-door-open"></i> Chat History - Room ${roomNumber}
-                        <br><small>Host: ${session.host_name} | Date: ${new Date(session.created_at).toLocaleDateString()}</small>
-                    </div>
+                    <div class="message-text">No messages in this room yet.</div>
                 </div>
             `;
-            chatMessages.appendChild(historyHeader);
+            chatMessages.appendChild(emptyMessage);
+            return;
         }
         
         // Load reactions for all messages
         for (const msg of messages) {
-            const reactions = await getMessageReactions(msg.id);
+            let reactions = [];
+            
+            // Try to get reactions from ChatModule
+            if (window.ChatModule && typeof window.ChatModule.getMessageReactions === 'function') {
+                try {
+                    reactions = await window.ChatModule.getMessageReactions(msg.id);
+                } catch (e) {
+                    console.log('Error getting reactions from ChatModule:', e);
+                }
+            }
             
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
-            displayMessage({
-                id: msg.id,
-                sender: msg.sender_name,
-                text: msg.message,
-                image: msg.image_url,
-                time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: messageType,
-                is_historical: !!sessionId,
-                reactions: reactions,
-                reply_to: msg.reply_to
-            });
+            
+            // Use displayMessage from ChatModule if available
+            if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
+                window.ChatModule.displayMessage({
+                    id: msg.id,
+                    sender: msg.sender_name,
+                    text: msg.message,
+                    image: msg.image_url,
+                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    type: messageType,
+                    is_historical: !!sessionId,
+                    reactions: reactions,
+                    reply_to: msg.reply_to
+                });
+            } else {
+                console.warn('ChatModule displayMessage not available');
+            }
         }
         
         if (chatMessages) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
+        
+        console.log('Chat history loaded successfully');
     } catch (error) {
         console.error("Error loading chat history:", error);
+        
+        // Show error message in chat
+        if (chatMessages) {
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'message received';
+            errorMsg.innerHTML = `
+                <div class="message-sender">System</div>
+                <div class="message-content">
+                    <div class="message-text">Error loading messages: ${error.message}</div>
+                </div>
+            `;
+            chatMessages.appendChild(errorMsg);
+        }
     }
 }
 
@@ -2086,6 +2148,12 @@ function updateUIAfterConnection() {
             closeReplyModal: document.getElementById('closeReplyModal')
         });
         console.log('ChatModule re-initialized after connection');
+
+                
+        // Load chat history after a short delay to ensure ChatModule is ready
+        setTimeout(() => {
+            loadChatHistory();
+        }, 500);
     }
     
     if (adminSection) {
