@@ -80,6 +80,7 @@ const ChatModule = (function() {
 
 
 // Display a message in the chat
+// Display a message in the chat
 function displayMessage(message) {
     if (!chatMessages) {
         console.error('Chat messages container not found');
@@ -106,11 +107,20 @@ function displayMessage(message) {
     
     // Add reply reference if this is a reply
     if (message.reply_to) {
-        // Try to find the original message
-        const originalMsg = appState?.messages?.find(m => m.id === message.reply_to);
-        const replyText = originalMsg ? 
-            `Replying to ${originalMsg.sender}: ${originalMsg.text?.substring(0, 50)}${originalMsg.text?.length > 50 ? '...' : ''}` : 
-            'Replying to a message';
+        // Find the original message in the DOM or appState
+        const originalMsgElement = document.getElementById(`msg-${message.reply_to}`);
+        let replyText = 'Replying to a message';
+        
+        if (originalMsgElement) {
+            const originalSender = originalMsgElement.querySelector('.message-sender')?.textContent || 'Someone';
+            const originalText = originalMsgElement.querySelector('.message-text')?.textContent || '';
+            replyText = `Replying to ${originalSender}: ${originalText.substring(0, 50)}${originalText.length > 50 ? '...' : ''}`;
+        } else if (appState && appState.messages) {
+            const originalMsg = appState.messages.find(m => m.id === message.reply_to);
+            if (originalMsg) {
+                replyText = `Replying to ${originalMsg.sender}: ${originalMsg.text.substring(0, 50)}${originalMsg.text.length > 50 ? '...' : ''}`;
+            }
+        }
         
         messageContent += `<div class="message-reply-ref"><i class="fas fa-reply"></i> ${escapeHtml(replyText)}</div>`;
     }
@@ -181,29 +191,29 @@ function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-    // Render reactions for a message
-    function renderReactions(container, reactions) {
-        if (!container) return;
-        
-        if (!reactions || reactions.length === 0) {
-            container.innerHTML = '';
-            return;
-        }
-        
-        // Group reactions by emoji
-        const reactionCounts = {};
-        reactions.forEach(r => {
-            reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-        });
-        
-        let html = '';
-        for (const [emoji, count] of Object.entries(reactionCounts)) {
-            const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
-            html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
-        }
-        
-        container.innerHTML = html;
+// Render reactions for a message
+function renderReactions(container, reactions) {
+    if (!container) return;
+    
+    if (!reactions || reactions.length === 0) {
+        container.innerHTML = '';
+        return;
     }
+    
+    // Group reactions by emoji
+    const reactionCounts = {};
+    reactions.forEach(r => {
+        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+    });
+    
+    let html = '';
+    for (const [emoji, count] of Object.entries(reactionCounts)) {
+        const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
+        html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+    }
+    
+    container.innerHTML = html;
+}
 
     // Toggle message actions menu
     function toggleMessageActions(messageId, button) {
@@ -366,24 +376,28 @@ function displayMessage(message) {
         }
     }
 
-    // Open reply modal
-    function openReplyModal(messageId, senderName, messageText) {
-        console.log('Opening reply modal for message:', messageId);
-        
-        if (!replyModal || !replyToName || !replyToContent || !replyInput) {
-            console.error('Reply modal elements not found');
-            return;
-        }
-        
-        replyToName.textContent = senderName || 'Unknown';
-        replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
-        replyInput.value = '';
-        
-        if (appState) appState.replyingTo = messageId;
-        
-        replyModal.style.display = 'flex';
-        replyInput.focus();
+// Open reply modal
+function openReplyModal(messageId, senderName, messageText) {
+    console.log('Opening reply modal for message:', messageId);
+    
+    if (!replyModal || !replyToName || !replyToContent || !replyInput) {
+        console.error('Reply modal elements not found');
+        return;
     }
+    
+    replyToName.textContent = senderName || 'Unknown';
+    replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
+    replyInput.value = '';
+    
+    // Set the replyingTo in appState
+    if (appState) {
+        appState.replyingTo = messageId;
+        console.log('Set replyingTo to:', messageId);
+    }
+    
+    replyModal.style.display = 'flex';
+    replyInput.focus();
+}
 
 
 // Send reply
