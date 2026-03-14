@@ -1833,8 +1833,8 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-    // Create a new channel for all real-time events
-    const channel = supabaseClient.channel('messages_' + appState.currentSessionId);
+    // Create a single channel for all subscriptions
+    const channel = supabaseClient.channel('room_' + appState.currentSessionId);
     
     // Messages INSERT subscription
     channel.on(
@@ -1842,16 +1842,17 @@ function setupRealtimeSubscriptions() {
         {
             event: 'INSERT',
             schema: 'public',
-            table: 'messages'
+            table: 'messages',
+            filter: `session_id=eq.${appState.currentSessionId}`
         },
         (payload) => {
             console.log('📦 Realtime message received:', payload.new?.sender_name);
             
-            if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                    // Get reactions for this message
-                    getMessageReactions(payload.new.id).then(reactions => {
-                        displayMessage({
+            if (payload.new && payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                // Get reactions for this message
+                getMessageReactions(payload.new.id).then(reactions => {
+                    if (window.ChatModule) {
+                        window.ChatModule.displayMessage({
                             id: payload.new.id,
                             sender: payload.new.sender_name,
                             text: payload.new.message,
@@ -1862,15 +1863,15 @@ function setupRealtimeSubscriptions() {
                             reactions: reactions,
                             reply_to_id: payload.new.reply_to_id || payload.new.reply_to
                         });
-                    });
-                    
-                    if (appState.soundEnabled && !payload.new.is_notification) {
-                        try {
-                            messageSound.currentTime = 0;
-                            messageSound.play().catch(e => console.log("Audio play failed:", e));
-                        } catch (e) {
-                            console.log("Audio error:", e);
-                        }
+                    }
+                });
+                
+                if (appState.soundEnabled && !payload.new.is_notification) {
+                    try {
+                        messageSound.currentTime = 0;
+                        messageSound.play().catch(e => console.log("Audio play failed:", e));
+                    } catch (e) {
+                        console.log("Audio error:", e);
                     }
                 }
             }
@@ -1889,7 +1890,7 @@ function setupRealtimeSubscriptions() {
             console.log('📝 Message updated:', payload.new?.id);
             
             const messageElement = document.getElementById(`msg-${payload.new.id}`);
-            if (messageElement) {
+            if (messageElement && window.ChatModule) {
                 if (payload.new.is_deleted) {
                     // Handle deleted message
                     messageElement.innerHTML = `
@@ -1914,7 +1915,7 @@ function setupRealtimeSubscriptions() {
             }
         }
     )
-    // NEW: Message Reactions subscription
+    // Message Reactions subscription (NEW)
     .on(
         'postgres_changes',
         {
@@ -1941,26 +1942,14 @@ function setupRealtimeSubscriptions() {
             if (reactionsContainer && window.ChatModule) {
                 window.ChatModule.renderReactions(reactionsContainer, updatedReactions);
             }
-            
-            // Play sound for reaction if enabled (optional)
-            if (appState.soundEnabled && payload.eventType === 'INSERT' && 
-                payload.new?.user_id !== appState.userId) {
-                try {
-                    // You can add a subtle sound for reactions if desired
-                    // messageSound.currentTime = 0;
-                    // messageSound.play().catch(e => console.log("Sound play failed:", e));
-                } catch (e) {
-                    console.log("Sound error:", e);
-                }
-            }
         }
     );
     
     // Subscribe to the channel
     appState.realtimeSubscription = channel.subscribe((status, err) => {
-        console.log('📡 MESSAGES Subscription status:', status);
+        console.log('📡 REALTIME Subscription status:', status);
         if (err) {
-            console.error('❌ Messages subscription error:', err);
+            console.error('❌ Subscription error:', err);
         }
     });
 
@@ -1972,7 +1961,7 @@ function setupRealtimeSubscriptions() {
         return div.innerHTML;
     }
     
-    // Typing subscription (keep as is)
+    // Typing subscription (keep separate)
     appState.typingSubscription = supabaseClient
         .channel('typing_' + appState.currentSessionId)
         .on(
