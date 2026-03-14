@@ -283,7 +283,6 @@ function loadAllQuotedMessages() {
     });
 }
 
-    // Render reactions for a message
 // Render reactions for a message
 function renderReactions(container, reactions) {
     if (!container) return;
@@ -441,25 +440,29 @@ async function addReaction(messageId, emoji) {
     }
 
     // Get reactions for a message
-    async function getMessageReactions(messageId) {
-        if (!supabaseClient) {
-            console.error('Supabase client not initialized');
-            return [];
-        }
-        
-        try {
-            const { data, error } = await supabaseClient
-                .from('message_reactions')
-                .select('*')
-                .eq('message_id', messageId);
-            
-            if (error) throw error;
-            return data || [];
-        } catch (error) {
-            console.error("Error getting reactions:", error);
-            return [];
-        }
+// Get reactions for a message
+async function getMessageReactions(messageId) {
+    if (!supabaseClient) {
+        console.error('Supabase client not initialized');
+        return [];
     }
+    
+    try {
+        const { data, error } = await supabaseClient
+            .from('message_reactions')
+            .select('*')
+            .eq('message_id', messageId);
+        
+        if (error) {
+            console.error('Error getting reactions:', error);
+            return [];
+        }
+        return data || [];
+    } catch (error) {
+        console.error("Error in getMessageReactions:", error);
+        return [];
+    }
+}
 
     // Open reply modal
 // Open reply modal
