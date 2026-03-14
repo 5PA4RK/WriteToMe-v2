@@ -35,16 +35,6 @@ const appState = {
     activeMessageActions: null
 };
 
-window.replyToMessage = function(messageId) {
-    const messageElement = document.getElementById(`msg-${messageId}`);
-    if (messageElement) {
-        const sender = messageElement.querySelector('.message-sender').textContent;
-        const text = messageElement.querySelector('.message-text').textContent;
-        messageInput.value = `Replying to ${sender}: ${text}\n`;
-        messageInput.focus();
-    }
-};
-
 // Make getMessageReactions available globally for loadChatHistory
 window.getMessageReactions = async function(messageId) {
     if (window.ChatModule) {
