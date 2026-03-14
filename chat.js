@@ -283,29 +283,29 @@ function loadAllQuotedMessages() {
     });
 }
 
-// Render reactions for a message
-function renderReactions(container, reactions) {
-    if (!container) return;
-    
-    if (!reactions || reactions.length === 0) {
-        container.innerHTML = '';
-        return;
+    // Render reactions for a message
+    function renderReactions(container, reactions) {
+        if (!container) return;
+        
+        if (!reactions || reactions.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+        
+        // Group reactions by emoji
+        const reactionCounts = {};
+        reactions.forEach(r => {
+            reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+        });
+        
+        let html = '';
+        for (const [emoji, count] of Object.entries(reactionCounts)) {
+            const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
+            html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+        }
+        
+        container.innerHTML = html;
     }
-    
-    // Group reactions by emoji
-    const reactionCounts = {};
-    reactions.forEach(r => {
-        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-    });
-    
-    let html = '';
-    for (const [emoji, count] of Object.entries(reactionCounts)) {
-        const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
-        html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
-    }
-    
-    container.innerHTML = html;
-}
 
     // Toggle message actions menu
     function toggleMessageActions(messageId, button) {
@@ -358,45 +358,62 @@ function renderReactions(container, reactions) {
     }
 
     // Add or remove reaction
-// Add or remove reaction
-async function addReaction(messageId, emoji) {
-    console.log('Adding reaction:', emoji, 'to message:', messageId);
-    closeMessageActions();
-    
-    if (!supabaseClient) {
-        console.error('Supabase client not initialized');
-        alert('Cannot add reaction: Database connection not initialized');
-        return;
-    }
-    
-    if (!appState || !appState.userId) {
-        console.error('User not logged in');
-        alert('You must be logged in to add reactions');
-        return;
-    }
-    
-    try {
-        const messageElement = document.getElementById(`msg-${messageId}`);
-        if (!messageElement) {
-            console.error('Message element not found');
+    async function addReaction(messageId, emoji) {
+        console.log('Adding reaction:', emoji, 'to message:', messageId);
+        closeMessageActions();
+        
+        if (!supabaseClient) {
+            console.error('Supabase client not initialized');
+            alert('Cannot add reaction: Database connection not initialized');
             return;
         }
         
-        const reactions = await getMessageReactions(messageId);
+        if (!appState || !appState.userId) {
+            console.error('User not logged in');
+            alert('You must be logged in to add reactions');
+            return;
+        }
         
-        // Check if user already reacted with ANY emoji on this message
-        const userReaction = reactions.find(r => r.user_id === appState.userId);
-        
-        if (userReaction) {
-            // If user already reacted with a different emoji, remove the old one first
-            if (userReaction.emoji !== emoji) {
-                // Remove old reaction
-                await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
-                
-                // Add new reaction
+        try {
+            const messageElement = document.getElementById(`msg-${messageId}`);
+            if (!messageElement) {
+                console.error('Message element not found');
+                return;
+            }
+            
+            const reactions = await getMessageReactions(messageId);
+            
+            // Check if user already reacted with ANY emoji on this message
+            const userReaction = reactions.find(r => r.user_id === appState.userId);
+            
+            if (userReaction) {
+                // If user already reacted with a different emoji, remove the old one first
+                if (userReaction.emoji !== emoji) {
+                    // Remove old reaction
+                    await supabaseClient
+                        .from('message_reactions')
+                        .delete()
+                        .eq('id', userReaction.id);
+                    
+                    // Add new reaction
+                    await supabaseClient
+                        .from('message_reactions')
+                        .insert([{
+                            message_id: messageId,
+                            user_id: appState.userId,
+                            user_name: appState.userName,
+                            emoji: emoji,
+                            created_at: new Date().toISOString()
+                        }]);
+                } else {
+                    // User clicked the same emoji - remove it (toggle off)
+                    await supabaseClient
+                        .from('message_reactions')
+                        .delete()
+                        .eq('id', userReaction.id);
+                }
+            } else {
+                // No existing reaction, add new one
                 await supabaseClient
                     .from('message_reactions')
                     .insert([{
@@ -406,63 +423,50 @@ async function addReaction(messageId, emoji) {
                         emoji: emoji,
                         created_at: new Date().toISOString()
                     }]);
-            } else {
-                // User clicked the same emoji - remove it (toggle off)
-                await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
             }
-        } else {
-            // No existing reaction, add new one
-            await supabaseClient
-                .from('message_reactions')
-                .insert([{
-                    message_id: messageId,
-                    user_id: appState.userId,
-                    user_name: appState.userName,
-                    emoji: emoji,
-                    created_at: new Date().toISOString()
-                }]);
+            
+            // Get updated reactions
+            const updatedReactions = await getMessageReactions(messageId);
+            
+            // Update UI
+            const reactionsContainer = messageElement.querySelector('.message-reactions');
+            if (reactionsContainer) {
+                renderReactions(reactionsContainer, updatedReactions);
+            }
+            
+            console.log('Reaction added successfully');
+            
+        } catch (error) {
+            console.error("Error adding reaction:", error);
+            alert("Failed to add reaction: " + error.message);
         }
-        
-        // No need to manually update UI here - the real-time subscription will handle it
-        console.log('Reaction added/deleted successfully, real-time subscription will update UI');
-        
-    } catch (error) {
-        console.error("Error adding reaction:", error);
-        alert("Failed to add reaction: " + error.message);
     }
-}
+
     // Toggle reaction (wrapper for addReaction)
     async function toggleReaction(messageId, emoji) {
         await addReaction(messageId, emoji);
     }
 
     // Get reactions for a message
-// Get reactions for a message
-async function getMessageReactions(messageId) {
-    if (!supabaseClient) {
-        console.error('Supabase client not initialized');
-        return [];
-    }
-    
-    try {
-        const { data, error } = await supabaseClient
-            .from('message_reactions')
-            .select('*')
-            .eq('message_id', messageId);
-        
-        if (error) {
-            console.error('Error getting reactions:', error);
+    async function getMessageReactions(messageId) {
+        if (!supabaseClient) {
+            console.error('Supabase client not initialized');
             return [];
         }
-        return data || [];
-    } catch (error) {
-        console.error("Error in getMessageReactions:", error);
-        return [];
+        
+        try {
+            const { data, error } = await supabaseClient
+                .from('message_reactions')
+                .select('*')
+                .eq('message_id', messageId);
+            
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("Error getting reactions:", error);
+            return [];
+        }
     }
-}
 
     // Open reply modal
 // Open reply modal
