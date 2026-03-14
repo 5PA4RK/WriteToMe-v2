@@ -379,6 +379,7 @@ function renderReactions(container, reactions) {
 // Open reply modal
 function openReplyModal(messageId, senderName, messageText) {
     console.log('Opening reply modal for message:', messageId);
+    console.log('Current appState replyingTo before:', appState?.replyingTo);
     
     if (!replyModal || !replyToName || !replyToContent || !replyInput) {
         console.error('Reply modal elements not found');
@@ -393,6 +394,7 @@ function openReplyModal(messageId, senderName, messageText) {
     if (appState) {
         appState.replyingTo = messageId;
         console.log('Set replyingTo to:', messageId);
+        console.log('Current appState replyingTo after:', appState.replyingTo);
     }
     
     replyModal.style.display = 'flex';
@@ -401,8 +403,10 @@ function openReplyModal(messageId, senderName, messageText) {
 
 
 // Send reply
-// Update the sendReply function in chat.js
 async function sendReply() {
+    console.log('sendReply called');
+    console.log('Current replyingTo:', appState?.replyingTo);
+    
     const replyText = replyInput.value.trim();
     if (!replyText) return;
     
@@ -417,14 +421,12 @@ async function sendReply() {
     // Make sure appState.replyingTo is still set
     if (appState) {
         appState.replyingTo = replyToId;
+        console.log('Set replyingTo to before sending:', appState.replyingTo);
     }
     
     // Trigger send message
     if (typeof window.sendMessage === 'function') {
         await window.sendMessage();
-    } else if (window.appState && typeof window.sendMessageToDB === 'function') {
-        // Fallback
-        await window.sendMessageToDB(replyText, null);
     } else {
         console.warn('No sendMessage function found');
         alert('Cannot send reply: Message function not available');
