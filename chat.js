@@ -117,7 +117,6 @@ async function getMessageById(messageId) {
 }
 
 // Display a message in the chat
-// Display a message in the chat
 async function displayMessage(message) {
     if (!chatMessages) {
         console.error('Chat messages container not found');
@@ -139,26 +138,18 @@ async function displayMessage(message) {
         messageDiv.classList.add('historical');
     }
     messageDiv.id = `msg-${message.id}`;
+    messageDiv.dataset.messageId = message.id;
     
     let messageContent = '';
-    let quotedMessageHtml = '';
     
     // Check for reply_to_id (prioritize this)
     const replyToId = message.reply_to_id || message.reply_to;
     console.log('Displaying message with reply_to_id:', replyToId, 'Full message:', message);
     
-    // If this is a reply, create a placeholder and then fetch the original
+    // If this is a reply, create a container that will be updated
     if (replyToId) {
-        // Add a placeholder that will be updated
-        quotedMessageHtml = `
-            <div class="quoted-message loading" id="quote-${message.id}">
-                <i class="fas fa-spinner fa-spin"></i> Loading original message...
-            </div>
-        `;
+        messageContent += `<div class="quoted-message-container" data-reply-id="${replyToId}" data-message-id="${message.id}"></div>`;
     }
-    
-    // Add the quoted message HTML before the main message content
-    messageContent += quotedMessageHtml;
     
     if (message.text) {
         messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
@@ -214,38 +205,10 @@ async function displayMessage(message) {
     
     // If this is a reply, fetch and update the quoted message
     if (replyToId) {
-        try {
-            console.log('Fetching original message for reply:', replyToId);
-            const originalMsg = await getMessageById(replyToId);
-            const quoteElement = document.getElementById(`quote-${message.id}`);
-            
-            if (quoteElement && originalMsg) {
-                const originalText = originalMsg.message || 'Image message';
-                const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
-                
-                quoteElement.className = 'quoted-message';
-                quoteElement.innerHTML = `
-                    <div class="quoted-sender">
-                        <i class="fas fa-reply"></i> ${escapeHtml(originalMsg.sender_name)}:
-                    </div>
-                    <div class="quoted-text">${escapeHtml(previewText)}</div>
-                `;
-            } else if (quoteElement) {
-                quoteElement.className = 'quoted-message error';
-                quoteElement.innerHTML = `
-                    <i class="fas fa-exclamation-circle"></i> Original message not found (ID: ${replyToId})
-                `;
-            }
-        } catch (error) {
-            console.error('Error loading quoted message:', error);
-            const quoteElement = document.getElementById(`quote-${message.id}`);
-            if (quoteElement) {
-                quoteElement.className = 'quoted-message error';
-                quoteElement.innerHTML = `
-                    <i class="fas fa-exclamation-circle"></i> Error loading original message
-                `;
-            }
-        }
+        // Use setTimeout to ensure the DOM is ready
+        setTimeout(async () => {
+            await loadQuotedMessage(message.id, replyToId);
+        }, 100);
     }
     
     // Render existing reactions
@@ -255,6 +218,69 @@ async function displayMessage(message) {
     }
     
     chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Helper function to load quoted message
+async function loadQuotedMessage(messageId, replyToId) {
+    try {
+        console.log(`Loading quoted message for ${messageId}, reply to: ${replyToId}`);
+        
+        const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
+        if (!container) {
+            console.log('Container not found for message:', messageId);
+            return;
+        }
+        
+        // Show loading state
+        container.innerHTML = `<div class="quoted-message loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>`;
+        
+        const originalMsg = await getMessageById(replyToId);
+        
+        if (originalMsg) {
+            const originalText = originalMsg.message || 'Image message';
+            const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
+            
+            container.innerHTML = `
+                <div class="quoted-message">
+                    <div class="quoted-sender">
+                        <i class="fas fa-reply"></i> ${escapeHtml(originalMsg.sender_name)}:
+                    </div>
+                    <div class="quoted-text">${escapeHtml(previewText)}</div>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="quoted-message error">
+                    <i class="fas fa-exclamation-circle"></i> Message not found
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading quoted message:', error);
+        const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
+        if (container) {
+            container.innerHTML = `
+                <div class="quoted-message error">
+                    <i class="fas fa-exclamation-circle"></i> Error loading
+                </div>
+            `;
+        }
+    }
+}
+// Load all quoted messages after chat history is loaded
+function loadAllQuotedMessages() {
+    console.log('Loading all quoted messages...');
+    const containers = document.querySelectorAll('.quoted-message-container');
+    console.log('Found containers:', containers.length);
+    
+    containers.forEach(container => {
+        const messageId = container.dataset.messageId;
+        const replyToId = container.dataset.replyId;
+        
+        if (messageId && replyToId) {
+            loadQuotedMessage(messageId, replyToId);
+        }
+    });
 }
 
     // Render reactions for a message
