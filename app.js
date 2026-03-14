@@ -1944,6 +1944,7 @@ async function sendMessage() {
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
+        console.log('Replying to:', appState.replyingTo);
         
         const messageData = {
             session_id: appState.currentSessionId,
@@ -1951,7 +1952,6 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            // REMOVED: reactions: [],
             reply_to: appState.replyingTo || null
         };
         
@@ -1972,6 +1972,10 @@ async function sendMessageToDB(text, imageUrl) {
         
         console.log('✅ Message saved to DB:', data.id);
         
+        // Clear replyingTo after sending
+        const repliedToId = appState.replyingTo;
+        appState.replyingTo = null;
+        
         displayMessage({
             id: data.id,
             sender: appState.userName,
@@ -1980,8 +1984,8 @@ async function sendMessageToDB(text, imageUrl) {
             time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             type: 'sent',
             is_historical: false,
-            reactions: [], // Keep this for display
-            reply_to: appState.replyingTo
+            reactions: [],
+            reply_to: repliedToId
         });
         
         return { success: true, data };
