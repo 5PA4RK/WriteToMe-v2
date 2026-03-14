@@ -384,7 +384,9 @@ function openReplyModal(messageId, senderName, messageText) {
 
 
 // Send reply
+// Send reply
 async function sendReply() {
+    console.log('sendReply called in chat.js');
     const replyText = replyInput.value.trim();
     if (!replyText) return;
     
@@ -394,7 +396,10 @@ async function sendReply() {
     }
     replyModal.style.display = 'none';
     
-    // Trigger send message
+    // Use the appState's replyingTo which was set in openReplyModal
+    // The message will be sent with the reply_to field via sendMessageToDB
+    
+    // Trigger send message using the global sendMessage function from app.js
     if (typeof window.sendMessage === 'function') {
         await window.sendMessage();
     } else {
@@ -590,9 +595,6 @@ async function sendReply() {
     };
 })();
 
-// Make sure all functions are globally available
-window.ChatModule = ChatModule;
-
 // Expose individual functions directly for onclick handlers
 window.toggleMessageActions = function(messageId, button) {
     ChatModule.toggleMessageActions(messageId, button);
@@ -622,4 +624,8 @@ window.showFullImage = function(src) {
     ChatModule.showFullImage(src);
 };
 
+// REMOVE THIS LINE - it's causing the conflict with app.js
+// window.sendReply = function() {
+//     if (window.ChatModule) window.ChatModule.sendReply();
+// };
 console.log('Chat.js loaded and functions exposed globally');
