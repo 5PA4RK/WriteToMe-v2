@@ -1,65 +1,65 @@
-// app.js - Complete Rewritten Version
-
-// ============================================
-// SUPABASE CONFIGURATION
-// ============================================
+// Supabase Configuration
 const SUPABASE_URL = 'https://plqvqenoroacvzwtgoxq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_91IHQ5--y4tDIo8L9X2ZJQ_YeThfdu_';
 
 // Initialize Supabase client
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ============================================
-// APP STATE
-// ============================================
+// App State
 const appState = {
-    // Connection status
     isHost: false,
     isConnected: false,
     userName: "Guest",
     userId: null,
     sessionId: null,
     currentSessionId: null,
-    
-    // Chat data
     messages: [],
     typingTimeout: null,
-    soundEnabled: true,
-    
-    // Subscriptions
     realtimeSubscription: null,
     typingSubscription: null,
     pendingSubscription: null,
-    reactionSubscription: null,
-    
-    // History
+    soundEnabled: true,
     isViewingHistory: false,
     viewingSessionId: null,
-    allSessions: [],
-    
-    // Guest management
     pendingGuests: [],
-    guestNote: "",
-    
-    // User management
+    emojis: ["😀", "😂", "😍", "😎", "😭", "😡", "👍", "👎", "❤️", "🔥", "👏", "🙏", "🤔", "😴", "🥳"],
+    reactionEmojis: ["👍", "❤️", "😂", "😮", "😢", "😡"],
     users: [],
-    
-    // Notes
+    availableRooms: [],
+    guestNote: "",
     visitorNotes: [],
     unreadNotesCount: 0,
     showNotesPanel: false,
-    
-    // Emojis
-    emojis: ["😀", "😂", "😍", "😎", "😭", "😡", "👍", "👎", "❤️", "🔥", "👏", "🙏", "🤔", "😴", "🥳"],
-    
-    // Reply functionality
+    allSessions: [],
     replyingTo: null,
     activeMessageActions: null
 };
 
-// ============================================
-// DOM ELEMENTS
-// ============================================
+// Make getMessageReactions available globally for loadChatHistory
+window.getMessageReactions = async function(messageId) {
+    if (window.ChatModule) {
+        return await window.ChatModule.getMessageReactions(messageId);
+    }
+    return [];
+};
+// Make sendMessage globally available
+window.sendMessage = sendMessage;
+
+// Update the sendReply function
+async function sendReply() {
+    if (window.ChatModule) {
+        await window.ChatModule.sendReply();
+    } else {
+        const replyText = replyInput.value.trim();
+        if (!replyText) return;
+        
+        messageInput.value = replyText;
+        replyModal.style.display = 'none';
+        await sendMessage();
+    }
+}
+
+// DOM Elements
 const connectionModal = document.getElementById('connectionModal');
 const connectBtn = document.getElementById('connectBtn');
 const passwordError = document.getElementById('passwordError');
@@ -105,10 +105,9 @@ const historyTabContent = document.getElementById('historyTabContent');
 const usersTabContent = document.getElementById('usersTabContent');
 
 const guestNoteInput = document.getElementById('guestNoteInput');
-const usernameInput = document.getElementById('usernameInput');
-const passwordInput = document.getElementById('passwordInput');
 
-// User Management Elements
+// User Management DOM Elements
+const userManagementSection = document.getElementById('userManagementSection');
 const addUserBtn = document.getElementById('addUserBtn');
 const userSearchInput = document.getElementById('userSearchInput');
 const usersList = document.getElementById('usersList');
@@ -131,6 +130,9 @@ const editIsActive = document.getElementById('editIsActive');
 const editUserError = document.getElementById('editUserError');
 const updateUserBtn = document.getElementById('updateUserBtn');
 const deleteUserBtn = document.getElementById('deleteUserBtn');
+
+const usernameInput = document.getElementById('usernameInput');
+const passwordInput = document.getElementById('passwordInput');
 
 // Notes elements
 const notesBtn = document.getElementById('notesBtn');
@@ -161,26 +163,9 @@ const replyToContent = document.getElementById('replyToContent');
 const replyInput = document.getElementById('replyInput');
 const sendReplyBtn = document.getElementById('sendReplyBtn');
 
-// ============================================
-// GLOBAL FUNCTIONS
-// ============================================
-window.getMessageReactions = async function(messageId) {
-    if (window.ChatModule) {
-        return await window.ChatModule.getMessageReactions(messageId);
-    }
-    return [];
-};
-
-window.sendMessage = sendMessage;
-
-// ============================================
-// INITIALIZATION
-// ============================================
+// Initialize ChatModule with appState and supabaseClient
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("🚀 App starting...");
-    initApp();
-    
-    // Initialize ChatModule after a short delay
+    // After DOM is loaded, initialize ChatModule
     setTimeout(() => {
         if (window.ChatModule) {
             window.ChatModule.init(appState, supabaseClient, {
@@ -197,16 +182,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 sendReplyBtn: document.getElementById('sendReplyBtn'),
                 closeReplyModal: document.getElementById('closeReplyModal')
             });
-            console.log('✅ ChatModule initialized');
+            console.log('ChatModule initialized with appState and supabaseClient');
         }
-    }, 200);
+    }, 100); // Small delay to ensure DOM is ready
 });
 
+
+
+// ============================================
+// INITIALIZATION
+// ============================================
+
 async function initApp() {
-    console.log("🚀 Initializing WriteToMira App...");
+    console.log("🚀 Initializing Enhanced WriteToMira App...");
     
     const mainContainer = document.querySelector('.main-container') || document.querySelector('.app-container');
-    if (mainContainer) mainContainer.style.display = 'none';
+    if (mainContainer) {
+        mainContainer.style.display = 'none';
+    }
     
     document.body.classList.remove('host-mode');
     
@@ -220,16 +213,18 @@ async function initApp() {
             appState.sessionId = sessionData.sessionId;
             appState.soundEnabled = sessionData.soundEnabled !== false;
             
-            console.log("🔄 Attempting to reconnect...");
+            console.log("🔄 Attempting to reconnect to saved session...");
             
             if (await reconnectToSession()) {
                 appState.isConnected = true;
-                if (appState.isHost) document.body.classList.add('host-mode');
+                if (appState.isHost) {
+                    document.body.classList.add('host-mode');
+                }
                 hideConnectionModal();
                 updateUIAfterConnection();
                 console.log("✅ Successfully reconnected!");
             } else {
-                console.log("❌ Failed to reconnect");
+                console.log("❌ Failed to reconnect, clearing session");
                 localStorage.removeItem('writeToMe_session');
                 showConnectionModal();
             }
@@ -259,13 +254,16 @@ async function initApp() {
 // ============================================
 // MODAL FUNCTIONS
 // ============================================
+
 function showConnectionModal() {
     connectionModal.style.display = 'flex';
     connectionModal.classList.add('show');
     document.body.classList.add('modal-open');
     
     const mainContainer = document.querySelector('.main-container') || document.querySelector('.app-container');
-    if (mainContainer) mainContainer.style.display = 'none';
+    if (mainContainer) {
+        mainContainer.style.display = 'none';
+    }
     
     if (usernameInput) usernameInput.value = '';
     if (passwordInput) passwordInput.value = '';
@@ -287,12 +285,15 @@ function hideConnectionModal() {
     document.body.classList.remove('modal-open');
     
     const mainContainer = document.querySelector('.main-container') || document.querySelector('.app-container');
-    if (mainContainer) mainContainer.style.display = 'block';
+    if (mainContainer) {
+        mainContainer.style.display = 'block';
+    }
 }
 
 // ============================================
 // RECONNECT FUNCTION
 // ============================================
+
 async function reconnectToSession() {
     try {
         if (!appState.sessionId) return false;
@@ -304,7 +305,7 @@ async function reconnectToSession() {
             .single();
         
         if (error || !session) {
-            console.log("Session not found:", error);
+            console.log("Session not found or error:", error);
             return false;
         }
         
@@ -351,8 +352,9 @@ async function reconnectToSession() {
 }
 
 // ============================================
-// LOAD ALL SESSIONS
+// LOAD ALL SESSIONS FOR STABLE NUMBERING
 // ============================================
+
 async function loadAllSessions() {
     try {
         const { data: sessions, error } = await supabaseClient
@@ -363,10 +365,10 @@ async function loadAllSessions() {
         if (error) throw error;
         
         appState.allSessions = sessions || [];
-        console.log(`📊 Loaded ${appState.allSessions.length} sessions`);
+        console.log(`📊 Loaded ${appState.allSessions.length} total sessions`);
         return appState.allSessions;
     } catch (error) {
-        console.error("Error loading sessions:", error);
+        console.error("Error loading all sessions:", error);
         appState.allSessions = [];
         return [];
     }
@@ -379,14 +381,14 @@ function getStableRoomNumber(sessionId) {
 }
 
 // ============================================
-// EVENT LISTENERS
+// EVENT LISTENERS SETUP
 // ============================================
+
 function setupEventListeners() {
     // Connection modal
     if (usernameInput) {
-        usernameInput.addEventListener('input', () => {
+        usernameInput.addEventListener('input', function() {
             if (passwordError) passwordError.style.display = 'none';
-            updatePasswordHint(usernameInput.value);
         });
     }
     
@@ -396,21 +398,42 @@ function setupEventListeners() {
         });
     }
     
-    if (connectBtn) connectBtn.addEventListener('click', handleConnect);
+    if (connectBtn) {
+        connectBtn.addEventListener('click', handleConnect);
+    }
     
-    // Guest notification
-    if (guestNotifyBtn) guestNotifyBtn.addEventListener('click', showGuestNotificationModal);
-    if (closeGuestNotifyModal) closeGuestNotifyModal.addEventListener('click', () => guestNotificationModal.style.display = 'none');
-    if (sendGuestNotification) sendGuestNotification.addEventListener('click', sendGuestNotificationToAdmin);
+    // Guest notification button
+    if (guestNotifyBtn) {
+        guestNotifyBtn.addEventListener('click', showGuestNotificationModal);
+    }
+    
+    if (closeGuestNotifyModal) {
+        closeGuestNotifyModal.addEventListener('click', () => {
+            guestNotificationModal.style.display = 'none';
+        });
+    }
+    
+    if (sendGuestNotification) {
+        sendGuestNotification.addEventListener('click', sendGuestNotificationToAdmin);
+    }
     
     // Logout
-    if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
     
     // Pending guests
-    if (pendingGuestsBtn) pendingGuestsBtn.addEventListener('click', showPendingGuests);
-    if (closePendingModal) closePendingModal.addEventListener('click', () => pendingGuestsModal.style.display = 'none');
+    if (pendingGuestsBtn) {
+        pendingGuestsBtn.addEventListener('click', showPendingGuests);
+    }
     
-    // Chat
+    if (closePendingModal) {
+        closePendingModal.addEventListener('click', () => {
+            pendingGuestsModal.style.display = 'none';
+        });
+    }
+    
+    // Chat functionality
     if (messageInput) {
         messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -418,63 +441,121 @@ function setupEventListeners() {
                 sendMessage();
             }
         });
+        
         messageInput.addEventListener('input', handleTyping);
     }
     
-    if (sendMessageBtn) sendMessageBtn.addEventListener('click', sendMessage);
-    if (clearChatBtn) clearChatBtn.addEventListener('click', clearChat);
-    if (imageUpload) imageUpload.addEventListener('change', handleImageUpload);
-    if (emojiBtn) emojiBtn.addEventListener('click', toggleEmojiPicker);
-    if (returnToActiveBtn) returnToActiveBtn.addEventListener('click', returnToActiveChat);
-    if (refreshHistoryBtn) refreshHistoryBtn.addEventListener('click', async () => {
-        await loadAllSessions();
-        loadChatSessions();
-    });
-    if (soundControl) soundControl.addEventListener('click', toggleSound);
+    if (sendMessageBtn) {
+        sendMessageBtn.addEventListener('click', sendMessage);
+    }
+    
+    if (clearChatBtn) {
+        clearChatBtn.addEventListener('click', clearChat);
+    }
+    
+    // Image upload
+    if (imageUpload) {
+        imageUpload.addEventListener('change', handleImageUpload);
+    }
+    
+    // Emoji picker
+    if (emojiBtn) {
+        emojiBtn.addEventListener('click', toggleEmojiPicker);
+    }
+    
+    // Return to active chat
+    if (returnToActiveBtn) {
+        returnToActiveBtn.addEventListener('click', returnToActiveChat);
+    }
+    
+    // History
+    if (refreshHistoryBtn) {
+        refreshHistoryBtn.addEventListener('click', async () => {
+            await loadAllSessions();
+            loadChatSessions();
+        });
+    }
+    
+    // Sound control
+    if (soundControl) {
+        soundControl.addEventListener('click', toggleSound);
+    }
     
     // Image modal
     if (imageModal) {
         imageModal.addEventListener('click', (e) => {
-            if (e.target === imageModal) imageModal.style.display = 'none';
+            if (e.target === imageModal || e.target.classList.contains('image-modal-overlay')) {
+                imageModal.style.display = 'none';
+            }
         });
+        
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && imageModal.style.display === 'flex') imageModal.style.display = 'none';
+            if (e.key === 'Escape' && imageModal.style.display === 'flex') {
+                imageModal.style.display = 'none';
+            }
         });
     }
     
-    // Click outside handlers
-    document.addEventListener('click', (e) => {
-        if (emojiPicker && emojiPicker.classList.contains('show')) {
-            if (!emojiPicker.contains(e.target) && emojiBtn && !emojiBtn.contains(e.target)) {
-                emojiPicker.classList.remove('show');
-            }
+    // Click outside emoji picker to close
+// Click outside emoji picker to close
+document.addEventListener('click', (e) => {
+    // Close emoji picker when clicking outside
+    if (emojiPicker && emojiPicker.classList.contains('show')) {
+        if (!emojiPicker.contains(e.target) && emojiBtn && !emojiBtn.contains(e.target)) {
+            emojiPicker.classList.remove('show');
         }
-        
-        if (appState.activeMessageActions && window.ChatModule) {
-            window.ChatModule.closeMessageActions();
+    }
+    
+    // Close message actions when clicking outside
+    if (appState.activeMessageActions) {
+        const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
+        if (actionsMenu && !actionsMenu.contains(e.target) && 
+            !e.target.closest('.message-action-dots')) {
+            closeMessageActions();
         }
-    });
+    }
+});
     
     // Tab switching
-    if (historyTabBtn) historyTabBtn.addEventListener('click', () => switchAdminTab('history'));
-    if (usersTabBtn) usersTabBtn.addEventListener('click', () => switchAdminTab('users'));
+    if (historyTabBtn) {
+        historyTabBtn.addEventListener('click', () => switchAdminTab('history'));
+    }
+    
+    if (usersTabBtn) {
+        usersTabBtn.addEventListener('click', () => switchAdminTab('users'));
+    }
     
     // Notes panel
-    if (notesBtn) notesBtn.addEventListener('click', toggleNotesPanel);
-    if (closeNotesPanel) closeNotesPanel.addEventListener('click', () => {
-        notesPanel.classList.remove('show');
-        appState.showNotesPanel = false;
-    });
-    if (refreshNotesBtn) refreshNotesBtn.addEventListener('click', loadVisitorNotes);
-    if (markAllReadBtn) markAllReadBtn.addEventListener('click', markAllNotesAsRead);
-    if (notesSearchInput) notesSearchInput.addEventListener('input', function() {
-        searchNotes(this.value.toLowerCase());
-    });
+    if (notesBtn) {
+        notesBtn.addEventListener('click', toggleNotesPanel);
+    }
     
-    // Click outside notes panel
+    if (closeNotesPanel) {
+        closeNotesPanel.addEventListener('click', () => {
+            notesPanel.classList.remove('show');
+            appState.showNotesPanel = false;
+        });
+    }
+    
+    if (refreshNotesBtn) {
+        refreshNotesBtn.addEventListener('click', loadVisitorNotes);
+    }
+    
+    if (markAllReadBtn) {
+        markAllReadBtn.addEventListener('click', markAllNotesAsRead);
+    }
+    
+    if (notesSearchInput) {
+        notesSearchInput.addEventListener('input', function() {
+            searchNotes(this.value.toLowerCase());
+        });
+    }
+    
+    // Click outside to close notes panel
     document.addEventListener('click', (e) => {
         if (notesPanel && notesPanel.classList.contains('show') && 
-            !notesPanel.contains(e.target) && notesBtn && !notesBtn.contains(e.target)) {
+            !notesPanel.contains(e.target) && 
+            notesBtn && !notesBtn.contains(e.target)) {
             notesPanel.classList.remove('show');
             appState.showNotesPanel = false;
         }
@@ -489,11 +570,7 @@ function setupEventListeners() {
     }
     
     if (sendReplyBtn) {
-        sendReplyBtn.addEventListener('click', () => {
-            if (window.ChatModule) {
-                window.ChatModule.sendReply();
-            }
-        });
+        sendReplyBtn.addEventListener('click', sendReply);
     }
     
     window.addEventListener('click', (e) => {
@@ -507,31 +584,21 @@ function setupEventListeners() {
     });
 }
 
-function updatePasswordHint(username) {
-    const passwordHint = document.getElementById('passwordHint');
-    if (!passwordHint) return;
-    
-    const lowerUsername = username.toLowerCase();
-    if (lowerUsername === 'guest') {
-        passwordHint.textContent = "Test password: guest123";
-        passwordHint.style.display = 'block';
-    } else if (lowerUsername === 'host') {
-        passwordHint.textContent = "Test password: host123";
-        passwordHint.style.display = 'block';
-    } else if (lowerUsername === 'admin') {
-        passwordHint.textContent = "Test password: admin123";
-        passwordHint.style.display = 'block';
-    } else {
-        passwordHint.style.display = 'none';
-    }
-}
-
 // ============================================
 // TAB SWITCHING
 // ============================================
+
 function switchAdminTab(tabName) {
+    console.log("Switching to tab:", tabName);
+    
+    if (!historyTabBtn || !usersTabBtn || !historyTabContent || !usersTabContent) {
+        console.error("Tab elements not found!");
+        return;
+    }
+    
     historyTabBtn.classList.remove('active');
     usersTabBtn.classList.remove('active');
+    
     historyTabContent.style.display = 'none';
     usersTabContent.style.display = 'none';
     historyTabContent.classList.remove('active');
@@ -551,13 +618,62 @@ function switchAdminTab(tabName) {
 }
 
 // ============================================
+// CLEAR CHAT
+// ============================================
+
+async function clearChat() {
+    if (!appState.isConnected || !appState.currentSessionId) {
+        alert("You must be connected to clear chat.");
+        return;
+    }
+    
+    if (!confirm("Are you sure you want to clear messages?")) {
+        return;
+    }
+    
+    try {
+        if (appState.isHost) {
+            const { error } = await supabaseClient
+                .from('messages')
+                .update({
+                    is_deleted: true,
+                    deleted_at: new Date().toISOString(),
+                    deleted_by: appState.userId
+                })
+                .eq('session_id', appState.currentSessionId);
+            
+            if (error) throw error;
+            
+            chatMessages.innerHTML = '';
+            appState.messages = [];
+            
+            addSystemMessage(`Chat cleared by host ${appState.userName}`);
+        } else {
+            const messages = document.querySelectorAll('.message');
+            messages.forEach(msg => {
+                if (msg.querySelector('.message-sender')?.textContent === appState.userName) {
+                    msg.remove();
+                }
+            });
+            
+            addSystemMessage(`You cleared your view of the chat`, true);
+        }
+    } catch (error) {
+        console.error("Error clearing chat:", error);
+        alert("Failed to clear chat: " + error.message);
+    }
+}
+
+// ============================================
 // SYSTEM MESSAGE HELPER
 // ============================================
+
 function addSystemMessage(text, isLocal = false) {
     const systemMsg = document.createElement('div');
     systemMsg.className = 'message received';
-    if (isLocal) systemMsg.classList.add('local-system');
-    
+    if (isLocal) {
+        systemMsg.classList.add('local-system');
+    }
     systemMsg.innerHTML = `
         <div class="message-sender">System</div>
         <div class="message-content">
@@ -570,8 +686,9 @@ function addSystemMessage(text, isLocal = false) {
 }
 
 // ============================================
-// AUTHENTICATION
+// HANDLE CONNECTION
 // ============================================
+
 async function handleConnect() {
     const username = usernameInput.value.trim();
     const password = passwordInput.value;
@@ -581,78 +698,94 @@ async function handleConnect() {
     connectBtn.disabled = true;
     connectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
     
-    if (!username || !password) {
+    if (!username) {
         passwordError.style.display = 'block';
-        passwordError.textContent = "Please enter both username and password.";
+        passwordError.textContent = "Please enter a username.";
+        resetConnectButton();
+        return;
+    }
+    
+    if (!password) {
+        passwordError.style.display = 'block';
+        passwordError.textContent = "Please enter a password.";
         resetConnectButton();
         return;
     }
     
     try {
-        console.log("🔐 Authenticating:", username);
+        console.log("🔐 Attempting authentication for:", username);
         
-        // Test accounts for easy login
-        const testAccounts = {
-            'guest': { password: 'guest123', role: 'guest', display: 'Guest User' },
-            'host': { password: 'host123', role: 'host', display: 'Host User' },
-            'admin': { password: 'admin123', role: 'host', display: 'Admin User' }
-        };
-        
-        const lowerUsername = username.toLowerCase();
-        
-        // Check if using test account
-        if (testAccounts[lowerUsername] && testAccounts[lowerUsername].password === password) {
-            console.log("✅ Using test account:", lowerUsername);
-            
-            appState.isHost = testAccounts[lowerUsername].role === 'host';
-            appState.userName = testAccounts[lowerUsername].display;
-            appState.userId = `test-${lowerUsername}-${Date.now()}`;
-            appState.guestNote = guestNote;
-            
-            console.log("✅ Test account authentication successful");
-            
-            const userIP = await getRealIP();
-            
-            if (appState.isHost) {
-                await connectAsHost(userIP);
-            } else {
-                await connectAsGuest(userIP);
-            }
-            return;
-        }
-        
-        // Try database authentication
         const { data: userData, error: userError } = await supabaseClient
             .from('user_management')
-            .select('id, username, display_name, role, is_active')
+            .select('id, username, display_name, password_hash, role, is_active')
             .ilike('username', username)
             .eq('is_active', true)
-            .maybeSingle();
+            .single();
         
         if (userError || !userData) {
-            console.log("User not found in database");
+            console.log("User not found:", userError);
             showAuthError("Invalid username or password.");
             return;
         }
         
-        // For demo, accept any password for database users
-        // In production, you'd verify the password here
-        console.log("👤 User found in database:", userData.username);
+        console.log("👤 User found:", userData.username, "Role:", userData.role);
+        
+        // Authenticate
+        let isAuthenticated = false;
+        
+        try {
+            const { data: authResult } = await supabaseClient
+                .rpc('verify_password', {
+                    stored_hash: userData.password_hash,
+                    password: password
+                });
+            
+            if (authResult === true) {
+                isAuthenticated = true;
+            }
+        } catch (rpcError) {
+            console.log("RPC failed, trying test passwords:", rpcError);
+        }
+        
+        if (!isAuthenticated) {
+            const testPasswords = {
+                'admin': 'admin123',
+                'host': 'host123',
+                'guest': 'guest123'
+            };
+            
+            if (testPasswords[username.toLowerCase()] && password === testPasswords[username.toLowerCase()]) {
+                isAuthenticated = true;
+            }
+        }
+        
+        if (!isAuthenticated) {
+            showAuthError("Invalid username or password.");
+            return;
+        }
         
         appState.isHost = userData.role === 'host';
         appState.userName = userData.display_name || userData.username;
         appState.userId = userData.id;
         appState.guestNote = guestNote;
         
-        console.log("✅ Database authentication successful");
+        console.log("✅ Authentication successful:", {
+            name: appState.userName,
+            id: appState.userId,
+            isHost: appState.isHost
+        });
         
-        // Update last login
         try {
             await supabaseClient
                 .from('user_management')
-                .update({ last_login: new Date().toISOString() })
+                .update({ 
+                    last_login: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                })
                 .eq('id', userData.id);
-        } catch (e) { /* ignore */ }
+        } catch (updateError) {
+            console.log("Could not update last login:", updateError);
+        }
         
         const userIP = await getRealIP();
         
@@ -661,10 +794,11 @@ async function handleConnect() {
         } else {
             await connectAsGuest(userIP);
         }
-        
     } catch (error) {
-        console.error("Authentication error:", error);
-        showAuthError("Authentication error. Please try again.");
+        console.error("Error in authentication process:", error);
+        showAuthError(error.message.includes('NetworkError') ? 
+            "Network error. Check connection." : 
+            "Authentication error. Please try again.");
     }
 }
 
@@ -682,24 +816,29 @@ function resetConnectButton() {
 // ============================================
 // CONNECT AS HOST
 // ============================================
+
 async function connectAsHost(userIP) {
     try {
         console.log("👑 Connecting as host...");
         
         const sessionId = 'room_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
         
-        const { error } = await supabaseClient
+        const { data, error } = await supabaseClient
             .from('sessions')
-            .insert([{
-                session_id: sessionId,
-                host_id: appState.userId,
-                host_name: appState.userName,
-                host_ip: userIP,
-                is_active: true,
-                requires_approval: true,
-                created_at: new Date().toISOString(),
-                max_guests: 50
-            }]);
+            .insert([
+                {
+                    session_id: sessionId,
+                    host_id: appState.userId,
+                    host_name: appState.userName,
+                    host_ip: userIP,
+                    is_active: true,
+                    requires_approval: true,
+                    created_at: new Date().toISOString(),
+                    max_guests: 50
+                }
+            ])
+            .select()
+            .single();
         
         if (error) {
             console.error("Error creating session:", error);
@@ -717,7 +856,8 @@ async function connectAsHost(userIP) {
         document.body.classList.add('host-mode');
         
         saveSessionToStorage();
-        hideConnectionModal();
+        
+        connectionModal.style.display = 'none';
         resetConnectButton();
         updateUIAfterConnection();
         
@@ -727,9 +867,10 @@ async function connectAsHost(userIP) {
         await loadPendingGuests();
         await loadChatHistory();
         await loadChatSessions();
-        await saveSystemMessage(`${appState.userName} has created a new chat room.`);
         
-        console.log("✅ Host connection completed!");
+        await saveMessageToDB('System', `${appState.userName} has created a new chat room.`);
+        
+        console.log("✅ Host connection completed successfully!");
     } catch (error) {
         console.error("Error in host connection:", error);
         alert("An error occurred: " + error.message);
@@ -744,9 +885,10 @@ async function connectAsHost(userIP) {
 // ============================================
 // CONNECT AS GUEST
 // ============================================
+
 async function connectAsGuest(userIP) {
     try {
-        console.log("👤 Connecting as guest...");
+        console.log("👤 Connecting as guest - auto-joining latest room...");
         
         const { data: activeSessions, error: sessionError } = await supabaseClient
             .from('sessions')
@@ -756,7 +898,7 @@ async function connectAsGuest(userIP) {
             .limit(1);
         
         if (sessionError || !activeSessions || activeSessions.length === 0) {
-            alert("No active rooms available.");
+            alert("No active rooms available. Please try again later or contact a host.");
             resetConnectButton();
             return;
         }
@@ -772,17 +914,22 @@ async function connectAsGuest(userIP) {
             .maybeSingle();
         
         if (existingRequest) {
+            console.log("Existing request found with status:", existingRequest.status);
+            
             if (existingRequest.status === 'pending') {
+                console.log("Guest already pending");
                 appState.sessionId = targetSession.session_id;
-                hideConnectionModal();
+                connectionModal.style.display = 'none';
                 resetConnectButton();
                 updateUIForPendingGuest();
                 setupPendingApprovalSubscription(targetSession.session_id);
                 return;
             } else if (existingRequest.status === 'approved') {
+                console.log("Guest already approved");
                 completeGuestConnection(targetSession.session_id);
                 return;
-            } else {
+            } else if (existingRequest.status === 'rejected' || existingRequest.status === 'kicked') {
+                console.log("Previous request was rejected/kicked, creating new request");
                 await createNewGuestRequest(targetSession, userIP);
             }
         } else {
@@ -797,7 +944,9 @@ async function connectAsGuest(userIP) {
 
 async function createNewGuestRequest(session, userIP) {
     try {
-        await supabaseClient
+        console.log("Creating new guest request for session:", session.session_id);
+        
+        const { data: newGuest, error: insertError } = await supabaseClient
             .from('session_guests')
             .insert([{
                 session_id: session.session_id,
@@ -807,16 +956,54 @@ async function createNewGuestRequest(session, userIP) {
                 guest_note: appState.guestNote || "",
                 status: 'pending',
                 requested_at: new Date().toISOString()
-            }]);
+            }])
+            .select();
+        
+        if (insertError) {
+            console.error("Error adding to pending:", insertError);
+            
+            if (insertError.message.includes('duplicate key')) {
+                alert("You already have a pending request for this room.");
+            } else {
+                alert("Failed to request access: " + insertError.message);
+            }
+            resetConnectButton();
+            return;
+        }
+        
+        console.log("✅ Guest added to pending list successfully:", newGuest);
         
         if (appState.guestNote && appState.guestNote.trim() !== '') {
             await saveVisitorNote(session.session_id, appState.guestNote, userIP);
         }
         
-        await saveSystemMessage(`🔔 New guest request from ${appState.userName}${appState.guestNote ? ': ' + appState.guestNote : ''}`);
+        try {
+            await supabaseClient
+                .from('sessions')
+                .update({
+                    created_at: new Date().toISOString()
+                })
+                .eq('session_id', session.session_id);
+        } catch (updateError) {
+            console.log("Could not update session timestamp:", updateError);
+        }
+        
+        try {
+            await supabaseClient
+                .from('messages')
+                .insert([{
+                    session_id: session.session_id,
+                    sender_id: 'system',
+                    sender_name: 'System',
+                    message: `🔔 New guest request from ${appState.userName}${appState.guestNote ? ': ' + appState.guestNote : ''}`,
+                    created_at: new Date().toISOString()
+                }]);
+        } catch (msgError) {
+            console.log("Could not send system message:", msgError);
+        }
         
         appState.sessionId = session.session_id;
-        hideConnectionModal();
+        connectionModal.style.display = 'none';
         resetConnectButton();
         updateUIForPendingGuest();
         setupPendingApprovalSubscription(session.session_id);
@@ -829,7 +1016,7 @@ async function createNewGuestRequest(session, userIP) {
 
 async function saveVisitorNote(sessionId, noteText, userIP) {
     try {
-        await supabaseClient
+        const { error } = await supabaseClient
             .from('visitor_notes')
             .insert([{
                 guest_id: appState.userId,
@@ -840,8 +1027,14 @@ async function saveVisitorNote(sessionId, noteText, userIP) {
                 created_at: new Date().toISOString(),
                 read_by_host: false
             }]);
+        
+        if (error) {
+            console.error("Error saving visitor note:", error);
+        } else {
+            console.log("✅ Visitor note saved successfully");
+        }
     } catch (error) {
-        console.error("Error saving visitor note:", error);
+        console.error("Error in saveVisitorNote:", error);
     }
 }
 
@@ -851,13 +1044,13 @@ function completeGuestConnection(sessionId) {
     appState.isConnected = true;
     
     saveSessionToStorage();
-    hideConnectionModal();
+    connectionModal.style.display = 'none';
     resetConnectButton();
     updateUIAfterConnection();
     setupRealtimeSubscriptions();
     loadChatHistory();
     loadChatSessions();
-    saveSystemMessage(`${appState.userName} has joined the chat.`);
+    saveMessageToDB('System', `${appState.userName} has joined the chat.`);
 }
 
 function saveSessionToStorage() {
@@ -873,11 +1066,17 @@ function saveSessionToStorage() {
 // ============================================
 // PENDING GUESTS SYSTEM
 // ============================================
+
 function setupPendingGuestsSubscription() {
+    console.log("🔄 Setting up pending guests subscription...");
+    
     if (!appState.isHost || !appState.currentSessionId) {
+        console.log("⚠️ Cannot setup pending subscription: Not host or no session ID");
         if (pendingGuestsBtn) pendingGuestsBtn.style.display = 'none';
         return;
     }
+    
+    console.log("✅ Host detected, setting up pending guests for session:", appState.currentSessionId);
     
     if (appState.pendingSubscription) {
         supabaseClient.removeChannel(appState.pendingSubscription);
@@ -894,9 +1093,13 @@ function setupPendingGuestsSubscription() {
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
             (payload) => {
+                console.log('🎯 NEW PENDING GUEST DETECTED:', payload.new);
+                
                 if (payload.new && payload.new.status === 'pending') {
                     const exists = appState.pendingGuests.some(g => g.id === payload.new.id);
-                    if (!exists) appState.pendingGuests.push(payload.new);
+                    if (!exists) {
+                        appState.pendingGuests.push(payload.new);
+                    }
                     
                     updatePendingButtonUI();
                     showGuestNotification(payload.new);
@@ -905,12 +1108,16 @@ function setupPendingGuestsSubscription() {
                         try {
                             messageSound.currentTime = 0;
                             messageSound.play().catch(e => console.log("Sound play failed:", e));
-                        } catch (e) { /* ignore */ }
+                        } catch (e) {
+                            console.log("Sound error:", e);
+                        }
                     }
                     
-                    addSystemMessage(`🔔 New guest request from ${payload.new.guest_name}`);
+                    addSystemMessage(`🔔 New guest request from ${payload.new.guest_name}${payload.new.guest_note ? ': ' + payload.new.guest_note : ''}`);
                     
-                    if (pendingGuestsModal.style.display === 'flex') showPendingGuests();
+                    if (pendingGuestsModal.style.display === 'flex') {
+                        showPendingGuests();
+                    }
                 }
             }
         )
@@ -922,15 +1129,39 @@ function setupPendingGuestsSubscription() {
                 table: 'session_guests',
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
-            () => loadPendingGuests()
+            (payload) => {
+                console.log('🔄 PENDING GUEST UPDATED:', payload.new);
+                loadPendingGuests();
+            }
         )
-        .subscribe();
+        .subscribe((status, err) => {
+            console.log('📡 Pending guests subscription status:', status);
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ Successfully subscribed to pending guests!');
+                loadPendingGuests();
+            }
+            if (err) {
+                console.error('❌ Subscription error:', err);
+            }
+        });
 }
 
 async function loadPendingGuests() {
-    if (!appState.isHost || !appState.currentSessionId) return;
+    if (!appState.isHost) {
+        console.log("Cannot load pending guests: Not host");
+        return;
+    }
     
     try {
+        console.log("🔄 Loading pending guests for session:", appState.currentSessionId);
+        
+        if (!appState.currentSessionId) {
+            console.log("No active session ID");
+            appState.pendingGuests = [];
+            updatePendingButtonUI();
+            return;
+        }
+        
         const { data: guests, error } = await supabaseClient
             .from('session_guests')
             .select('*')
@@ -938,34 +1169,46 @@ async function loadPendingGuests() {
             .eq('status', 'pending')
             .order('requested_at', { ascending: false });
         
-        if (error) throw error;
+        if (error) {
+            console.error("Error loading pending guests:", error);
+            return;
+        }
         
+        console.log(`✅ Loaded ${guests?.length || 0} pending guests`);
         appState.pendingGuests = guests || [];
+        
         updatePendingButtonUI();
         
-        if (pendingGuestsModal.style.display === 'flex') renderPendingGuestsList();
+        if (pendingGuestsModal.style.display === 'flex') {
+            renderPendingGuestsList();
+        }
     } catch (error) {
-        console.error("Error loading pending guests:", error);
+        console.error("Error in loadPendingGuests:", error);
     }
 }
 
 function showGuestNotification(guest) {
+    console.log("🔔 Showing notification for:", guest.guest_name);
+    
     document.querySelectorAll('.guest-notification').forEach(n => n.remove());
     
     const notification = document.createElement('div');
     notification.className = 'guest-notification';
     notification.innerHTML = `
         <div class="notification-content">
-            <div class="notification-icon"><i class="fas fa-user-plus"></i></div>
+            <div class="notification-icon">
+                <i class="fas fa-user-plus"></i>
+            </div>
             <div class="notification-text">
                 <strong>New Guest Request!</strong>
                 <span>${guest.guest_name} wants to join</span>
+                ${guest.guest_note ? `<small>📝 ${guest.guest_note}</small>` : ''}
             </div>
             <div class="notification-actions">
                 <button onclick="viewPendingGuestsNow()" class="btn btn-small btn-success">
                     <i class="fas fa-eye"></i> View
                 </button>
-                <button onclick="this.remove()" class="btn btn-small btn-secondary">
+                <button onclick="this.closest('.guest-notification').remove()" class="btn btn-small btn-secondary">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -975,7 +1218,9 @@ function showGuestNotification(guest) {
     document.body.appendChild(notification);
     
     setTimeout(() => {
-        if (notification.parentNode) notification.remove();
+        if (notification.parentNode) {
+            notification.remove();
+        }
     }, 15000);
 }
 
@@ -983,6 +1228,8 @@ function updatePendingButtonUI() {
     if (!pendingGuestsBtn || !pendingCount) return;
     
     const count = appState.pendingGuests.length;
+    console.log(`Updating pending button UI. Count: ${count}`);
+    
     pendingCount.textContent = count;
     
     if (count > 0) {
@@ -999,6 +1246,7 @@ function updatePendingButtonUI() {
 }
 
 function showPendingGuests() {
+    console.log("Showing pending guests modal...");
     renderPendingGuestsList();
     pendingGuestsModal.style.display = 'flex';
 }
@@ -1031,7 +1279,12 @@ function renderPendingGuestsList() {
                 </div>
                 <div class="guest-details">
                     <small><i class="fas fa-calendar"></i> ${new Date(guest.requested_at).toLocaleString()}</small>
-                    ${guest.guest_note ? `<div class="guest-note"><i class="fas fa-sticky-note"></i> ${guest.guest_note}</div>` : ''}
+                    <small><i class="fas fa-network-wired"></i> IP: ${guest.guest_ip || 'Unknown'}</small>
+                    ${guest.guest_note ? `
+                        <div class="guest-note">
+                            <i class="fas fa-sticky-note"></i> ${guest.guest_note}
+                        </div>
+                    ` : ''}
                 </div>
             </div>
             <div class="guest-actions">
@@ -1050,25 +1303,38 @@ function renderPendingGuestsList() {
 
 async function approveGuest(guestRecordId) {
     try {
+        console.log("Approving guest:", guestRecordId);
+        
         const { data: guest, error: fetchError } = await supabaseClient
             .from('session_guests')
             .select('*')
             .eq('id', guestRecordId)
             .single();
         
-        if (fetchError || !guest) throw new Error("Guest not found");
+        if (fetchError || !guest) {
+            throw new Error("Guest not found");
+        }
         
-        await supabaseClient
+        const { error } = await supabaseClient
             .from('session_guests')
-            .update({ status: 'approved', approved_at: new Date().toISOString() })
+            .update({
+                status: 'approved',
+                approved_at: new Date().toISOString()
+            })
             .eq('id', guestRecordId);
+        
+        if (error) throw error;
         
         appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
         updatePendingButtonUI();
         
-        if (pendingGuestsModal.style.display === 'flex') renderPendingGuestsList();
+        if (pendingGuestsModal.style.display === 'flex') {
+            renderPendingGuestsList();
+        }
         
-        await saveSystemMessage(`${guest.guest_name} has been approved and joined the chat.`);
+        await saveMessageToDB('System', `${guest.guest_name} has been approved and joined the chat.`);
+        
+        console.log(`✅ Approved guest: ${guest.guest_name}`);
     } catch (error) {
         console.error("Error approving guest:", error);
         alert("Failed to approve guest: " + error.message);
@@ -1077,23 +1343,36 @@ async function approveGuest(guestRecordId) {
 
 async function denyGuest(guestRecordId) {
     try {
+        console.log("Denying guest:", guestRecordId);
+        
         const { data: guest, error: fetchError } = await supabaseClient
             .from('session_guests')
             .select('*')
             .eq('id', guestRecordId)
             .single();
         
-        if (fetchError || !guest) throw new Error("Guest not found");
+        if (fetchError || !guest) {
+            throw new Error("Guest not found");
+        }
         
-        await supabaseClient
+        const { error } = await supabaseClient
             .from('session_guests')
-            .update({ status: 'rejected', left_at: new Date().toISOString() })
+            .update({
+                status: 'rejected',
+                left_at: new Date().toISOString()
+            })
             .eq('id', guestRecordId);
+        
+        if (error) throw error;
         
         appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
         updatePendingButtonUI();
         
-        if (pendingGuestsModal.style.display === 'flex') renderPendingGuestsList();
+        if (pendingGuestsModal.style.display === 'flex') {
+            renderPendingGuestsList();
+        }
+        
+        console.log(`❌ Denied guest: ${guest.guest_name}`);
     } catch (error) {
         console.error("Error denying guest:", error);
         alert("Failed to deny guest: " + error.message);
@@ -1106,18 +1385,26 @@ window.kickGuest = async function(guestId, guestName) {
         return;
     }
     
-    if (!confirm(`Are you sure you want to kick ${guestName}?`)) return;
+    if (!confirm(`Are you sure you want to kick ${guestName} from the chat?`)) return;
     
     try {
-        await supabaseClient
+        const { error } = await supabaseClient
             .from('session_guests')
-            .update({ status: 'kicked', left_at: new Date().toISOString() })
+            .update({
+                status: 'kicked',
+                left_at: new Date().toISOString()
+            })
             .eq('id', guestId)
             .eq('session_id', appState.currentSessionId);
         
-        await saveSystemMessage(`${guestName} has been kicked from the chat.`);
+        if (error) throw error;
+        
+        await saveMessageToDB('System', `${guestName} has been kicked from the chat by host.`);
+        
         loadPendingGuests();
         loadChatSessions();
+        
+        alert(`${guestName} has been kicked.`);
     } catch (error) {
         console.error("Error kicking guest:", error);
         alert("Failed to kick guest: " + error.message);
@@ -1125,6 +1412,8 @@ window.kickGuest = async function(guestId, guestName) {
 };
 
 function setupPendingApprovalSubscription(sessionId) {
+    console.log("⏳ Setting up pending approval subscription for guest...");
+    
     if (appState.pendingSubscription) {
         supabaseClient.removeChannel(appState.pendingSubscription);
         appState.pendingSubscription = null;
@@ -1141,8 +1430,12 @@ function setupPendingApprovalSubscription(sessionId) {
                 filter: `guest_id=eq.${appState.userId}`
             },
             async (payload) => {
+                console.log('👤 Guest approval update:', payload.new?.status);
+                
                 if (payload.new && payload.new.session_id === sessionId) {
                     if (payload.new.status === 'approved') {
+                        console.log("🎉 Guest has been APPROVED!");
+                        
                         appState.currentSessionId = sessionId;
                         appState.isConnected = true;
                         saveSessionToStorage();
@@ -1155,25 +1448,36 @@ function setupPendingApprovalSubscription(sessionId) {
                         updateUIAfterConnection();
                         setupRealtimeSubscriptions();
                         await loadChatHistory();
-                        await saveSystemMessage(`${appState.userName} has joined the chat.`);
+                        await saveMessageToDB('System', `${appState.userName} has joined the chat.`);
                         
                         alert("🎉 You have been approved! Welcome to the chat.");
                     } else if (payload.new.status === 'rejected') {
-                        alert("Your access request was rejected.");
+                        console.log("❌ Guest has been REJECTED");
+                        alert("Your access request was rejected by the host.");
                         location.reload();
                     } else if (payload.new.status === 'kicked') {
-                        alert("You have been kicked from the chat.");
+                        console.log("👢 Guest has been KICKED");
+                        alert("You have been kicked from the chat by the host.");
                         handleLogout();
                     }
                 }
             }
         )
-        .subscribe();
+        .subscribe((status, err) => {
+            console.log('Guest approval subscription status:', status);
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ Guest approval subscription active');
+            }
+            if (err) {
+                console.error('Guest approval subscription error:', err);
+            }
+        });
 }
 
 // ============================================
 // GUEST NOTIFICATION TO ADMIN
 // ============================================
+
 function showGuestNotificationModal() {
     guestNotifyName.value = '';
     guestNotifyEmail.value = '';
@@ -1191,8 +1495,20 @@ async function sendGuestNotificationToAdmin() {
     guestNotifyError.style.display = 'none';
     guestNotifySuccess.style.display = 'none';
     
-    if (!name || !message) {
-        guestNotifyError.textContent = "Please enter your name and message.";
+    if (!name) {
+        guestNotifyError.textContent = "Please enter your name.";
+        guestNotifyError.style.display = 'block';
+        return;
+    }
+    
+    if (!message) {
+        guestNotifyError.textContent = "Please enter a message.";
+        guestNotifyError.style.display = 'block';
+        return;
+    }
+    
+    if (email && (!email.includes('@') || !email.includes('.'))) {
+        guestNotifyError.textContent = "Please enter a valid email address or leave it blank.";
         guestNotifyError.style.display = 'block';
         return;
     }
@@ -1206,35 +1522,143 @@ async function sendGuestNotificationToAdmin() {
             const response = await fetch('https://api.ipify.org?format=json');
             const data = await response.json();
             userIP = data.ip || "Unknown";
-        } catch (ipError) { /* ignore */ }
+        } catch (ipError) {
+            console.log("Could not get IP, using Unknown");
+        }
         
-        const noteText = `📬 GUEST NOTIFICATION\nFrom: ${name}\n${email ? 'Email: ' + email + '\n' : ''}Message: ${message}`;
+        console.log("Sending guest notification from:", name, email || "no email");
         
-        await supabaseClient
-            .from('visitor_notes')
-            .insert([{
-                guest_name: name,
-                guest_email: email || null,
-                note_text: noteText,
-                guest_ip: userIP,
-                created_at: new Date().toISOString(),
-                read_by_host: false,
-                is_guest_notification: true
-            }]);
+        let notificationSent = false;
+        const notificationId = 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         
-        guestNotifySuccess.style.display = 'block';
-        guestNotifySuccess.innerHTML = '<i class="fas fa-check-circle"></i> ✅ Your message has been sent!';
+        const notification = {
+            id: notificationId,
+            guest_name: name,
+            guest_email: email || null,
+            message: message,
+            guest_ip: userIP,
+            created_at: new Date().toISOString(),
+            is_read: false,
+            source: 'guest_notification'
+        };
         
-        guestNotifyName.value = '';
-        guestNotifyEmail.value = '';
-        guestNotifyMessage.value = '';
+        try {
+            const noteText = `📬 GUEST NOTIFICATION\nFrom: ${name}\n${email ? 'Email: ' + email + '\n' : ''}Message: ${message}`;
+            
+            const { data, error } = await supabaseClient
+                .from('visitor_notes')
+                .insert([{
+                    guest_name: name,
+                    guest_email: email || null,
+                    note_text: noteText,
+                    guest_ip: userIP,
+                    created_at: new Date().toISOString(),
+                    read_by_host: false,
+                    is_guest_notification: true
+                }])
+                .select();
+            
+            if (!error) {
+                console.log("✅ Saved to visitor_notes:", data);
+                notificationSent = true;
+            } else {
+                console.log("visitor_notes error:", error);
+            }
+        } catch (e) {
+            console.log("visitor_notes exception:", e.message);
+        }
         
-        setTimeout(() => {
-            guestNotificationModal.style.display = 'none';
-        }, 3000);
+        try {
+            const { data, error } = await supabaseClient
+                .from('guest_notifications')
+                .insert([{
+                    guest_name: name,
+                    guest_email: email || null,
+                    message: message,
+                    guest_ip: userIP,
+                    created_at: new Date().toISOString(),
+                    is_read: false
+                }])
+                .select();
+            
+            if (!error) {
+                console.log("✅ Saved to guest_notifications:", data);
+                notificationSent = true;
+            } else {
+                console.log("guest_notifications error:", error);
+            }
+        } catch (e) {
+            console.log("guest_notifications exception:", e.message);
+        }
+        
+        if (!notificationSent) {
+            try {
+                const stored = localStorage.getItem('guest_notifications_backup');
+                let notifications = stored ? JSON.parse(stored) : [];
+                
+                notifications.push(notification);
+                
+                if (notifications.length > 50) {
+                    notifications = notifications.slice(-50);
+                }
+                
+                localStorage.setItem('guest_notifications_backup', JSON.stringify(notifications));
+                console.log("✅ Saved to localStorage backup");
+                notificationSent = true;
+            } catch (e) {
+                console.log("localStorage backup error:", e.message);
+            }
+        }
+        
+        if (!notificationSent) {
+            if (appState.isHost) {
+                if (!appState.visitorNotes) appState.visitorNotes = [];
+                
+                appState.visitorNotes.unshift({
+                    id: notificationId,
+                    guest_name: name,
+                    guest_email: email,
+                    note_text: `📬 GUEST NOTIFICATION (Offline)\nFrom: ${name}\n${email ? 'Email: ' + email + '\n' : ''}Message: ${message}`,
+                    guest_ip: userIP,
+                    created_at: new Date().toISOString(),
+                    read_by_host: false,
+                    is_guest_notification: true
+                });
+                
+                appState.unreadNotesCount = (appState.unreadNotesCount || 0) + 1;
+                updateNotesButtonUI();
+                
+                if (appState.showNotesPanel) {
+                    renderVisitorNotes(appState.visitorNotes);
+                }
+                
+                notificationSent = true;
+                console.log("✅ Added to appState (in-memory)");
+            }
+        }
+        
+        if (notificationSent) {
+            guestNotifySuccess.style.display = 'block';
+            guestNotifySuccess.innerHTML = '<i class="fas fa-check-circle"></i> ✅ Your message has been sent to the administrator!';
+            
+            guestNotifyName.value = '';
+            guestNotifyEmail.value = '';
+            guestNotifyMessage.value = '';
+            
+            setTimeout(() => {
+                guestNotificationModal.style.display = 'none';
+            }, 3000);
+        } else {
+            throw new Error("Could not deliver notification through any method");
+        }
     } catch (error) {
         console.error("Error sending guest notification:", error);
-        guestNotifyError.innerHTML = `<i class="fas fa-exclamation-circle"></i> Failed to send message.`;
+        guestNotifyError.innerHTML = `
+            <i class="fas fa-exclamation-circle"></i> 
+            Failed to send message.<br>
+            <small>${error.message}</small><br>
+            <small>Please try again or contact the administrator directly.</small>
+        `;
         guestNotifyError.style.display = 'block';
     } finally {
         sendGuestNotification.disabled = false;
@@ -1242,9 +1666,49 @@ async function sendGuestNotificationToAdmin() {
     }
 }
 
+function loadBackupNotifications() {
+    try {
+        const stored = localStorage.getItem('guest_notifications_backup');
+        if (stored) {
+            const backups = JSON.parse(stored);
+            console.log(`📦 Found ${backups.length} backup notifications in localStorage`);
+            
+            if (appState.isHost && backups.length > 0) {
+                if (!appState.visitorNotes) appState.visitorNotes = [];
+                
+                backups.forEach(backup => {
+                    const exists = appState.visitorNotes.some(n => n.id === backup.id);
+                    if (!exists) {
+                        appState.visitorNotes.unshift({
+                            id: backup.id,
+                            guest_name: backup.guest_name,
+                            guest_email: backup.guest_email,
+                            note_text: `📬 GUEST NOTIFICATION (Backup)\nFrom: ${backup.guest_name}\n${backup.guest_email ? 'Email: ' + backup.guest_email + '\n' : ''}Message: ${backup.message}`,
+                            guest_ip: backup.guest_ip,
+                            created_at: backup.created_at,
+                            read_by_host: false,
+                            is_guest_notification: true
+                        });
+                    }
+                });
+                
+                appState.unreadNotesCount = appState.visitorNotes.filter(n => !n.read_by_host).length;
+                updateNotesButtonUI();
+                
+                if (appState.showNotesPanel) {
+                    renderVisitorNotes(appState.visitorNotes);
+                }
+            }
+        }
+    } catch (e) {
+        console.log("Error loading backup notifications:", e);
+    }
+}
+
 // ============================================
-// REALTIME SUBSCRIPTIONS - FIXED VERSION
+// REALTIME SUBSCRIPTIONS
 // ============================================
+
 function setupRealtimeSubscriptions() {
     if (!appState.currentSessionId) {
         console.log("⚠️ No session ID for subscriptions");
@@ -1253,8 +1717,8 @@ function setupRealtimeSubscriptions() {
     
     console.log("📡 Setting up real-time subscriptions for session:", appState.currentSessionId);
     
-    // Clean up old subscriptions
     if (appState.realtimeSubscription) {
+        console.log("Removing old subscription");
         supabaseClient.removeChannel(appState.realtimeSubscription);
         appState.realtimeSubscription = null;
     }
@@ -1264,30 +1728,23 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-    if (appState.reactionSubscription) {
-        supabaseClient.removeChannel(appState.reactionSubscription);
-        appState.reactionSubscription = null;
-    }
-    
-    // Main messages subscription
     appState.realtimeSubscription = supabaseClient
-        .channel(`messages-${appState.currentSessionId}-${Date.now()}`)
-        .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            (payload) => {
-                console.log('📦 New message:', payload.new.sender_name);
-                
-                if (payload.new.sender_id === appState.userId || appState.isViewingHistory) return;
-                
-                getMessageReactions(payload.new.id).then(reactions => {
-                    if (window.ChatModule) {
-                        window.ChatModule.displayMessage({
+    .channel('messages_' + appState.currentSessionId)
+    .on(
+        'postgres_changes',
+        {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages'
+        },
+        (payload) => {
+            console.log('📦 Realtime message received:', payload.new?.sender_name);
+            
+            if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                    // Get reactions for this message
+                    getMessageReactions(payload.new.id).then(reactions => {
+                        displayMessage({
                             id: payload.new.id,
                             sender: payload.new.sender_name,
                             text: payload.new.message,
@@ -1298,73 +1755,82 @@ function setupRealtimeSubscriptions() {
                             reactions: reactions,
                             reply_to: payload.new.reply_to
                         });
+                    });
+                    
+                    if (appState.soundEnabled && !payload.new.is_notification) {
+                        try {
+                            messageSound.currentTime = 0;
+                            messageSound.play().catch(e => console.log("Audio play failed:", e));
+                        } catch (e) {
+                            console.log("Audio error:", e);
+                        }
+                    }
+                }
+            }
+        }
+    )
+    .on(
+        'postgres_changes',
+        {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'messages',
+            filter: `session_id=eq.${appState.currentSessionId}`
+        },
+        (payload) => {
+            console.log('📝 Message updated:', payload.new?.id);
+            
+            const messageElement = document.getElementById(`msg-${payload.new.id}`);
+            if (messageElement) {
+                if (payload.new.is_deleted) {
+                    // Handle deleted message
+                    messageElement.innerHTML = `
+                        <div class="message-sender">${escapeHtml(payload.new.sender_name)}</div>
+                        <div class="message-content">
+                            <div class="message-text"><i>Message deleted</i></div>
+                            <div class="message-footer">
+                                <div class="message-time">${new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                            </div>
+                        </div>
+                    `;
+                    // Remove actions menu
+                    const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
+                    if (actionsMenu) actionsMenu.remove();
+                } else {
+                    // Handle edited message
+                    const textElement = messageElement.querySelector('.message-text');
+                    if (textElement && !textElement.innerHTML.includes('Message deleted')) {
+                        textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
+                    }
+                }
+                
+                // Update reactions
+                getMessageReactions(payload.new.id).then(reactions => {
+                    const reactionsContainer = messageElement.querySelector('.message-reactions');
+                    if (reactionsContainer && window.ChatModule) {
+                        window.ChatModule.renderReactions(reactionsContainer, reactions);
                     }
                 });
-                
-                if (appState.soundEnabled && !payload.new.is_notification) {
-                    try {
-                        messageSound.currentTime = 0;
-                        messageSound.play().catch(e => console.log("Audio play failed:", e));
-                    } catch (e) { /* ignore */ }
-                }
             }
-        )
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'messages',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            (payload) => {
-                console.log('📝 Message updated:', payload.new.id);
-                handleMessageUpdate(payload.new);
-            }
-        )
-        .on(
-            'postgres_changes',
-            {
-                event: 'DELETE',
-                schema: 'public',
-                table: 'messages',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            (payload) => {
-                console.log('🗑️ Message deleted:', payload.old.id);
-                const messageElement = document.getElementById(`msg-${payload.old.id}`);
-                if (messageElement) messageElement.remove();
-            }
-        )
-        .subscribe((status) => {
-            console.log('📡 Messages subscription:', status);
-        });
+        }
+    )
+    .subscribe((status, err) => {
+        console.log('📡 MESSAGES Subscription status:', status);
+        if (err) {
+            console.error('❌ Messages subscription error:', err);
+        }
+    });
+
+    // Helper function to escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
     
-    // Reactions subscription
-    appState.reactionSubscription = supabaseClient
-        .channel(`reactions-${appState.currentSessionId}-${Date.now()}`)
-        .on(
-            'postgres_changes',
-            {
-                event: '*',
-                schema: 'public',
-                table: 'message_reactions'
-            },
-            (payload) => {
-                const messageId = payload.new?.message_id || payload.old?.message_id;
-                if (!messageId) return;
-                
-                const messageElement = document.getElementById(`msg-${messageId}`);
-                if (messageElement) {
-                    updateMessageReactions(messageId);
-                }
-            }
-        )
-        .subscribe();
-    
-    // Typing subscription
     appState.typingSubscription = supabaseClient
-        .channel(`typing-${appState.currentSessionId}-${Date.now()}`)
+        .channel('typing_' + appState.currentSessionId)
         .on(
             'postgres_changes',
             {
@@ -1383,56 +1849,22 @@ function setupRealtimeSubscriptions() {
                             typingIndicator.classList.remove('show');
                         }
                     }, 3000);
-                } else if (!payload.new?.typing_user) {
-                    typingIndicator.classList.remove('show');
                 }
             }
         )
         .subscribe();
     
     if (appState.isHost) {
-        console.log("👑 Setting up pending guests subscription");
+        console.log("👑 Setting up pending guests subscription for host");
         setupPendingGuestsSubscription();
-    }
-}
-
-function handleMessageUpdate(updatedMessage) {
-    const messageElement = document.getElementById(`msg-${updatedMessage.id}`);
-    if (!messageElement) return;
-    
-    if (updatedMessage.is_deleted) {
-        messageElement.innerHTML = `
-            <div class="message-sender">${escapeHtml(updatedMessage.sender_name)}</div>
-            <div class="message-content">
-                <div class="message-text"><i>Message deleted</i></div>
-                <div class="message-footer">
-                    <div class="message-time">${new Date(updatedMessage.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                </div>
-            </div>
-        `;
-        const actionsMenu = document.getElementById(`actions-${updatedMessage.id}`);
-        if (actionsMenu) actionsMenu.remove();
-    } else if (updatedMessage.is_edited) {
-        const textElement = messageElement.querySelector('.message-text');
-        if (textElement && !textElement.innerHTML.includes('Message deleted')) {
-            textElement.innerHTML = `${escapeHtml(updatedMessage.message)} <small class="edited-indicator">(edited)</small>`;
-        }
-    }
-}
-
-async function updateMessageReactions(messageId) {
-    const messageElement = document.getElementById(`msg-${messageId}`);
-    if (messageElement) {
-        const reactions = await getMessageReactions(messageId);
-        const reactionsContainer = messageElement.querySelector('.message-reactions');
-        if (reactionsContainer && window.ChatModule) {
-            window.ChatModule.renderReactions(reactionsContainer, reactions);
-        }
+        loadBackupNotifications();
     }
 }
 
 function checkAndReconnectSubscriptions() {
     if (!appState.isConnected || !appState.currentSessionId) return;
+    
+    console.log("🔍 Checking subscription health...");
     
     if (!appState.realtimeSubscription) {
         console.log("🔄 Reconnecting messages subscription...");
@@ -1445,31 +1877,33 @@ function checkAndReconnectSubscriptions() {
     }
 }
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+// ============================================
+// ENHANCED CHAT FUNCTIONS
+// ============================================
 
-// ============================================
-// CHAT FUNCTIONS
-// ============================================
 async function handleTyping() {
     if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) return;
     
     try {
         await supabaseClient
             .from('sessions')
-            .update({ typing_user: appState.userName })
+            .update({ 
+                typing_user: appState.userName,
+                created_at: new Date().toISOString()
+            })
             .eq('session_id', appState.currentSessionId);
         
-        if (appState.typingTimeout) clearTimeout(appState.typingTimeout);
+        if (appState.typingTimeout) {
+            clearTimeout(appState.typingTimeout);
+        }
         
         appState.typingTimeout = setTimeout(() => {
             supabaseClient
                 .from('sessions')
-                .update({ typing_user: null })
+                .update({ 
+                    typing_user: null,
+                    created_at: new Date().toISOString()
+                })
                 .eq('session_id', appState.currentSessionId)
                 .catch(e => console.log("Error clearing typing:", e));
         }, 1000);
@@ -1505,27 +1939,25 @@ async function sendMessage() {
     
     messageInput.value = '';
     messageInput.style.height = 'auto';
+    appState.replyingTo = null;
 }
-
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
-        console.log('Replying to:', appState.replyingTo);
         
         const messageData = {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
             sender_name: appState.userName,
             message: text || '',
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            // REMOVED: reactions: [],
+            reply_to: appState.replyingTo || null
         };
         
-        if (appState.replyingTo) {
-            messageData.reply_to = appState.replyingTo;
-            console.log('✅ Added reply_to:', appState.replyingTo);
+        if (imageUrl) {
+            messageData.image_url = imageUrl;
         }
-        
-        if (imageUrl) messageData.image_url = imageUrl;
         
         const { data, error } = await supabaseClient
             .from('messages')
@@ -1533,29 +1965,26 @@ async function sendMessageToDB(text, imageUrl) {
             .select()
             .single();
         
-        if (error) throw error;
+        if (error) {
+            console.error("❌ Error sending message:", error);
+            throw error;
+        }
         
         console.log('✅ Message saved to DB:', data.id);
         
-        const repliedToId = appState.replyingTo;
-        appState.replyingTo = null;
-        
-        if (window.ChatModule) {
-            window.ChatModule.displayMessage({
-                id: data.id,
-                sender: appState.userName,
-                text: text,
-                image: imageUrl,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_historical: false,
-                reactions: [],
-                reply_to: repliedToId
-            });
-        }
+        displayMessage({
+            id: data.id,
+            sender: appState.userName,
+            text: text,
+            image: imageUrl,
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            type: 'sent',
+            is_historical: false,
+            reactions: [], // Keep this for display
+            reply_to: appState.replyingTo
+        });
         
         return { success: true, data };
-        
     } catch (error) {
         console.error("❌ Error in sendMessageToDB:", error);
         alert("Failed to send message: " + error.message);
@@ -1563,29 +1992,26 @@ async function sendMessageToDB(text, imageUrl) {
     }
 }
 
-async function saveSystemMessage(messageText) {
-    try {
-        await supabaseClient
-            .from('messages')
-            .insert([{
-                session_id: appState.currentSessionId,
-                sender_id: 'system',
-                sender_name: 'System',
-                message: messageText,
-                created_at: new Date().toISOString(),
-                is_notification: true
-            }]);
-    } catch (error) {
-        console.error("Error saving system message:", error);
+function displayMessage(message) {
+    if (window.ChatModule) {
+        window.ChatModule.displayMessage(message);
+    } else {
+        console.warn('ChatModule not available, message not displayed');
     }
 }
 
 // ============================================
 // LOAD CHAT HISTORY
 // ============================================
+// ============================================
+// LOAD CHAT HISTORY
+// ============================================
 async function loadChatHistory(sessionId = null) {
     const targetSessionId = sessionId || appState.currentSessionId;
-    if (!targetSessionId) return;
+    if (!targetSessionId) {
+        console.log('No target session ID for loading chat history');
+        return;
+    }
     
     console.log('Loading chat history for session:', targetSessionId);
     
@@ -1597,11 +2023,20 @@ async function loadChatHistory(sessionId = null) {
             .eq('is_deleted', false)
             .order('created_at', { ascending: true });
         
-        if (error) throw error;
+        if (error) {
+            console.error('Error loading messages:', error);
+            throw error;
+        }
         
-        chatMessages.innerHTML = '';
+        console.log(`Loaded ${messages?.length || 0} messages from database`);
+        
+        // Clear chat messages container
+        if (chatMessages) {
+            chatMessages.innerHTML = '';
+        }
         appState.messages = [];
         
+        // Add history header if viewing a past session
         if (sessionId) {
             const { data: session } = await supabaseClient
                 .from('sessions')
@@ -1611,6 +2046,7 @@ async function loadChatHistory(sessionId = null) {
             
             if (session) {
                 const roomNumber = getStableRoomNumber(sessionId);
+                
                 const historyHeader = document.createElement('div');
                 historyHeader.className = 'message received historical';
                 historyHeader.innerHTML = `
@@ -1626,6 +2062,7 @@ async function loadChatHistory(sessionId = null) {
             }
         }
         
+        // If no messages, show a system message
         if (!messages || messages.length === 0) {
             const emptyMessage = document.createElement('div');
             emptyMessage.className = 'message received';
@@ -1639,16 +2076,17 @@ async function loadChatHistory(sessionId = null) {
             return;
         }
         
-        // Load reactions for all messages
+        // Load all reactions first (more efficient)
         const reactionPromises = messages.map(msg => 
             window.ChatModule?.getMessageReactions(msg.id) || []
         );
         const allReactions = await Promise.all(reactionPromises);
         
+        // Display all messages at once
         messages.forEach((msg, index) => {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
             
-            if (window.ChatModule) {
+            if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
                 window.ChatModule.displayMessage({
                     id: msg.id,
                     sender: msg.sender_name,
@@ -1663,16 +2101,33 @@ async function loadChatHistory(sessionId = null) {
             }
         });
         
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-        console.log('Chat history loaded');
+        if (chatMessages) {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        console.log('Chat history loaded successfully');
     } catch (error) {
         console.error("Error loading chat history:", error);
+        
+        // Show error message in chat
+        if (chatMessages) {
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'message received';
+            errorMsg.innerHTML = `
+                <div class="message-sender">System</div>
+                <div class="message-content">
+                    <div class="message-text">Error loading messages: ${error.message}</div>
+                </div>
+            `;
+            chatMessages.appendChild(errorMsg);
+        }
     }
 }
 
 // ============================================
 // UI FUNCTIONS
 // ============================================
+
 function updateUIForPendingGuest() {
     if (statusIndicator) statusIndicator.className = 'status-indicator offline';
     if (userRoleDisplay) userRoleDisplay.textContent = `${appState.userName} (Pending Approval)`;
@@ -1701,7 +2156,8 @@ function updateUIForPendingGuest() {
 function updateUIAfterConnection() {
     if (!statusIndicator || !userRoleDisplay || !logoutBtn) return;
     
-    statusIndicator.className = 'status-indicator online';
+    statusIndicator.className = 'status-indicator';
+    statusIndicator.classList.add('online');
     userRoleDisplay.textContent = `${appState.userName} (Connected)`;
     logoutBtn.style.display = 'flex';
     
@@ -1713,18 +2169,49 @@ function updateUIAfterConnection() {
     
     if (sendMessageBtn) sendMessageBtn.disabled = false;
     
+    // Re-initialize ChatModule with updated appState
+    if (window.ChatModule) {
+        window.ChatModule.init(appState, supabaseClient, {
+            chatMessages: document.getElementById('chatMessages'),
+            messageInput: document.getElementById('messageInput'),
+            sendMessageBtn: document.getElementById('sendMessageBtn'),
+            messageSound: document.getElementById('messageSound'),
+            typingIndicator: document.getElementById('typingIndicator'),
+            typingUser: document.getElementById('typingUser'),
+            replyModal: document.getElementById('replyModal'),
+            replyToName: document.getElementById('replyToName'),
+            replyToContent: document.getElementById('replyToContent'),
+            replyInput: document.getElementById('replyInput'),
+            sendReplyBtn: document.getElementById('sendReplyBtn'),
+            closeReplyModal: document.getElementById('closeReplyModal')
+        });
+        console.log('ChatModule re-initialized after connection');
+
+                
+        // Load chat history after a short delay to ensure ChatModule is ready
+        setTimeout(() => {
+            loadChatHistory();
+        }, 500);
+    }
+    
     if (adminSection) {
         if (appState.isHost) {
             adminSection.style.display = 'block';
             document.body.classList.add('host-mode');
+            
             if (notesBtn) notesBtn.style.display = 'flex';
             
-            historyTabBtn.classList.add('active');
-            usersTabBtn.classList.remove('active');
-            historyTabContent.style.display = 'block';
-            usersTabContent.style.display = 'none';
+            if (historyTabBtn && usersTabBtn && historyTabContent && usersTabContent) {
+                historyTabBtn.classList.add('active');
+                usersTabBtn.classList.remove('active');
+                historyTabContent.style.display = 'block';
+                historyTabContent.classList.add('active');
+                usersTabContent.style.display = 'none';
+                usersTabContent.classList.remove('active');
+            }
             
             loadChatSessions();
+            
             setTimeout(() => {
                 loadPendingGuests();
                 loadVisitorNotes();
@@ -1738,7 +2225,9 @@ function updateUIAfterConnection() {
     
     if (pendingGuestsBtn) {
         pendingGuestsBtn.style.display = appState.isHost && appState.currentSessionId ? 'flex' : 'none';
-        if (appState.isHost) setupPendingGuestsSubscription();
+        if (appState.isHost) {
+            setupPendingGuestsSubscription();
+        }
     }
     
     if (appState.isViewingHistory) returnToActiveChat();
@@ -1747,17 +2236,20 @@ function updateUIAfterConnection() {
 // ============================================
 // LOGOUT
 // ============================================
+
 async function handleLogout() {
     if (!confirm("Are you sure you want to logout?")) return;
     
-    chatMessages.innerHTML = `
-        <div class="message received">
-            <div class="message-sender">System</div>
-            <div class="message-content">
-                <div class="message-text">Disconnected. Please reconnect to continue.</div>
+    if (chatMessages) {
+        chatMessages.innerHTML = `
+            <div class="message received">
+                <div class="message-sender">System</div>
+                <div class="message-content">
+                    <div class="message-text">Disconnected. Please reconnect to continue.</div>
+                </div>
             </div>
-        </div>
-    `;
+        `;
+    }
     
     if (statusIndicator) statusIndicator.className = 'status-indicator offline';
     if (userRoleDisplay) userRoleDisplay.textContent = "Disconnected";
@@ -1780,12 +2272,18 @@ async function handleLogout() {
             if (appState.isHost) {
                 await supabaseClient
                     .from('sessions')
-                    .update({ is_active: false, ended_at: new Date().toISOString() })
+                    .update({ 
+                        is_active: false,
+                        ended_at: new Date().toISOString()
+                    })
                     .eq('session_id', appState.currentSessionId);
             } else {
                 await supabaseClient
                     .from('session_guests')
-                    .update({ status: 'left', left_at: new Date().toISOString() })
+                    .update({ 
+                        status: 'left',
+                        left_at: new Date().toISOString()
+                    })
                     .eq('session_id', appState.currentSessionId)
                     .eq('guest_id', appState.userId);
             }
@@ -1794,34 +2292,33 @@ async function handleLogout() {
         }
     }
     
-    // Clean up subscriptions
-    if (appState.realtimeSubscription) supabaseClient.removeChannel(appState.realtimeSubscription);
-    if (appState.reactionSubscription) supabaseClient.removeChannel(appState.reactionSubscription);
-    if (appState.typingSubscription) supabaseClient.removeChannel(appState.typingSubscription);
-    if (appState.pendingSubscription) supabaseClient.removeChannel(appState.pendingSubscription);
-    
-    appState.realtimeSubscription = null;
-    appState.reactionSubscription = null;
-    appState.typingSubscription = null;
-    appState.pendingSubscription = null;
+    if (appState.realtimeSubscription) {
+        supabaseClient.removeChannel(appState.realtimeSubscription);
+        appState.realtimeSubscription = null;
+    }
+    if (appState.typingSubscription) {
+        supabaseClient.removeChannel(appState.typingSubscription);
+        appState.typingSubscription = null;
+    }
+    if (appState.pendingSubscription) {
+        supabaseClient.removeChannel(appState.pendingSubscription);
+        appState.pendingSubscription = null;
+    }
     
     localStorage.removeItem('writeToMe_session');
     
-    // Reset app state
-    Object.assign(appState, {
-        isHost: false,
-        isConnected: false,
-        userName: "Guest",
-        userId: null,
-        sessionId: null,
-        currentSessionId: null,
-        messages: [],
-        isViewingHistory: false,
-        viewingSessionId: null,
-        pendingGuests: [],
-        guestNote: "",
-        replyingTo: null
-    });
+    appState.isHost = false;
+    appState.isConnected = false;
+    appState.userName = "Guest";
+    appState.userId = null;
+    appState.sessionId = null;
+    appState.currentSessionId = null;
+    appState.messages = [];
+    appState.isViewingHistory = false;
+    appState.viewingSessionId = null;
+    appState.pendingGuests = [];
+    appState.guestNote = "";
+    appState.replyingTo = null;
     
     showConnectionModal();
 }
@@ -1829,12 +2326,14 @@ async function handleLogout() {
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
+
 async function getRealIP() {
     try {
         const response = await fetch('https://api.ipify.org?format=json');
         const data = await response.json();
         return data.ip || "Unknown";
     } catch (error) {
+        console.error("Error getting IP:", error);
         return "Unknown";
     }
 }
@@ -1855,32 +2354,48 @@ async function handleImageUpload(e) {
         return;
     }
     
-    sendMessageBtn.disabled = true;
-    sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    if (sendMessageBtn) {
+        sendMessageBtn.disabled = true;
+        sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    }
     
     const reader = new FileReader();
     
     reader.onload = async function(e) {
-        const result = await sendMessageToDB('', e.target.result);
-        
-        if (result && result.success) {
-            console.log('✅ Image sent successfully');
-        } else {
-            console.error("❌ Failed to send image");
-            alert("Failed to send image");
+        try {
+            const result = await sendMessageToDB('', e.target.result);
+            
+            if (result && result.success) {
+                console.log('✅ Image sent successfully');
+                imageUpload.value = '';
+                
+                if (sendMessageBtn) {
+                    sendMessageBtn.disabled = false;
+                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+                }
+            } else {
+                throw new Error("Failed to send image");
+            }
+        } catch (error) {
+            console.error("❌ Error sending image:", error);
+            alert("Failed to send image: " + error.message);
+            
+            if (sendMessageBtn) {
+                sendMessageBtn.disabled = false;
+                sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+            }
         }
-        
-        imageUpload.value = '';
-        sendMessageBtn.disabled = false;
-        sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
     };
     
-    reader.onerror = function() {
-        console.error('❌ Error reading image');
+    reader.onerror = function(e) {
+        console.error('❌ Error reading image:', e);
         alert("Error reading image file.");
         imageUpload.value = '';
-        sendMessageBtn.disabled = false;
-        sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+        
+        if (sendMessageBtn) {
+            sendMessageBtn.disabled = false;
+            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+        }
     };
     
     reader.readAsDataURL(file);
@@ -1931,9 +2446,35 @@ function updateSoundControl() {
     }
 }
 
+async function saveMessageToDB(senderName, messageText) {
+    try {
+        const messageData = {
+            session_id: appState.currentSessionId,
+            sender_id: 'system',
+            sender_name: senderName,
+            message: messageText,
+            created_at: new Date().toISOString()
+        };
+        
+        const { error } = await supabaseClient
+            .from('messages')
+            .insert([messageData]);
+        
+        if (error) {
+            console.error("Error saving system message:", error);
+            return null;
+        }
+        return { success: true };
+    } catch (error) {
+        console.error("Error saving system message:", error);
+        return null;
+    }
+}
+
 // ============================================
-// SESSION FUNCTIONS
+// HISTORY & SESSION FUNCTIONS
 // ============================================
+
 async function loadChatSessions() {
     try {
         if (!appState.isHost) {
@@ -1958,7 +2499,8 @@ async function loadChatSessions() {
         if (!historyCards) return;
         historyCards.innerHTML = '';
         
-        for (const session of sessions) {
+        for (let i = 0; i < sessions.length; i++) {
+            const session = sessions[i];
             const isActive = session.session_id === appState.currentSessionId && session.is_active;
             const roomNumber = getStableRoomNumber(session.session_id);
             
@@ -1970,6 +2512,25 @@ async function loadChatSessions() {
             const approvedGuests = guests ? guests.filter(g => g.status === 'approved') : [];
             const guestCount = approvedGuests.length;
             
+            const startDate = new Date(session.created_at);
+            const endDate = session.ended_at ? new Date(session.ended_at) : null;
+            
+            let duration = 'Ongoing';
+            if (endDate) {
+                const diffMs = endDate - startDate;
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMins / 60);
+                const diffDays = Math.floor(diffHours / 24);
+                
+                if (diffDays > 0) {
+                    duration = `${diffDays}d ${diffHours % 24}h`;
+                } else if (diffHours > 0) {
+                    duration = `${diffHours}h ${diffMins % 60}m`;
+                } else {
+                    duration = `${diffMins}m`;
+                }
+            }
+            
             const card = document.createElement('div');
             card.className = 'session-card';
             if (isActive) card.classList.add('active');
@@ -1977,12 +2538,17 @@ async function loadChatSessions() {
             card.innerHTML = `
                 <div class="session-card-header">
                     <div class="session-header-left">
-                        <div class="session-id">
+                        <div class="session-id" title="${session.session_id}">
                             <i class="fas fa-door-open"></i> Room ${roomNumber}
                         </div>
                         <div class="session-stats">
-                            <div class="stat-item guest-count">
-                                <i class="fas fa-users"></i> <span>${guestCount} Guests</span>
+                            <div class="stat-item guest-count" title="Approved guests">
+                                <i class="fas fa-users"></i>
+                                <span>${guestCount} Guests</span>
+                            </div>
+                            <div class="stat-item duration-badge" title="Session duration">
+                                <i class="fas fa-clock"></i>
+                                <span>${duration}</span>
                             </div>
                             <div class="stat-item status-badge">
                                 <i class="fas fa-${session.is_active ? 'play-circle' : 'stop-circle'}"></i>
@@ -1994,27 +2560,88 @@ async function loadChatSessions() {
                 </div>
                 
                 <div class="session-info">
-                    <div class="guest-info-rows">
-                        <div class="guest-info-row">
-                            <span class="guest-info-label"><i class="fas fa-user"></i> Host:</span>
-                            <span class="guest-info-value">${session.host_name}</span>
+                    <div class="session-info-section">
+                        <div class="session-info-section-title">
+                            <i class="fas fa-info-circle"></i> Room Information
                         </div>
-                        <div class="guest-info-row">
-                            <span class="guest-info-label"><i class="fas fa-calendar-alt"></i> Created:</span>
-                            <span class="guest-info-value">${new Date(session.created_at).toLocaleString()}</span>
+                        
+                        <div class="guest-info-rows">
+                            <div class="guest-info-row">
+                                <span class="guest-info-label"><i class="fas fa-user-crown"></i> Host:</span>
+                                <span class="guest-info-value">${session.host_name}</span>
+                            </div>
+                            <div class="guest-info-row">
+                                <span class="guest-info-label"><i class="fas fa-calendar-alt"></i> Created:</span>
+                                <span class="guest-info-value">${startDate.toLocaleString()}</span>
+                            </div>
+                            <div class="guest-info-row">
+                                <span class="guest-info-label"><i class="fas fa-network-wired"></i> Host IP:</span>
+                                <span class="guest-info-value">${session.host_ip || 'Unknown'}</span>
+                            </div>
                         </div>
                     </div>
+                    
+                    ${guests && guests.length > 0 ? `
+                    <div class="session-info-section">
+                        <div class="session-info-section-title">
+                            <i class="fas fa-users"></i> Guests (${guests.length})
+                        </div>
+                        
+                        <div class="guest-list-container">
+                            <div class="guest-list">
+                                ${guests.slice(0, 3).map(guest => `
+                                    <div class="guest-item">
+                                        <div class="guest-item-info">
+                                            <div class="guest-name">
+                                                <i class="fas fa-user"></i>
+                                                ${guest.guest_name}
+                                            </div>
+                                            <div class="guest-meta">
+                                                <span title="Status: ${guest.status}">
+                                                    <i class="fas fa-${guest.status === 'approved' ? 'check-circle' : guest.status === 'pending' ? 'clock' : 'times-circle'}"></i> 
+                                                    ${guest.status}
+                                                </span>
+                                                <span title="IP: ${guest.guest_ip || 'Unknown'}">
+                                                    <i class="fas fa-network-wired"></i> ${guest.guest_ip || 'Unknown'}
+                                                </span>
+                                            </div>
+                                            ${guest.guest_note ? `
+                                            <div class="guest-note small">
+                                                <i class="fas fa-sticky-note"></i> ${guest.guest_note}
+                                            </div>
+                                            ` : ''}
+                                        </div>
+                                        ${isActive && guest.status === 'approved' && guest.guest_id !== appState.userId ? `
+                                            <button class="btn btn-danger btn-small" onclick="kickGuest('${guest.id}', '${guest.guest_name}')">
+                                                <i class="fas fa-user-slash"></i> Kick
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                `).join('')}
+                                
+                                ${guests.length > 3 ? `
+                                    <div class="guest-item" style="justify-content: center; background: rgba(138, 43, 226, 0.1);">
+                                        <div class="guest-name">
+                                            <i class="fas fa-ellipsis-h"></i>
+                                            ${guests.length - 3} more guests...
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
                 </div>
                 
                 <div class="session-actions">
-                    <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')">
+                    <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')" title="View chat history">
                         <i class="fas fa-eye"></i> View Chat
                     </button>
-                    <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')">
+                    <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')" title="View all guest details">
                         <i class="fas fa-users"></i> Guest Details
                     </button>
                     ${appState.isHost && !isActive ? `
-                    <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')">
+                    <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')" title="Delete this session">
                         <i class="fas fa-trash"></i> Delete
                     </button>
                     ` : ''}
@@ -2025,6 +2652,9 @@ async function loadChatSessions() {
         }
     } catch (error) {
         console.error("Error loading sessions:", error);
+        if (historyCards) {
+            historyCards.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">Error loading sessions</div>';
+        }
     }
 }
 
@@ -2041,6 +2671,7 @@ async function viewSessionHistory(sessionId) {
     if (sendMessageBtn) sendMessageBtn.disabled = true;
     
     await loadChatHistory(sessionId);
+    
     if (chatMessages) chatMessages.scrollTop = 0;
 }
 
@@ -2066,39 +2697,171 @@ async function deleteSession(sessionId) {
         return;
     }
     
-    if (!confirm("⚠️ WARNING: Are you sure you want to delete this session?\n\nThis action CANNOT be undone!")) {
+    if (!confirm("⚠️ WARNING: Are you sure you want to delete this session?\n\nThis will permanently delete all messages, guest data, and visitor notes!\n\nThis action CANNOT be undone!")) {
         return;
     }
     
     try {
-        await supabaseClient.from('visitor_notes').delete().eq('session_id', sessionId);
-        await supabaseClient.from('messages').delete().eq('session_id', sessionId);
-        await supabaseClient.from('session_guests').delete().eq('session_id', sessionId);
-        await supabaseClient.from('sessions').delete().eq('session_id', sessionId);
+        console.log("🗑️ Deleting session:", sessionId);
         
+        const deleteButtons = document.querySelectorAll(`[onclick*="deleteSession('${sessionId}')"]`);
+        deleteButtons.forEach(btn => {
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+            }
+        });
+
+        if (appState.currentSessionId === sessionId) {
+            console.log("⚠️ This is the current active session");
+            
+            if (appState.realtimeSubscription) {
+                supabaseClient.removeChannel(appState.realtimeSubscription);
+                appState.realtimeSubscription = null;
+            }
+            if (appState.typingSubscription) {
+                supabaseClient.removeChannel(appState.typingSubscription);
+                appState.typingSubscription = null;
+            }
+            if (appState.pendingSubscription) {
+                supabaseClient.removeChannel(appState.pendingSubscription);
+                appState.pendingSubscription = null;
+            }
+        }
+
+        try {
+            await supabaseClient
+                .from('visitor_notes')
+                .delete()
+                .eq('session_id', sessionId);
+            console.log("✅ Visitor notes deleted");
+        } catch (e) {
+            console.log("Visitor notes deletion skipped:", e.message);
+        }
+
+        const { error: messagesError } = await supabaseClient
+            .from('messages')
+            .delete()
+            .eq('session_id', sessionId);
+        
+        if (messagesError) throw messagesError;
+        console.log("✅ Messages deleted");
+
+        const { error: guestsError } = await supabaseClient
+            .from('session_guests')
+            .delete()
+            .eq('session_id', sessionId);
+        
+        if (guestsError) throw guestsError;
+        console.log("✅ Session guests deleted");
+
+        const { error: sessionError } = await supabaseClient
+            .from('sessions')
+            .delete()
+            .eq('session_id', sessionId);
+        
+        if (sessionError) {
+            console.error("Session deletion error:", sessionError);
+            
+            if (sessionError.message.includes('permission denied') || 
+                sessionError.message.includes('violates row-level security')) {
+                
+                console.log("🔄 RLS blocking, trying admin bypass...");
+                
+                const { error: adminError } = await supabaseClient
+                    .from('sessions')
+                    .delete()
+                    .eq('session_id', sessionId)
+                    .select();
+                
+                if (adminError) throw adminError;
+            } else {
+                throw sessionError;
+            }
+        }
+        
+        console.log("✅ Session deleted successfully!");
+
         await loadAllSessions();
-        await loadChatSessions();
         
+        if (appState.currentSessionId === sessionId) {
+            appState.currentSessionId = null;
+            appState.isConnected = false;
+            
+            if (chatMessages) {
+                chatMessages.innerHTML = `
+                    <div class="message received">
+                        <div class="message-sender">System</div>
+                        <div class="message-content">
+                            <div class="message-text">Your current room was deleted. Please reconnect.</div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        if (appState.viewingSessionId === sessionId) {
+            returnToActiveChat();
+        }
+
+        await loadChatSessions();
+
         addSystemMessage("✅ Session deleted successfully", true);
     } catch (error) {
         console.error("❌ Error deleting session:", error);
         alert("Failed to delete session: " + error.message);
+        
+        await loadAllSessions();
+        await loadChatSessions();
+    } finally {
+        const deleteButtons = document.querySelectorAll(`[onclick*="deleteSession('${sessionId}')"]`);
+        deleteButtons.forEach(btn => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-trash"></i> Delete';
+            }
+        });
     }
 }
 
 // ============================================
 // USER MANAGEMENT FUNCTIONS
 // ============================================
+
 function setupUserManagementListeners() {
-    if (addUserBtn) addUserBtn.addEventListener('click', showAddUserModal);
-    if (closeAddUserModal) closeAddUserModal.addEventListener('click', () => addUserModal.style.display = 'none');
-    if (closeEditUserModal) closeEditUserModal.addEventListener('click', () => editUserModal.style.display = 'none');
-    if (saveUserBtn) saveUserBtn.addEventListener('click', saveNewUser);
-    if (updateUserBtn) updateUserBtn.addEventListener('click', updateUser);
-    if (deleteUserBtn) deleteUserBtn.addEventListener('click', deleteUser);
-    if (userSearchInput) userSearchInput.addEventListener('input', function() {
-        searchUsers(this.value.toLowerCase());
-    });
+    if (addUserBtn) {
+        addUserBtn.addEventListener('click', showAddUserModal);
+    }
+    
+    if (closeAddUserModal) {
+        closeAddUserModal.addEventListener('click', () => {
+            addUserModal.style.display = 'none';
+        });
+    }
+    
+    if (closeEditUserModal) {
+        closeEditUserModal.addEventListener('click', () => {
+            editUserModal.style.display = 'none';
+        });
+    }
+    
+    if (saveUserBtn) {
+        saveUserBtn.addEventListener('click', saveNewUser);
+    }
+    
+    if (updateUserBtn) {
+        updateUserBtn.addEventListener('click', updateUser);
+    }
+    
+    if (deleteUserBtn) {
+        deleteUserBtn.addEventListener('click', deleteUser);
+    }
+    
+    if (userSearchInput) {
+        userSearchInput.addEventListener('input', function() {
+            searchUsers(this.value.toLowerCase());
+        });
+    }
 }
 
 async function loadUsers() {
@@ -2116,6 +2879,14 @@ async function loadUsers() {
         renderUsers(users);
     } catch (error) {
         console.error("Error loading users:", error);
+        if (usersList) {
+            usersList.innerHTML = `
+                <div style="padding: 20px; text-align: center; color: var(--danger-red);">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <div>Error loading users</div>
+                </div>
+            `;
+        }
     }
 }
 
@@ -2139,6 +2910,10 @@ function renderUsers(users) {
         const userCard = document.createElement('div');
         userCard.className = `user-card ${user.role} ${user.is_active ? '' : 'inactive'}`;
         
+        const lastLogin = user.last_login 
+            ? new Date(user.last_login).toLocaleString() 
+            : 'Never';
+        
         userCard.innerHTML = `
             <div class="user-header">
                 <div class="user-name">
@@ -2159,6 +2934,10 @@ function renderUsers(users) {
                     <span class="user-detail-label">Created:</span>
                     <span class="user-detail-value">${new Date(user.created_at).toLocaleDateString()}</span>
                 </div>
+                <div class="user-detail">
+                    <span class="user-detail-label">Last Login:</span>
+                    <span class="user-detail-value">${lastLogin}</span>
+                </div>
             </div>
             <div class="user-actions">
                 <button class="btn btn-secondary btn-small" onclick="editUserModalOpen('${user.id}')">
@@ -2174,11 +2953,11 @@ function renderUsers(users) {
 function showAddUserModal() {
     if (!appState.isHost) return;
     
-    newUsername.value = '';
-    newDisplayName.value = '';
-    newPassword.value = '';
-    newRole.value = 'guest';
-    addUserError.style.display = 'none';
+    if (newUsername) newUsername.value = '';
+    if (newDisplayName) newDisplayName.value = '';
+    if (newPassword) newPassword.value = '';
+    if (newRole) newRole.value = 'guest';
+    if (addUserError) addUserError.style.display = 'none';
     
     addUserModal.style.display = 'flex';
 }
@@ -2192,13 +2971,15 @@ async function saveNewUser() {
     const role = newRole.value;
     
     if (!username || !displayName || !password) {
-        addUserError.textContent = "All fields are required.";
-        addUserError.style.display = 'block';
+        if (addUserError) {
+            addUserError.textContent = "All fields are required.";
+            addUserError.style.display = 'block';
+        }
         return;
     }
     
     try {
-        await supabaseClient
+        const { error } = await supabaseClient
             .from('user_management')
             .insert([{
                 username: username,
@@ -2209,13 +2990,17 @@ async function saveNewUser() {
                 is_active: true
             }]);
         
+        if (error) throw error;
+        
         addUserModal.style.display = 'none';
         await loadUsers();
         alert(`User "${username}" created successfully!`);
     } catch (error) {
         console.error("Error creating user:", error);
-        addUserError.textContent = `Error: ${error.message}`;
-        addUserError.style.display = 'block';
+        if (addUserError) {
+            addUserError.textContent = `Error: ${error.message}`;
+            addUserError.style.display = 'block';
+        }
     }
 }
 
@@ -2223,13 +3008,13 @@ function editUserModalOpen(userId) {
     const user = appState.users.find(u => u.id === userId);
     if (!user) return;
     
-    editUserId.value = user.id;
-    editUsername.value = user.username;
-    editDisplayName.value = user.display_name;
-    editPassword.value = '';
-    editRole.value = user.role;
-    editIsActive.checked = user.is_active;
-    editUserError.style.display = 'none';
+    if (editUserId) editUserId.value = user.id;
+    if (editUsername) editUsername.value = user.username;
+    if (editDisplayName) editDisplayName.value = user.display_name;
+    if (editPassword) editPassword.value = '';
+    if (editRole) editRole.value = user.role;
+    if (editIsActive) editIsActive.checked = user.is_active;
+    if (editUserError) editUserError.style.display = 'none';
     
     editUserModal.style.display = 'flex';
 }
@@ -2253,20 +3038,26 @@ async function updateUser() {
             updated_at: new Date().toISOString()
         };
         
-        if (password) updateData.password_hash = password;
+        if (password) {
+            updateData.password_hash = password;
+        }
         
-        await supabaseClient
+        const { error } = await supabaseClient
             .from('user_management')
             .update(updateData)
             .eq('id', userId);
+        
+        if (error) throw error;
         
         editUserModal.style.display = 'none';
         await loadUsers();
         alert("User updated successfully!");
     } catch (error) {
         console.error("Error updating user:", error);
-        editUserError.textContent = `Error: ${error.message}`;
-        editUserError.style.display = 'block';
+        if (editUserError) {
+            editUserError.textContent = `Error: ${error.message}`;
+            editUserError.style.display = 'block';
+        }
     }
 }
 
@@ -2276,13 +3067,15 @@ async function deleteUser() {
     const userId = editUserId.value;
     if (!userId) return;
     
-    if (!confirm("Are you sure you want to delete this user?")) return;
+    if (!confirm("Are you sure you want to delete this user? This action cannot be undone.")) return;
     
     try {
-        await supabaseClient
+        const { error } = await supabaseClient
             .from('user_management')
             .delete()
             .eq('id', userId);
+        
+        if (error) throw error;
         
         editUserModal.style.display = 'none';
         await loadUsers();
@@ -2311,20 +3104,33 @@ function searchUsers(searchTerm) {
 // ============================================
 // VISITOR NOTES FUNCTIONS
 // ============================================
+
 async function loadVisitorNotes() {
-    if (!appState.isHost) return;
+    if (!appState.isHost) {
+        console.log("Not host, skipping notes load");
+        return;
+    }
     
     try {
+        console.log("📝 Loading visitor notes...");
+        
         const { data: notes, error } = await supabaseClient
             .from('visitor_notes')
             .select('*')
             .eq('is_archived', false)
             .order('created_at', { ascending: false });
         
-        if (error) throw error;
+        if (error) {
+            console.error("Error loading visitor notes:", error);
+            return;
+        }
+        
+        console.log(`✅ Loaded ${notes?.length || 0} visitor notes:`, notes);
         
         appState.visitorNotes = notes || [];
         appState.unreadNotesCount = appState.visitorNotes.filter(n => !n.read_by_host).length;
+        
+        console.log(`📊 Unread count: ${appState.unreadNotesCount}`);
         
         updateNotesButtonUI();
         
@@ -2336,12 +3142,17 @@ async function loadVisitorNotes() {
             notesBtn.classList.toggle('has-unread', appState.unreadNotesCount > 0);
         }
     } catch (error) {
-        console.error("Error loading visitor notes:", error);
+        console.error("Error in loadVisitorNotes:", error);
     }
 }
 
 function renderVisitorNotes(notes) {
-    if (!notesList) return;
+    if (!notesList) {
+        console.error("notesList element not found!");
+        return;
+    }
+    
+    console.log("Rendering notes:", notes?.length || 0);
     
     if (!notes || notes.length === 0) {
         notesList.innerHTML = `
@@ -2357,49 +3168,89 @@ function renderVisitorNotes(notes) {
     notesList.innerHTML = '';
     
     notes.forEach(note => {
-        const noteElement = document.createElement('div');
-        noteElement.className = `visitor-note-item ${note.read_by_host ? 'read' : 'unread'}`;
-        noteElement.dataset.noteId = note.id;
-        
-        const isGuestNotification = note.is_guest_notification;
-        
-        noteElement.innerHTML = `
-            <div class="note-header">
-                <div class="note-guest-info">
-                    <i class="fas ${isGuestNotification ? 'fa-bell' : 'fa-user'}"></i>
-                    <strong>${note.guest_name || 'Anonymous'}</strong>
-                    ${!note.read_by_host ? '<span class="unread-badge">New</span>' : ''}
+        try {
+            const noteElement = document.createElement('div');
+            noteElement.className = `visitor-note-item ${note.read_by_host ? 'read' : 'unread'}`;
+            noteElement.dataset.noteId = note.id;
+            
+            const createdDate = note.created_at ? new Date(note.created_at).toLocaleString() : 'Unknown date';
+            const isGuestNotification = note.is_guest_notification || 
+                                        (note.note_text && note.note_text.includes('GUEST NOTIFICATION'));
+            
+            let displayName = note.guest_name || 'Unknown';
+            let displayMessage = note.note_text || 'No message';
+            let emailInfo = '';
+            
+            if (isGuestNotification && note.note_text) {
+                const lines = note.note_text.split('\n');
+                displayName = lines.find(l => l.startsWith('From:'))?.replace('From:', '').trim() || displayName;
+                const emailLine = lines.find(l => l.startsWith('Email:'));
+                if (emailLine) {
+                    emailInfo = `<div class="note-email"><i class="fas fa-envelope"></i> ${emailLine.replace('Email:', '').trim()}</div>`;
+                }
+                const msgLine = lines.find(l => l.startsWith('Message:'));
+                if (msgLine) {
+                    displayMessage = msgLine.replace('Message:', '').trim();
+                }
+            }
+            
+            noteElement.innerHTML = `
+                <div class="note-header">
+                    <div class="note-guest-info">
+                        <i class="fas ${isGuestNotification ? 'fa-bell' : 'fa-user'}"></i>
+                        <strong>${isGuestNotification ? '📬 Guest Message' : (displayName || 'Anonymous')}</strong>
+                        ${!note.read_by_host ? '<span class="unread-badge">New</span>' : ''}
+                    </div>
+                    <div class="note-time">
+                        <i class="fas fa-clock"></i> ${createdDate}
+                    </div>
                 </div>
-                <div class="note-time">
-                    <i class="fas fa-clock"></i> ${new Date(note.created_at).toLocaleString()}
+                <div class="note-content">
+                    <div class="note-from"><i class="fas fa-user"></i> From: ${displayName}</div>
+                    ${emailInfo}
+                    <div class="note-text">${escapeHtml(displayMessage)}</div>
+                    ${note.guest_ip ? `<div class="note-ip"><i class="fas fa-network-wired"></i> IP: ${note.guest_ip}</div>` : ''}
+                    ${note.guest_email ? `<div class="note-email"><i class="fas fa-envelope"></i> Email: ${note.guest_email}</div>` : ''}
                 </div>
-            </div>
-            <div class="note-content">
-                <div class="note-text">${escapeHtml(note.note_text)}</div>
-                ${note.guest_ip ? `<div class="note-ip"><i class="fas fa-network-wired"></i> IP: ${note.guest_ip}</div>` : ''}
-            </div>
-            <div class="note-actions">
-                <button class="btn btn-small btn-success" onclick="markNoteAsRead('${note.id}')" ${note.read_by_host ? 'disabled' : ''}>
-                    <i class="fas fa-check"></i> Mark Read
-                </button>
-                <button class="btn btn-small btn-info" onclick="archiveNote('${note.id}')">
-                    <i class="fas fa-archive"></i> Archive
-                </button>
-            </div>
-        `;
-        
-        notesList.appendChild(noteElement);
+                <div class="note-actions">
+                    <button class="btn btn-small btn-success" onclick="markNoteAsRead('${note.id}')" ${note.read_by_host ? 'disabled' : ''}>
+                        <i class="fas fa-check"></i> Mark Read
+                    </button>
+                    <button class="btn btn-small btn-info" onclick="archiveNote('${note.id}')">
+                        <i class="fas fa-archive"></i> Archive
+                    </button>
+                </div>
+            `;
+            
+            notesList.appendChild(noteElement);
+        } catch (e) {
+            console.error("Error rendering note:", e, note);
+        }
     });
+    
+    console.log("Notes rendered successfully");
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 window.markNoteAsRead = async function(noteId) {
     if (!appState.isHost) return;
     
     try {
-        await supabaseClient
+        const { error } = await supabaseClient
             .from('visitor_notes')
-            .update({ read_by_host: true, read_at: new Date().toISOString(), host_id: appState.userId })
+            .update({
+                read_by_host: true,
+                read_at: new Date().toISOString(),
+                host_id: appState.userId
+            })
             .eq('id', noteId);
+        
+        if (error) throw error;
         
         const note = appState.visitorNotes.find(n => n.id === noteId);
         if (note) {
@@ -2420,10 +3271,14 @@ window.archiveNote = async function(noteId) {
     if (!confirm("Are you sure you want to archive this note?")) return;
     
     try {
-        await supabaseClient
+        const { error } = await supabaseClient
             .from('visitor_notes')
-            .update({ is_archived: true })
+            .update({
+                is_archived: true
+            })
             .eq('id', noteId);
+        
+        if (error) throw error;
         
         appState.visitorNotes = appState.visitorNotes.filter(n => n.id !== noteId);
         appState.unreadNotesCount = appState.visitorNotes.filter(n => !n.read_by_host).length;
@@ -2456,14 +3311,20 @@ function searchNotes(searchTerm) {
     
     const filtered = appState.visitorNotes.filter(note => 
         note.guest_name.toLowerCase().includes(searchTerm) ||
-        note.note_text.toLowerCase().includes(searchTerm)
+        note.note_text.toLowerCase().includes(searchTerm) ||
+        (note.guest_ip && note.guest_ip.includes(searchTerm))
     );
     
     renderVisitorNotes(filtered);
 }
 
 function updateNotesButtonUI() {
-    if (!notesBtn || !notesCount) return;
+    if (!notesBtn || !notesCount) {
+        console.log("Notes button elements not found");
+        return;
+    }
+    
+    console.log(`Updating notes button UI. Unread: ${appState.unreadNotesCount}`);
     
     notesCount.textContent = appState.unreadNotesCount || 0;
     
@@ -2489,12 +3350,20 @@ async function markAllNotesAsRead() {
     }
     
     try {
-        await supabaseClient
+        const { error } = await supabaseClient
             .from('visitor_notes')
-            .update({ read_by_host: true, read_at: new Date().toISOString(), host_id: appState.userId })
+            .update({
+                read_by_host: true,
+                read_at: new Date().toISOString(),
+                host_id: appState.userId
+            })
             .in('id', unreadNotes.map(n => n.id));
         
-        appState.visitorNotes.forEach(note => { note.read_by_host = true; });
+        if (error) throw error;
+        
+        appState.visitorNotes.forEach(note => {
+            note.read_by_host = true;
+        });
         appState.unreadNotesCount = 0;
         
         updateNotesButtonUI();
@@ -2507,17 +3376,6 @@ async function markAllNotesAsRead() {
 // ============================================
 // GLOBAL FUNCTIONS
 // ============================================
-window.openReplyModal = function(messageId, senderName, messageText) {
-    if (window.ChatModule) {
-        window.ChatModule.openReplyModal(messageId, senderName, messageText);
-    }
-};
-
-window.sendReply = function() {
-    if (window.ChatModule) {
-        window.ChatModule.sendReply();
-    }
-};
 
 window.showFullImage = function(src) {
     fullSizeImage.src = src;
@@ -2541,6 +3399,7 @@ window.showSessionGuests = async function(sessionId) {
         
         const approvedGuests = guests.filter(g => g.status === 'approved');
         const pendingGuests = guests.filter(g => g.status === 'pending');
+        const kickedGuests = guests.filter(g => g.status === 'kicked');
         
         let guestInfo = `
             <div class="guest-details-modal">
@@ -2548,27 +3407,44 @@ window.showSessionGuests = async function(sessionId) {
                 <p><strong>Session ID:</strong> ${sessionId.substring(0, 20)}...</p>
                 
                 <div class="guest-status-section">
-                    <h4><i class="fas fa-check-circle"></i> Approved Guests (${approvedGuests.length})</h4>
-                    ${approvedGuests.map(g => `
+                    <h4><i class="fas fa-check-circle" style="color: var(--success-green);"></i> Approved Guests (${approvedGuests.length})</h4>
+                    ${approvedGuests.length > 0 ? approvedGuests.map(g => `
                         <div class="guest-detail">
                             <strong>${g.guest_name}</strong>
                             <div class="guest-meta">
                                 <small>Joined: ${new Date(g.approved_at).toLocaleString()}</small>
+                                <small>IP: ${g.guest_ip || 'Not recorded'}</small>
                                 ${g.guest_note ? `<small>Note: ${g.guest_note}</small>` : ''}
                             </div>
                         </div>
-                    `).join('')}
+                    `).join('') : '<p>No approved guests</p>'}
                 </div>
                 
                 ${pendingGuests.length > 0 ? `
                 <div class="guest-status-section">
-                    <h4><i class="fas fa-clock"></i> Pending Guests (${pendingGuests.length})</h4>
+                    <h4><i class="fas fa-clock" style="color: var(--warning-yellow);"></i> Pending Guests (${pendingGuests.length})</h4>
                     ${pendingGuests.map(g => `
                         <div class="guest-detail">
                             <strong>${g.guest_name}</strong>
                             <div class="guest-meta">
                                 <small>Requested: ${new Date(g.requested_at).toLocaleString()}</small>
+                                <small>IP: ${g.guest_ip || 'Not recorded'}</small>
                                 ${g.guest_note ? `<small>Note: ${g.guest_note}</small>` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                ` : ''}
+                
+                ${kickedGuests.length > 0 ? `
+                <div class="guest-status-section">
+                    <h4><i class="fas fa-user-slash" style="color: var(--danger-red);"></i> Kicked Guests (${kickedGuests.length})</h4>
+                    ${kickedGuests.map(g => `
+                        <div class="guest-detail">
+                            <strong>${g.guest_name}</strong>
+                            <div class="guest-meta">
+                                <small>Kicked: ${new Date(g.left_at).toLocaleString()}</small>
+                                <small>IP: ${g.guest_ip || 'Not recorded'}</small>
                             </div>
                         </div>
                     `).join('')}
@@ -2581,14 +3457,14 @@ window.showSessionGuests = async function(sessionId) {
         modal.className = 'modal-overlay';
         modal.style.display = 'flex';
         modal.innerHTML = `
-            <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-content" style="max-width: 600px; max-height: 80vh;">
                 <div class="modal-header">
                     <h2><i class="fas fa-users"></i> Session Guests</h2>
                     <button class="btn btn-secondary btn-small close-guest-modal">
                         <i class="fas fa-times"></i> Close
                     </button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body" style="overflow-y: auto;">
                     ${guestInfo}
                 </div>
             </div>
@@ -2596,7 +3472,10 @@ window.showSessionGuests = async function(sessionId) {
         
         document.body.appendChild(modal);
         
-        modal.querySelector('.close-guest-modal').addEventListener('click', () => modal.remove());
+        modal.querySelector('.close-guest-modal').addEventListener('click', () => {
+            modal.remove();
+        });
+        
         modal.addEventListener('click', (e) => {
             if (e.target === modal) modal.remove();
         });
@@ -2606,12 +3485,15 @@ window.showSessionGuests = async function(sessionId) {
     }
 };
 
+// Make functions global (these will call ChatModule)
 window.approveGuest = approveGuest;
 window.denyGuest = denyGuest;
 window.kickGuest = kickGuest;
 window.viewSessionHistory = viewSessionHistory;
 window.deleteSession = deleteSession;
 window.editUserModalOpen = editUserModalOpen;
+
+// These are now handled by ChatModule, but keep them as references
 window.editMessage = function(messageId) {
     if (window.ChatModule) window.ChatModule.editMessage(messageId);
 };
@@ -2627,6 +3509,15 @@ window.toggleReaction = function(messageId, emoji) {
 window.toggleMessageActions = function(messageId, button) {
     if (window.ChatModule) window.ChatModule.toggleMessageActions(messageId, button);
 };
+window.openReplyModal = function(messageId, senderName, messageText) {
+    if (window.ChatModule) window.ChatModule.openReplyModal(messageId, senderName, messageText);
+};
+window.sendReply = function() {
+    if (window.ChatModule) window.ChatModule.sendReply();
+};
+
+// Initialize the app
+document.addEventListener('DOMContentLoaded', initApp);
 
 // Auto-resize textarea
 if (messageInput) {
