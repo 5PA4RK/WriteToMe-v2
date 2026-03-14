@@ -1944,7 +1944,7 @@ async function sendMessage() {
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
-        console.log('Replying to:', appState.replyingTo);
+        console.log('Current replyingTo:', appState.replyingTo);
         
         const messageData = {
             session_id: appState.currentSessionId,
@@ -1952,8 +1952,10 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to: appState.replyingTo || null
+            reply_to: appState.replyingTo || null  // Make sure this is included
         };
+        
+        console.log('Message data with reply_to:', messageData);
         
         if (imageUrl) {
             messageData.image_url = imageUrl;
@@ -1971,10 +1973,10 @@ async function sendMessageToDB(text, imageUrl) {
         }
         
         console.log('✅ Message saved to DB:', data.id);
+        console.log('Saved reply_to value:', data.reply_to);
         
-        // Clear replyingTo after sending
-        const repliedToId = appState.replyingTo;
-        appState.replyingTo = null;
+        // Get reactions for this message (empty initially)
+        const reactions = [];
         
         displayMessage({
             id: data.id,
@@ -1984,11 +1986,15 @@ async function sendMessageToDB(text, imageUrl) {
             time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             type: 'sent',
             is_historical: false,
-            reactions: [],
-            reply_to: repliedToId
+            reactions: reactions,
+            reply_to: appState.replyingTo  // Pass this to display
         });
         
-        return { success: true, data };
+        // Clear the replyingTo after successful send
+        const repliedToId = appState.replyingTo;
+        appState.replyingTo = null;
+        
+        return { success: true, data, repliedToId };
     } catch (error) {
         console.error("❌ Error in sendMessageToDB:", error);
         alert("Failed to send message: " + error.message);
