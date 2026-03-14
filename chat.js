@@ -79,6 +79,7 @@ const ChatModule = (function() {
     }
 
 // Get message by ID
+// Get message by ID
 async function getMessageById(messageId) {
     if (!supabaseClient) {
         console.error('Supabase client not initialized');
@@ -93,10 +94,13 @@ async function getMessageById(messageId) {
     try {
         console.log('Fetching message by ID:', messageId);
         
+        // Convert to number if it's a string number
+        const id = typeof messageId === 'string' && !isNaN(messageId) ? parseInt(messageId) : messageId;
+        
         const { data, error } = await supabaseClient
             .from('messages')
             .select('*')
-            .eq('id', messageId)
+            .eq('id', id)
             .single();
         
         if (error) {
@@ -112,6 +116,7 @@ async function getMessageById(messageId) {
     }
 }
 
+// Display a message in the chat
 // Display a message in the chat
 async function displayMessage(message) {
     if (!chatMessages) {
@@ -138,41 +143,18 @@ async function displayMessage(message) {
     let messageContent = '';
     let quotedMessageHtml = '';
     
-    // Check for reply_to_id (not reply_to)
+    // Check for reply_to_id (prioritize this)
     const replyToId = message.reply_to_id || message.reply_to;
-    console.log('Message reply info:', { reply_to_id: message.reply_to_id, reply_to: message.reply_to, final: replyToId });
+    console.log('Displaying message with reply_to_id:', replyToId, 'Full message:', message);
     
-    // If this is a reply, fetch and display the quoted message
+    // If this is a reply, create a placeholder and then fetch the original
     if (replyToId) {
-        try {
-            const originalMsg = await getMessageById(replyToId);
-            if (originalMsg) {
-                const originalText = originalMsg.message || 'Image message';
-                const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
-                
-                quotedMessageHtml = `
-                    <div class="quoted-message">
-                        <div class="quoted-sender">
-                            <i class="fas fa-reply"></i> ${escapeHtml(originalMsg.sender_name)}:
-                        </div>
-                        <div class="quoted-text">${escapeHtml(previewText)}</div>
-                    </div>
-                `;
-            } else {
-                quotedMessageHtml = `
-                    <div class="quoted-message error">
-                        <i class="fas fa-exclamation-circle"></i> Original message not found
-                    </div>
-                `;
-            }
-        } catch (error) {
-            console.error('Error loading quoted message:', error);
-            quotedMessageHtml = `
-                <div class="quoted-message error">
-                    <i class="fas fa-exclamation-circle"></i> Error loading original message
-                </div>
-            `;
-        }
+        // Add a placeholder that will be updated
+        quotedMessageHtml = `
+            <div class="quoted-message loading" id="quote-${message.id}">
+                <i class="fas fa-spinner fa-spin"></i> Loading original message...
+            </div>
+        `;
     }
     
     // Add the quoted message HTML before the main message content
@@ -229,6 +211,42 @@ async function displayMessage(message) {
     `;
     
     chatMessages.appendChild(messageDiv);
+    
+    // If this is a reply, fetch and update the quoted message
+    if (replyToId) {
+        try {
+            console.log('Fetching original message for reply:', replyToId);
+            const originalMsg = await getMessageById(replyToId);
+            const quoteElement = document.getElementById(`quote-${message.id}`);
+            
+            if (quoteElement && originalMsg) {
+                const originalText = originalMsg.message || 'Image message';
+                const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
+                
+                quoteElement.className = 'quoted-message';
+                quoteElement.innerHTML = `
+                    <div class="quoted-sender">
+                        <i class="fas fa-reply"></i> ${escapeHtml(originalMsg.sender_name)}:
+                    </div>
+                    <div class="quoted-text">${escapeHtml(previewText)}</div>
+                `;
+            } else if (quoteElement) {
+                quoteElement.className = 'quoted-message error';
+                quoteElement.innerHTML = `
+                    <i class="fas fa-exclamation-circle"></i> Original message not found (ID: ${replyToId})
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading quoted message:', error);
+            const quoteElement = document.getElementById(`quote-${message.id}`);
+            if (quoteElement) {
+                quoteElement.className = 'quoted-message error';
+                quoteElement.innerHTML = `
+                    <i class="fas fa-exclamation-circle"></i> Error loading original message
+                `;
+            }
+        }
+    }
     
     // Render existing reactions
     const reactionsContainer = messageDiv.querySelector('.message-reactions');
