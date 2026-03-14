@@ -2091,17 +2091,18 @@ async function loadChatHistory(sessionId = null) {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
             
             if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-                window.ChatModule.displayMessage({
-                    id: msg.id,
-                    sender: msg.sender_name,
-                    text: msg.message,
-                    image: msg.image_url,
-                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    type: messageType,
-                    is_historical: !!sessionId,
-                    reactions: allReactions[index] || [],
-                    reply_to: msg.reply_to
-                });
+// Inside loadChatHistory function, where you call displayMessage:
+window.ChatModule.displayMessage({
+    id: msg.id,
+    sender: msg.sender_name,
+    text: msg.message,
+    image: msg.image_url,
+    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+    type: messageType,
+    is_historical: !!sessionId,
+    reactions: allReactions[index] || [],
+    reply_to: msg.reply_to  // Make sure this is included
+});
             }
         });
         
