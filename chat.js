@@ -78,28 +78,42 @@ const ChatModule = (function() {
         });
     }
 
-    // Get message by ID
 // Get message by ID
 async function getMessageById(messageId) {
-    if (!supabaseClient) return null;
+    if (!supabaseClient) {
+        console.error('Supabase client not initialized');
+        return null;
+    }
+    
+    if (!messageId) {
+        console.error('No message ID provided');
+        return null;
+    }
     
     try {
-        // The ID might be a number or string, but in your DB it's bigint
+        console.log('Fetching message by ID:', messageId);
+        
         const { data, error } = await supabaseClient
             .from('messages')
             .select('*')
             .eq('id', messageId)
             .single();
         
-        if (error) throw error;
+        if (error) {
+            console.error('Error fetching message:', error);
+            return null;
+        }
+        
+        console.log('Found original message:', data);
         return data;
     } catch (error) {
-        console.error("Error fetching message:", error);
+        console.error("Error in getMessageById:", error);
         return null;
     }
 }
 
     // Display a message in the chat
+// Display a message in the chat
 // Display a message in the chat
 // Display a message in the chat
 async function displayMessage(message) {
@@ -125,11 +139,37 @@ async function displayMessage(message) {
     messageDiv.id = `msg-${message.id}`;
     
     let messageContent = '';
+    let quotedMessageHtml = '';
     
-    // Add reply reference if this is a reply - LOOK FOR reply_to_id
+    // If this is a reply (has reply_to_id), fetch and display the quoted message
     if (message.reply_to_id) {
-        messageContent += `<div class="message-reply-ref" id="reply-ref-${message.id}"><i class="fas fa-reply"></i> <span class="reply-loading">Loading reply...</span></div>`;
+        try {
+            const originalMsg = await getMessageById(message.reply_to_id);
+            if (originalMsg) {
+                const originalText = originalMsg.message || 'Image message';
+                const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
+                
+                quotedMessageHtml = `
+                    <div class="quoted-message">
+                        <div class="quoted-sender">
+                            <i class="fas fa-reply"></i> ${escapeHtml(originalMsg.sender_name)}:
+                        </div>
+                        <div class="quoted-text">${escapeHtml(previewText)}</div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading quoted message:', error);
+            quotedMessageHtml = `
+                <div class="quoted-message error">
+                    <i class="fas fa-exclamation-circle"></i> Original message not found
+                </div>
+            `;
+        }
     }
+    
+    // Add the quoted message HTML before the main message content
+    messageContent += quotedMessageHtml;
     
     if (message.text) {
         messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
@@ -182,31 +222,6 @@ async function displayMessage(message) {
     `;
     
     chatMessages.appendChild(messageDiv);
-    
-    // If this is a reply, fetch and display the original message reference
-    if (message.reply_to_id) {
-        try {
-            const originalMsg = await getMessageById(message.reply_to_id);
-            const replyRef = document.getElementById(`reply-ref-${message.id}`);
-            if (replyRef && originalMsg) {
-                const originalText = originalMsg.message || 'Image message';
-                const previewText = originalText.length > 50 ? originalText.substring(0, 50) + '...' : originalText;
-                replyRef.innerHTML = `
-                    <i class="fas fa-reply"></i> 
-                    Replying to <strong>${escapeHtml(originalMsg.sender_name)}</strong>: 
-                    <span class="reply-preview">${escapeHtml(previewText)}</span>
-                `;
-            } else if (replyRef) {
-                replyRef.innerHTML = `<i class="fas fa-reply"></i> Replying to a message (original not found)`;
-            }
-        } catch (error) {
-            console.error('Error loading reply reference:', error);
-            const replyRef = document.getElementById(`reply-ref-${message.id}`);
-            if (replyRef) {
-                replyRef.innerHTML = `<i class="fas fa-reply"></i> Replying to a message`;
-            }
-        }
-    }
     
     // Render existing reactions
     const reactionsContainer = messageDiv.querySelector('.message-reactions');
