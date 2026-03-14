@@ -1049,3 +1049,47 @@ header {
     margin-left: 5px;
     font-style: italic;
 }
+/* Quoted message styling */
+.quoted-message {
+    background-color: rgba(0, 0, 0, 0.05);
+    border-left: 3px solid var(--primary);
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+}
+
+.message.sent .quoted-message {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-left-color: rgba(255, 255, 255, 0.5);
+}
+
+.quoted-sender {
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--text-secondary);
+}
+
+.message.sent .quoted-sender {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.quoted-sender i {
+    margin-right: 4px;
+    font-size: 0.8rem;
+}
+
+.quoted-text {
+    font-style: italic;
+    word-break: break-word;
+    color: var(--text-secondary);
+}
+
+.message.sent .quoted-text {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.quoted-message.error {
+    border-left-color: var(--danger);
+    color: var(--danger);
+}
