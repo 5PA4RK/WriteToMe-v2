@@ -112,9 +112,6 @@ async function getMessageById(messageId) {
     }
 }
 
-    // Display a message in the chat
-// Display a message in the chat
-// Display a message in the chat
 // Display a message in the chat
 async function displayMessage(message) {
     if (!chatMessages) {
@@ -141,10 +138,14 @@ async function displayMessage(message) {
     let messageContent = '';
     let quotedMessageHtml = '';
     
-    // If this is a reply (has reply_to_id), fetch and display the quoted message
-    if (message.reply_to_id) {
+    // Check for reply_to_id (not reply_to)
+    const replyToId = message.reply_to_id || message.reply_to;
+    console.log('Message reply info:', { reply_to_id: message.reply_to_id, reply_to: message.reply_to, final: replyToId });
+    
+    // If this is a reply, fetch and display the quoted message
+    if (replyToId) {
         try {
-            const originalMsg = await getMessageById(message.reply_to_id);
+            const originalMsg = await getMessageById(replyToId);
             if (originalMsg) {
                 const originalText = originalMsg.message || 'Image message';
                 const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
@@ -157,12 +158,18 @@ async function displayMessage(message) {
                         <div class="quoted-text">${escapeHtml(previewText)}</div>
                     </div>
                 `;
+            } else {
+                quotedMessageHtml = `
+                    <div class="quoted-message error">
+                        <i class="fas fa-exclamation-circle"></i> Original message not found
+                    </div>
+                `;
             }
         } catch (error) {
             console.error('Error loading quoted message:', error);
             quotedMessageHtml = `
                 <div class="quoted-message error">
-                    <i class="fas fa-exclamation-circle"></i> Original message not found
+                    <i class="fas fa-exclamation-circle"></i> Error loading original message
                 </div>
             `;
         }
@@ -661,6 +668,7 @@ async function sendReply() {
         addReaction,
         toggleReaction,
         getMessageReactions,
+        getMessageById,  // Add this line
         getMessageById,
         openReplyModal,
         sendReply,
