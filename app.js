@@ -1982,10 +1982,10 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to: appState.replyingTo || null  // Add this line
+            reply_to_id: appState.replyingTo || null  // Use reply_to_id instead of reply_to
         };
         
-        console.log('Message data with reply_to:', messageData);
+        console.log('Message data with reply_to_id:', messageData);
         
         if (imageUrl) {
             messageData.image_url = imageUrl;
@@ -2003,34 +2003,22 @@ async function sendMessageToDB(text, imageUrl) {
         }
         
         console.log('✅ Message saved to DB:', data.id);
-        console.log('Saved reply_to value:', data.reply_to);
+        console.log('Saved reply_to_id value:', data.reply_to_id);
         
         // Get reactions for this message (empty initially)
         const reactions = [];
         
-        // Use ChatModule to display message if available
         if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
             window.ChatModule.displayMessage({
-                id: data.id,
-                sender: appState.userName,
-                text: text,
-                image: imageUrl,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_historical: false,
-                reactions: reactions,
-                reply_to: appState.replyingTo
-            });
-        } else {
-            // Fallback to old display method
-            displayMessage({
-                id: data.id,
-                sender: appState.userName,
-                text: text,
-                image: imageUrl,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_historical: false
+                id: msg.id,
+                sender: msg.sender_name,
+                text: msg.message,
+                image: msg.image_url,
+                time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: messageType,
+                is_historical: !!sessionId,
+                reactions: allReactions[index] || [],
+                reply_to_id: msg.reply_to_id  // Use reply_to_id instead of reply_to
             });
         }
         
