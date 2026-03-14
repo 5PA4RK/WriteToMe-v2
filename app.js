@@ -148,6 +148,7 @@ window.getMessageReactions = async function(messageId) {
     return [];
 };
 
+// Make sendMessage globally available
 window.sendMessage = sendMessage;
 
 // Initialize ChatModule
@@ -1595,6 +1596,7 @@ async function sendMessage() {
 
 // UPDATED: sendMessageToDB with proper reply handling
 // Update the sendMessageToDB function in app.js
+// In app.js, update sendMessageToDB function
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
@@ -1608,10 +1610,10 @@ async function sendMessageToDB(text, imageUrl) {
             created_at: new Date().toISOString()
         };
         
-        // IMPORTANT: Add reply_to field if we're replying
+        // Add reply_to if replying
         if (appState.replyingTo) {
             messageData.reply_to = appState.replyingTo;
-            console.log('✅ Setting reply_to to:', appState.replyingTo);
+            console.log('✅ Added reply_to:', appState.replyingTo);
         }
         
         if (imageUrl) {
@@ -1638,20 +1640,23 @@ async function sendMessageToDB(text, imageUrl) {
         // Clear replyingTo after sending
         appState.replyingTo = null;
         
-        // Display the message
-        displayMessage({
-            id: data.id,
-            sender: appState.userName,
-            text: text,
-            image: imageUrl,
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-            type: 'sent',
-            is_historical: false,
-            reactions: [],
-            reply_to: repliedToId
-        });
+        // Display message with reply info
+        if (window.ChatModule) {
+            window.ChatModule.displayMessage({
+                id: data.id,
+                sender: appState.userName,
+                text: text,
+                image: imageUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false,
+                reactions: [],
+                reply_to: repliedToId
+            });
+        }
         
         return { success: true, data };
+        
     } catch (error) {
         console.error("❌ Error in sendMessageToDB:", error);
         alert("Failed to send message: " + error.message);
@@ -2646,6 +2651,19 @@ async function markAllNotesAsRead() {
 }
 
 // Global functions
+// Make sure these are at the bottom of app.js
+window.openReplyModal = function(messageId, senderName, messageText) {
+    if (window.ChatModule) {
+        window.ChatModule.openReplyModal(messageId, senderName, messageText);
+    }
+};
+
+window.sendReply = function() {
+    if (window.ChatModule) {
+        window.ChatModule.sendReply();
+    }
+};
+
 window.showFullImage = function(src) {
     fullSizeImage.src = src;
     imageModal.style.display = 'flex';
@@ -2767,8 +2785,29 @@ function closeMessageActions() {
 }
 
 // Initialize the app
-document.addEventListener('DOMContentLoaded', initApp);
-
+// In app.js, update the ChatModule initialization
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        if (window.ChatModule) {
+            window.ChatModule.init(appState, supabaseClient, {
+                chatMessages: document.getElementById('chatMessages'),
+                messageInput: document.getElementById('messageInput'),
+                sendMessageBtn: document.getElementById('sendMessageBtn'),
+                messageSound: document.getElementById('messageSound'),
+                typingIndicator: document.getElementById('typingIndicator'),
+                typingUser: document.getElementById('typingUser'),
+                // Add reply modal elements
+                replyModal: document.getElementById('replyModal'),
+                replyToName: document.getElementById('replyToName'),
+                replyToContent: document.getElementById('replyToContent'),
+                replyInput: document.getElementById('replyInput'),
+                sendReplyBtn: document.getElementById('sendReplyBtn'),
+                closeReplyModal: document.getElementById('closeReplyModal')
+            });
+            console.log('ChatModule initialized with reply functionality');
+        }
+    }, 100);
+});
 // Auto-resize textarea
 if (messageInput) {
     messageInput.addEventListener('input', function() {
