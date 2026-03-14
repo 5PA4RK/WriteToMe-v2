@@ -45,15 +45,17 @@ window.getMessageReactions = async function(messageId) {
 // Make sendMessage globally available
 window.sendMessage = sendMessage;
 
-// Update the sendReply function
+// Update the sendReply function (around line 78)
 async function sendReply() {
+    console.log('sendReply called in app.js');
     const replyText = replyInput.value.trim();
     if (!replyText) return;
     
     // Set the message input with the reply text
     messageInput.value = replyText;
     replyModal.style.display = 'none';
-    appState.replyingTo = appState.replyingTo; // Keep the replyingTo state
+    
+    // Keep the replyingTo state - it was set in openReplyModal
     
     // Send the message
     await sendMessage();
