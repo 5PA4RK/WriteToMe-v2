@@ -47,16 +47,19 @@ window.sendMessage = sendMessage;
 
 // Update the sendReply function
 async function sendReply() {
-    if (window.ChatModule) {
-        await window.ChatModule.sendReply();
-    } else {
-        const replyText = replyInput.value.trim();
-        if (!replyText) return;
-        
-        messageInput.value = replyText;
-        replyModal.style.display = 'none';
-        await sendMessage();
-    }
+    const replyText = replyInput.value.trim();
+    if (!replyText) return;
+    
+    // Set the message input with the reply text
+    messageInput.value = replyText;
+    replyModal.style.display = 'none';
+    appState.replyingTo = appState.replyingTo; // Keep the replyingTo state
+    
+    // Send the message
+    await sendMessage();
+    
+    // Clear the replyingTo state after sending
+    appState.replyingTo = null;
 }
 
 // DOM Elements
@@ -3376,6 +3379,9 @@ async function markAllNotesAsRead() {
 // ============================================
 // GLOBAL FUNCTIONS
 // ============================================
+
+// Make sendReply globally available
+window.sendReply = sendReply;
 
 window.showFullImage = function(src) {
     fullSizeImage.src = src;
