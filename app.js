@@ -620,7 +620,10 @@ function addSystemMessage(text, isLocal = false) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// Handle connection
+// ============================================
+// HANDLE CONNECTION - FIXED VERSION
+// ============================================
+
 async function handleConnect() {
     const username = usernameInput.value.trim();
     const password = passwordInput.value;
@@ -630,30 +633,116 @@ async function handleConnect() {
     connectBtn.disabled = true;
     connectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
     
-    if (!username || !password) {
+    if (!username) {
         passwordError.style.display = 'block';
-        passwordError.textContent = "Please enter both username and password.";
+        passwordError.textContent = "Please enter a username.";
+        resetConnectButton();
+        return;
+    }
+    
+    if (!password) {
+        passwordError.style.display = 'block';
+        passwordError.textContent = "Please enter a password.";
         resetConnectButton();
         return;
     }
     
     try {
-        console.log("🔐 Authenticating:", username);
+        console.log("🔐 Attempting authentication for:", username);
+        
+        // First, check if this is a test account
+        const testPasswords = {
+            'admin': 'admin123',
+            'host': 'host123',
+            'guest': 'guest123'
+        };
+        
+        // Check if username matches test accounts AND password matches
+        if (testPasswords[username.toLowerCase()] && password === testPasswords[username.toLowerCase()]) {
+            console.log("✅ Using test account:", username);
+            
+            // Create a mock user for test accounts
+            const mockUser = {
+                id: `test-${username}-${Date.now()}`,
+                username: username.toLowerCase(),
+                display_name: username.charAt(0).toUpperCase() + username.slice(1),
+                role: username.toLowerCase() === 'admin' ? 'host' : username.toLowerCase(),
+                is_active: true
+            };
+            
+            appState.isHost = mockUser.role === 'host';
+            appState.userName = mockUser.display_name;
+            appState.userId = mockUser.id;
+            appState.guestNote = guestNote;
+            
+            console.log("✅ Test account authentication successful:", {
+                name: appState.userName,
+                id: appState.userId,
+                isHost: appState.isHost
+            });
+            
+            const userIP = await getRealIP();
+            
+            if (appState.isHost) {
+                await connectAsHost(userIP);
+            } else {
+                await connectAsGuest(userIP);
+            }
+            return;
+        }
+        
+        // If not a test account, try database authentication
+        console.log("🔍 Checking database for user:", username);
         
         const { data: userData, error: userError } = await supabaseClient
             .from('user_management')
             .select('id, username, display_name, password_hash, role, is_active')
             .ilike('username', username)
             .eq('is_active', true)
-            .single();
+            .maybeSingle(); // Use maybeSingle instead of single to avoid errors
         
-        if (userError || !userData) {
+        if (userError) {
+            console.error("Database error:", userError);
+            showAuthError("Database error. Please try again.");
+            return;
+        }
+        
+        if (!userData) {
+            console.log("User not found in database");
             showAuthError("Invalid username or password.");
             return;
         }
         
-        // Simple password check (in production, use proper hashing)
-        const isAuthenticated = true; // Simplified for demo
+        console.log("👤 User found in database:", userData.username, "Role:", userData.role);
+        
+        // For database users, we'll do a simple password comparison
+        // In production, you should use proper password hashing
+        let isAuthenticated = false;
+        
+        // Try RPC first
+        try {
+            const { data: authResult } = await supabaseClient
+                .rpc('verify_password', {
+                    stored_hash: userData.password_hash,
+                    password: password
+                });
+            
+            if (authResult === true) {
+                isAuthenticated = true;
+            }
+        } catch (rpcError) {
+            console.log("RPC failed, using direct comparison:", rpcError);
+            
+            // Fallback: direct comparison (for development only)
+            if (userData.password_hash === password) {
+                isAuthenticated = true;
+            }
+            
+            // Also try common test passwords
+            if (testPasswords[username.toLowerCase()] && password === testPasswords[username.toLowerCase()]) {
+                isAuthenticated = true;
+            }
+        }
         
         if (!isAuthenticated) {
             showAuthError("Invalid username or password.");
@@ -665,7 +754,24 @@ async function handleConnect() {
         appState.userId = userData.id;
         appState.guestNote = guestNote;
         
-        console.log("✅ Authentication successful");
+        console.log("✅ Database authentication successful:", {
+            name: appState.userName,
+            id: appState.userId,
+            isHost: appState.isHost
+        });
+        
+        // Update last login
+        try {
+            await supabaseClient
+                .from('user_management')
+                .update({ 
+                    last_login: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', userData.id);
+        } catch (updateError) {
+            console.log("Could not update last login:", updateError);
+        }
         
         const userIP = await getRealIP();
         
@@ -674,9 +780,32 @@ async function handleConnect() {
         } else {
             await connectAsGuest(userIP);
         }
+        
     } catch (error) {
-        console.error("Authentication error:", error);
-        showAuthError("Authentication error. Please try again.");
+        console.error("Error in authentication process:", error);
+        showAuthError(error.message.includes('NetworkError') ? 
+            "Network error. Check connection." : 
+            "Authentication error. Please try again.");
+    }
+}
+
+// Add this function if it's not already in your app.js
+function updatePasswordHint(username) {
+    const passwordHint = document.getElementById('passwordHint');
+    if (!passwordHint) return;
+    
+    const lowerUsername = username.toLowerCase();
+    if (lowerUsername === 'guest') {
+        passwordHint.textContent = "Test password: guest123";
+        passwordHint.style.display = 'block';
+    } else if (lowerUsername === 'host') {
+        passwordHint.textContent = "Test password: host123";
+        passwordHint.style.display = 'block';
+    } else if (lowerUsername === 'admin') {
+        passwordHint.textContent = "Administrator account - password: admin123";
+        passwordHint.style.display = 'block';
+    } else {
+        passwordHint.style.display = 'none';
     }
 }
 
