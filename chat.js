@@ -79,25 +79,28 @@ const ChatModule = (function() {
     }
 
     // Get message by ID
-    async function getMessageById(messageId) {
-        if (!supabaseClient) return null;
+// Get message by ID
+async function getMessageById(messageId) {
+    if (!supabaseClient) return null;
+    
+    try {
+        // The ID might be a number or string, but in your DB it's bigint
+        const { data, error } = await supabaseClient
+            .from('messages')
+            .select('*')
+            .eq('id', messageId)
+            .single();
         
-        try {
-            const { data, error } = await supabaseClient
-                .from('messages')
-                .select('*')
-                .eq('id', messageId)
-                .single();
-            
-            if (error) throw error;
-            return data;
-        } catch (error) {
-            console.error("Error fetching message:", error);
-            return null;
-        }
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error("Error fetching message:", error);
+        return null;
     }
+}
 
     // Display a message in the chat
+// Display a message in the chat
 // Display a message in the chat
 async function displayMessage(message) {
     if (!chatMessages) {
@@ -123,8 +126,8 @@ async function displayMessage(message) {
     
     let messageContent = '';
     
-    // Add reply reference if this is a reply
-    if (message.reply_to) {
+    // Add reply reference if this is a reply - LOOK FOR reply_to_id
+    if (message.reply_to_id) {
         messageContent += `<div class="message-reply-ref" id="reply-ref-${message.id}"><i class="fas fa-reply"></i> <span class="reply-loading">Loading reply...</span></div>`;
     }
     
@@ -181,9 +184,9 @@ async function displayMessage(message) {
     chatMessages.appendChild(messageDiv);
     
     // If this is a reply, fetch and display the original message reference
-    if (message.reply_to) {
+    if (message.reply_to_id) {
         try {
-            const originalMsg = await getMessageById(message.reply_to);
+            const originalMsg = await getMessageById(message.reply_to_id);
             const replyRef = document.getElementById(`reply-ref-${message.id}`);
             if (replyRef && originalMsg) {
                 const originalText = originalMsg.message || 'Image message';
@@ -209,11 +212,6 @@ async function displayMessage(message) {
     const reactionsContainer = messageDiv.querySelector('.message-reactions');
     if (message.reactions && message.reactions.length > 0) {
         renderReactions(reactionsContainer, message.reactions);
-    }
-    
-    // Store in appState.messages if available
-    if (appState && appState.messages && Array.isArray(appState.messages)) {
-        appState.messages.push(message);
     }
     
     chatMessages.scrollTop = chatMessages.scrollHeight;
