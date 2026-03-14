@@ -1833,9 +1833,11 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-    appState.realtimeSubscription = supabaseClient
-    .channel('messages_' + appState.currentSessionId)
-    .on(
+    // Create a new channel for all real-time events
+    const channel = supabaseClient.channel('messages_' + appState.currentSessionId);
+    
+    // Messages INSERT subscription
+    channel.on(
         'postgres_changes',
         {
             event: 'INSERT',
@@ -1858,7 +1860,7 @@ function setupRealtimeSubscriptions() {
                             type: 'received',
                             is_historical: false,
                             reactions: reactions,
-                            reply_to: payload.new.reply_to
+                            reply_to_id: payload.new.reply_to_id || payload.new.reply_to
                         });
                     });
                     
@@ -1874,6 +1876,7 @@ function setupRealtimeSubscriptions() {
             }
         }
     )
+    // Messages UPDATE subscription (for edits and deletes)
     .on(
         'postgres_changes',
         {
@@ -1908,18 +1911,53 @@ function setupRealtimeSubscriptions() {
                         textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
                     }
                 }
-                
-                // Update reactions
-                getMessageReactions(payload.new.id).then(reactions => {
-                    const reactionsContainer = messageElement.querySelector('.message-reactions');
-                    if (reactionsContainer && window.ChatModule) {
-                        window.ChatModule.renderReactions(reactionsContainer, reactions);
-                    }
-                });
             }
         }
     )
-    .subscribe((status, err) => {
+    // NEW: Message Reactions subscription
+    .on(
+        'postgres_changes',
+        {
+            event: '*', // Listen to INSERT, UPDATE, DELETE
+            schema: 'public',
+            table: 'message_reactions'
+        },
+        async (payload) => {
+            console.log('😊 Reaction event received:', payload.eventType, payload.new || payload.old);
+            
+            // Find the message ID from the payload
+            const messageId = payload.new?.message_id || payload.old?.message_id;
+            if (!messageId) return;
+            
+            // Find the message element
+            const messageElement = document.getElementById(`msg-${messageId}`);
+            if (!messageElement) return;
+            
+            // Get updated reactions for this message
+            const updatedReactions = await getMessageReactions(messageId);
+            
+            // Update reactions in UI
+            const reactionsContainer = messageElement.querySelector('.message-reactions');
+            if (reactionsContainer && window.ChatModule) {
+                window.ChatModule.renderReactions(reactionsContainer, updatedReactions);
+            }
+            
+            // Play sound for reaction if enabled (optional)
+            if (appState.soundEnabled && payload.eventType === 'INSERT' && 
+                payload.new?.user_id !== appState.userId) {
+                try {
+                    // You can add a subtle sound for reactions if desired
+                    // messageSound.currentTime = 0;
+                    // messageSound.play().catch(e => console.log("Sound play failed:", e));
+                } catch (e) {
+                    console.log("Sound error:", e);
+                }
+            }
+        }
+    );
+    
+    // Subscribe to the channel
+    appState.realtimeSubscription = channel.subscribe((status, err) => {
         console.log('📡 MESSAGES Subscription status:', status);
         if (err) {
             console.error('❌ Messages subscription error:', err);
@@ -1927,13 +1965,14 @@ function setupRealtimeSubscriptions() {
     });
 
     // Helper function to escape HTML
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
     
+    // Typing subscription (keep as is)
     appState.typingSubscription = supabaseClient
         .channel('typing_' + appState.currentSessionId)
         .on(
