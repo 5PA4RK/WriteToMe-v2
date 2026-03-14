@@ -34,38 +34,37 @@ const ChatModule = (function() {
         messageSound = elements.messageSound;
         typingIndicator = elements.typingIndicator;
         typingUser = elements.typingUser;
-        
-        // Reply modal elements
         replyModal = elements.replyModal;
         replyToName = elements.replyToName;
         replyToContent = elements.replyToContent;
         replyInput = elements.replyInput;
         sendReplyBtn = elements.sendReplyBtn;
         closeReplyModal = elements.closeReplyModal;
-    
+
         setupEventListeners();
         console.log("ChatModule initialized successfully");
     }
+
     // Setup event listeners
     function setupEventListeners() {
         if (sendReplyBtn) {
             sendReplyBtn.addEventListener('click', sendReply);
         }
-    
+
         if (closeReplyModal) {
             closeReplyModal.addEventListener('click', () => {
                 replyModal.style.display = 'none';
                 if (appState) appState.replyingTo = null;
             });
         }
-    
+
         window.addEventListener('click', (e) => {
             if (e.target === replyModal) {
                 replyModal.style.display = 'none';
                 if (appState) appState.replyingTo = null;
             }
         });
-    
+
         // Close message actions when clicking outside
         document.addEventListener('click', (e) => {
             if (appState && appState.activeMessageActions) {
@@ -79,148 +78,125 @@ const ChatModule = (function() {
         });
     }
 
-
-// Display a message in the chat
-// Display a message in the chat
-function displayMessage(message) {
-    if (!chatMessages) {
-        console.error('Chat messages container not found');
-        return;
-    }
-    
-    if (appState && appState.isViewingHistory && message.is_historical === false) {
-        return;
-    }
-    
-    // Check if message already exists
-    if (document.getElementById(`msg-${message.id}`)) {
-        return;
-    }
-    
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${message.type}`;
-    if (message.is_historical) {
-        messageDiv.classList.add('historical');
-    }
-    messageDiv.id = `msg-${message.id}`;
-    
-    let messageContent = '';
-    
-    // Add reply reference if this is a reply
-    if (message.reply_to) {
-        // Try to find the original message
-        let replyText = 'Replying to a message';
-        const originalMsgElement = document.getElementById(`msg-${message.reply_to}`);
-        
-        if (originalMsgElement) {
-            const originalSender = originalMsgElement.querySelector('.message-sender')?.textContent || 'Someone';
-            const originalText = originalMsgElement.querySelector('.message-text')?.textContent || '';
-            replyText = `Replying to ${originalSender}: ${originalText.substring(0, 50)}${originalText.length > 50 ? '...' : ''}`;
-        } else if (appState && appState.messages) {
-            const originalMsg = appState.messages.find(m => m.id === message.reply_to);
-            if (originalMsg) {
-                replyText = `Replying to ${originalMsg.sender}: ${originalMsg.text.substring(0, 50)}${originalMsg.text.length > 50 ? '...' : ''}`;
-            }
+    // Display a message in the chat
+    function displayMessage(message) {
+        if (!chatMessages) {
+            console.error('Chat messages container not found');
+            return;
         }
         
-        messageContent += `<div class="message-reply-ref"><i class="fas fa-reply"></i> ${escapeHtml(replyText)}</div>`;
-    }
-    
-    // Add message text
-    if (message.text) {
-        messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
-    }
-    
-    // Add image if present
-    if (message.image) {
-        messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
-    }
-    
-    // Add reactions section
-    const reactionsHtml = `<div class="message-reactions"></div>`;
-    
-    // Create action buttons based on message type
-    let actionButtons = '';
-    
-    if (!message.is_historical) {
-        if (message.type === 'sent') {
-            // Sent messages - can edit, delete, reply
-            actionButtons = `
-                <div class="message-actions">
-                    <button class="message-action-btn" onclick="window.editMessage('${message.id}')" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="message-action-btn" onclick="window.deleteMessage('${message.id}')" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                    <button class="message-action-btn" onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')" title="Reply">
-                        <i class="fas fa-reply"></i>
-                    </button>
-                </div>
-            `;
-        } else {
-            // Received messages - can reply only
-            actionButtons = `
-                <div class="message-actions">
-                    <button class="message-action-btn" onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')" title="Reply">
-                        <i class="fas fa-reply"></i>
-                    </button>
-                </div>
-            `;
+        if (appState && appState.isViewingHistory && message.is_historical === false) {
+            return;
         }
-    }
-    
-    messageDiv.innerHTML = `
-        <div class="message-sender">${escapeHtml(message.sender)}</div>
-        <div class="message-content">
-            ${messageContent}
-            ${reactionsHtml}
-            <div class="message-footer">
-                <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
-                ${actionButtons}
+        
+        // Check if message already exists
+        if (document.getElementById(`msg-${message.id}`)) {
+            return;
+        }
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${message.type}`;
+        if (message.is_historical) {
+            messageDiv.classList.add('historical');
+        }
+        messageDiv.id = `msg-${message.id}`;
+        
+        let messageContent = '';
+        
+        // Add reply reference if this is a reply
+        if (message.reply_to) {
+            messageContent += `<div class="message-reply-ref"><i class="fas fa-reply"></i> Replying to a message</div>`;
+        }
+        
+        if (message.text) {
+            messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
+        }
+        
+        if (message.image) {
+            messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
+        }
+        
+        // Add reactions section
+        const reactionsHtml = `<div class="message-reactions"></div>`;
+        
+        // Add action button (three dots)
+        const actionButton = `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
+        
+        // Actions menu (initially hidden)
+        const actionsMenu = `
+            <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
+                ${message.sender === (appState ? appState.userName : '') ? `
+                    <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
+                    <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
+                    <div class="menu-divider"></div>
+                ` : ''}
+                <button onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
+                    <i class="fas fa-reply"></i> Reply
+                </button>
+                <div class="menu-divider"></div>
+                <div class="reaction-section">
+                    <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+                    <div class="reaction-quick-picker">
+                        ${reactionEmojis.map(emoji => 
+                            `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                        ).join('')}
+                    </div>
+                </div>
             </div>
-        </div>
-    `;
-    
-    chatMessages.appendChild(messageDiv);
-    
-    // Render existing reactions
-    const reactionsContainer = messageDiv.querySelector('.message-reactions');
-    if (message.reactions && message.reactions.length > 0) {
-        renderReactions(reactionsContainer, message.reactions);
-    }
-    
-    // Store in appState.messages if available
-    if (appState && appState.messages && Array.isArray(appState.messages)) {
-        appState.messages.push(message);
-    }
-    
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+        `;
+        
+        messageDiv.innerHTML = `
+            <div class="message-sender">${escapeHtml(message.sender)}</div>
+            <div class="message-content">
+                ${messageContent}
+                ${reactionsHtml}
+                <div class="message-footer">
+                    <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
+                    ${actionButton}
+                </div>
+            </div>
+            ${actionsMenu}
+        `;
+        
+        chatMessages.appendChild(messageDiv);
+        
+        // Render existing reactions
+        const reactionsContainer = messageDiv.querySelector('.message-reactions');
+        if (message.reactions && message.reactions.length > 0) {
+            renderReactions(reactionsContainer, message.reactions);
+        }
+        
+// Store in appState.messages if available
+if (appState && appState.messages && Array.isArray(appState.messages)) {
+    appState.messages.push(message);
 }
+        
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
 
-// Render reactions for a message
-function renderReactions(container, reactions) {
-    if (!container) return;
-    
-    if (!reactions || reactions.length === 0) {
-        container.innerHTML = '';
-        return;
+    // Render reactions for a message
+    function renderReactions(container, reactions) {
+        if (!container) return;
+        
+        if (!reactions || reactions.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+        
+        // Group reactions by emoji
+        const reactionCounts = {};
+        reactions.forEach(r => {
+            reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+        });
+        
+        let html = '';
+        for (const [emoji, count] of Object.entries(reactionCounts)) {
+            const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
+            html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+        }
+        
+        container.innerHTML = html;
     }
-    
-    // Group reactions by emoji
-    const reactionCounts = {};
-    reactions.forEach(r => {
-        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-    });
-    
-    let html = '';
-    for (const [emoji, count] of Object.entries(reactionCounts)) {
-        const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
-        html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
-    }
-    
-    container.innerHTML = html;
-}
 
     // Toggle message actions menu
     function toggleMessageActions(messageId, button) {
@@ -383,56 +359,42 @@ function renderReactions(container, reactions) {
         }
     }
 
-// Open reply modal
-function openReplyModal(messageId, senderName, messageText) {
-    console.log('Opening reply modal for message:', messageId);
-    
-    if (!replyModal || !replyToName || !replyToContent || !replyInput) {
-        console.error('Reply modal elements not found');
-        return;
+    // Open reply modal
+    function openReplyModal(messageId, senderName, messageText) {
+        console.log('Opening reply modal for message:', messageId);
+        
+        if (!replyModal || !replyToName || !replyToContent || !replyInput) {
+            console.error('Reply modal elements not found');
+            return;
+        }
+        
+        replyToName.textContent = senderName || 'Unknown';
+        replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
+        replyInput.value = '';
+        
+        if (appState) appState.replyingTo = messageId;
+        
+        replyModal.style.display = 'flex';
+        replyInput.focus();
     }
-    
-    replyToName.textContent = senderName || 'Unknown';
-    replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
-    replyInput.value = '';
-    
-    // Set the replyingTo in appState
-    if (appState) {
-        appState.replyingTo = messageId;
-        console.log('Set replyingTo to:', messageId);
-    }
-    
-    replyModal.style.display = 'flex';
-    replyInput.focus();
-}
 
 
 // Send reply
 async function sendReply() {
-    console.log('sendReply called');
-    console.log('Current replyingTo:', appState?.replyingTo);
-    
     const replyText = replyInput.value.trim();
     if (!replyText) return;
     
-    // Store the replyTo ID
-    const replyToId = appState ? appState.replyingTo : null;
-    
-    // Clear modal
-    replyModal.style.display = 'none';
-    
-    // Set message input and ensure replyingTo is still set
     if (messageInput) {
         messageInput.value = replyText;
     }
-    if (appState) {
-        appState.replyingTo = replyToId;
-        console.log('Set replyingTo to before sending:', appState.replyingTo);
-    }
+    replyModal.style.display = 'none';
     
     // Trigger send message
     if (typeof window.sendMessage === 'function') {
         await window.sendMessage();
+    } else if (window.appState && typeof window.sendMessageToDB === 'function') {
+        // Fallback
+        await window.sendMessageToDB(replyText, null);
     } else {
         console.warn('No sendMessage function found');
         alert('Cannot send reply: Message function not available');
@@ -615,8 +577,8 @@ async function sendReply() {
         addReaction,
         toggleReaction,
         getMessageReactions,
-        openReplyModal,      
-        sendReply,           
+        openReplyModal,
+        sendReply,
         editMessage,
         deleteMessage,
         handleTyping,
