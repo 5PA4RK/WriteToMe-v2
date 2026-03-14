@@ -359,24 +359,28 @@ if (appState && appState.messages && Array.isArray(appState.messages)) {
         }
     }
 
-    // Open reply modal
-    function openReplyModal(messageId, senderName, messageText) {
-        console.log('Opening reply modal for message:', messageId);
-        
-        if (!replyModal || !replyToName || !replyToContent || !replyInput) {
-            console.error('Reply modal elements not found');
-            return;
-        }
-        
-        replyToName.textContent = senderName || 'Unknown';
-        replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
-        replyInput.value = '';
-        
-        if (appState) appState.replyingTo = messageId;
-        
-        replyModal.style.display = 'flex';
-        replyInput.focus();
+// Open reply modal
+function openReplyModal(messageId, senderName, messageText) {
+    console.log('Opening reply modal for message:', messageId);
+    
+    if (!replyModal || !replyToName || !replyToContent || !replyInput) {
+        console.error('Reply modal elements not found');
+        return;
     }
+    
+    replyToName.textContent = senderName || 'Unknown';
+    replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
+    replyInput.value = '';
+    
+    // Set the replyingTo in appState
+    if (appState) {
+        appState.replyingTo = messageId;
+        console.log('Set replyingTo to:', messageId);
+    }
+    
+    replyModal.style.display = 'flex';
+    replyInput.focus();
+}
 
 
 // Send reply
@@ -384,6 +388,7 @@ async function sendReply() {
     const replyText = replyInput.value.trim();
     if (!replyText) return;
     
+    // Set the message input with the reply text
     if (messageInput) {
         messageInput.value = replyText;
     }
@@ -392,9 +397,6 @@ async function sendReply() {
     // Trigger send message
     if (typeof window.sendMessage === 'function') {
         await window.sendMessage();
-    } else if (window.appState && typeof window.sendMessageToDB === 'function') {
-        // Fallback
-        await window.sendMessageToDB(replyText, null);
     } else {
         console.warn('No sendMessage function found');
         alert('Cannot send reply: Message function not available');
