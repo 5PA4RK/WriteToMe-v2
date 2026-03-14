@@ -58,6 +58,17 @@ async function sendReply() {
         await sendMessage();
     }
 }
+// Make replyToMessage globally available
+window.replyToMessage = function(messageId) {
+    if (window.ChatModule) {
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        if (messageElement) {
+            const sender = messageElement.querySelector('.message-sender').textContent;
+            const text = messageElement.querySelector('.message-text').textContent;
+            window.ChatModule.openReplyModal(messageId, sender, text);
+        }
+    }
+};
 
 // DOM Elements
 const connectionModal = document.getElementById('connectionModal');
@@ -162,6 +173,25 @@ const replyToName = document.getElementById('replyToName');
 const replyToContent = document.getElementById('replyToContent');
 const replyInput = document.getElementById('replyInput');
 const sendReplyBtn = document.getElementById('sendReplyBtn');
+
+if (closeReplyModal) {
+    closeReplyModal.addEventListener('click', () => {
+        replyModal.style.display = 'none';
+        appState.replyingTo = null;
+    });
+}
+
+if (sendReplyBtn) {
+    sendReplyBtn.addEventListener('click', sendReply);
+}
+
+// Click outside to close reply modal
+window.addEventListener('click', (e) => {
+    if (e.target === replyModal) {
+        replyModal.style.display = 'none';
+        appState.replyingTo = null;
+    }
+});
 
 // Initialize ChatModule with appState and supabaseClient
 document.addEventListener('DOMContentLoaded', () => {
@@ -1952,7 +1982,7 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to: appState.replyingTo || null  // Make sure this is included
+            reply_to: appState.replyingTo || null  // Add this line
         };
         
         console.log('Message data with reply_to:', messageData);
@@ -1978,23 +2008,37 @@ async function sendMessageToDB(text, imageUrl) {
         // Get reactions for this message (empty initially)
         const reactions = [];
         
-        displayMessage({
-            id: data.id,
-            sender: appState.userName,
-            text: text,
-            image: imageUrl,
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-            type: 'sent',
-            is_historical: false,
-            reactions: reactions,
-            reply_to: appState.replyingTo  // Pass this to display
-        });
+        // Use ChatModule to display message if available
+        if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
+            window.ChatModule.displayMessage({
+                id: data.id,
+                sender: appState.userName,
+                text: text,
+                image: imageUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false,
+                reactions: reactions,
+                reply_to: appState.replyingTo
+            });
+        } else {
+            // Fallback to old display method
+            displayMessage({
+                id: data.id,
+                sender: appState.userName,
+                text: text,
+                image: imageUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false
+            });
+        }
         
         // Clear the replyingTo after successful send
-        const repliedToId = appState.replyingTo;
         appState.replyingTo = null;
         
-        return { success: true, data, repliedToId };
+        return { success: true, data };
+        
     } catch (error) {
         console.error("❌ Error in sendMessageToDB:", error);
         alert("Failed to send message: " + error.message);
@@ -2010,9 +2054,6 @@ function displayMessage(message) {
     }
 }
 
-// ============================================
-// LOAD CHAT HISTORY
-// ============================================
 // ============================================
 // LOAD CHAT HISTORY
 // ============================================
@@ -2097,18 +2138,28 @@ async function loadChatHistory(sessionId = null) {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
             
             if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-// Inside loadChatHistory function, where you call displayMessage:
-window.ChatModule.displayMessage({
-    id: msg.id,
-    sender: msg.sender_name,
-    text: msg.message,
-    image: msg.image_url,
-    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-    type: messageType,
-    is_historical: !!sessionId,
-    reactions: allReactions[index] || [],
-    reply_to: msg.reply_to  // Make sure this is included
-});
+                window.ChatModule.displayMessage({
+                    id: msg.id,
+                    sender: msg.sender_name,
+                    text: msg.message,
+                    image: msg.image_url,
+                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    type: messageType,
+                    is_historical: !!sessionId,
+                    reactions: allReactions[index] || [],
+                    reply_to: msg.reply_to  // Make sure this is included
+                });
+            } else {
+                // Fallback to old display method
+                displayMessage({
+                    id: msg.id,
+                    sender: msg.sender_name,
+                    text: msg.message,
+                    image: msg.image_url,
+                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    type: messageType,
+                    is_historical: !!sessionId
+                });
             }
         });
         
