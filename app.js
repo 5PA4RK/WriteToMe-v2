@@ -1942,7 +1942,9 @@ async function sendMessage() {
     
     messageInput.value = '';
     messageInput.style.height = 'auto';
-    appState.replyingTo = null;
+    
+    // Only clear replyingTo after successful send
+    // It's already being used in sendMessageToDB
 }
 async function sendMessageToDB(text, imageUrl) {
     try {
