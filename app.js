@@ -35,6 +35,7 @@ const appState = {
     activeMessageActions: null
 };
 
+
 // Make getMessageReactions available globally for loadChatHistory
 window.getMessageReactions = async function(messageId) {
     if (window.ChatModule) {
@@ -46,17 +47,51 @@ window.getMessageReactions = async function(messageId) {
 window.sendMessage = sendMessage;
 
 // Update the sendReply function
+// Update the sendReply function
 async function sendReply() {
-    if (window.ChatModule) {
-        await window.ChatModule.sendReply();
-    } else {
-        const replyText = replyInput.value.trim();
-        if (!replyText) return;
-        
-        messageInput.value = replyText;
-        replyModal.style.display = 'none';
-        await sendMessage();
+    console.log('sendReply called');
+    
+    const replyInput = document.getElementById('replyInput');
+    if (!replyInput) {
+        console.error('Reply input not found');
+        return;
     }
+    
+    const replyText = replyInput.value.trim();
+    if (!replyText) {
+        alert('Please enter a reply message.');
+        return;
+    }
+    
+    const replyModal = document.getElementById('replyModal');
+    const replyingToId = replyModal ? replyModal.dataset.replyingTo : appState.replyingTo;
+    
+    console.log('Sending reply to message ID:', replyingToId);
+    console.log('Reply text:', replyText);
+    
+    // Set the message input value
+    if (messageInput) {
+        messageInput.value = replyText;
+    }
+    
+    // Make sure appState.replyingTo is set
+    if (replyingToId) {
+        appState.replyingTo = replyingToId;
+    }
+    
+    // Close the modal
+    if (replyModal) {
+        replyModal.style.display = 'none';
+        delete replyModal.dataset.replyingTo;
+    }
+    
+    // Clear the reply input
+    if (replyInput) {
+        replyInput.value = '';
+    }
+    
+    // Send the message
+    await sendMessage();
 }
 // Make replyToMessage globally available
 window.replyToMessage = function(messageId) {
@@ -599,9 +634,49 @@ document.addEventListener('click', (e) => {
         });
     }
     
-    if (sendReplyBtn) {
-        sendReplyBtn.addEventListener('click', sendReply);
-    }
+// In setupEventListeners function, find the sendReplyBtn listener and update it:
+
+if (sendReplyBtn) {
+    // Remove any existing listeners to avoid duplicates
+    sendReplyBtn.replaceWith(sendReplyBtn.cloneNode(true));
+    const newSendReplyBtn = document.getElementById('sendReplyBtn');
+    
+    newSendReplyBtn.addEventListener('click', async () => {
+        console.log('Send reply button clicked');
+        
+        const replyInput = document.getElementById('replyInput');
+        const replyText = replyInput?.value.trim();
+        
+        if (!replyText) {
+            alert('Please enter a reply message.');
+            return;
+        }
+        
+        const replyModal = document.getElementById('replyModal');
+        const replyingToId = replyModal?.dataset.replyingTo || appState?.replyingTo;
+        
+        console.log('Sending reply to:', replyingToId);
+        
+        if (messageInput) {
+            messageInput.value = replyText;
+        }
+        
+        if (replyingToId) {
+            appState.replyingTo = replyingToId;
+        }
+        
+        if (replyModal) {
+            replyModal.style.display = 'none';
+            delete replyModal.dataset.replyingTo;
+        }
+        
+        if (replyInput) {
+            replyInput.value = '';
+        }
+        
+        await sendMessage();
+    });
+}
     
     window.addEventListener('click', (e) => {
         if (e.target === replyModal) {
@@ -1982,7 +2057,7 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to_id: appState.replyingTo || null  // Use reply_to_id instead of reply_to
+            reply_to_id: appState.replyingTo || null  // Use reply_to_id
         };
         
         console.log('Message data with reply_to_id:', messageData);
@@ -2008,17 +2083,18 @@ async function sendMessageToDB(text, imageUrl) {
         // Get reactions for this message (empty initially)
         const reactions = [];
         
+        // Use ChatModule to display message if available
         if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
             window.ChatModule.displayMessage({
-                id: msg.id,
-                sender: msg.sender_name,
-                text: msg.message,
-                image: msg.image_url,
-                time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: messageType,
-                is_historical: !!sessionId,
-                reactions: allReactions[index] || [],
-                reply_to_id: msg.reply_to_id  // Use reply_to_id instead of reply_to
+                id: data.id,
+                sender: appState.userName,
+                text: text,
+                image: imageUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false,
+                reactions: reactions,
+                reply_to_id: appState.replyingTo
             });
         }
         
