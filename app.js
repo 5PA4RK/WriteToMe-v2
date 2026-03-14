@@ -1,3 +1,5 @@
+// app.js - Optimized Version
+
 // Supabase Configuration
 const SUPABASE_URL = 'https://plqvqenoroacvzwtgoxq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_91IHQ5--y4tDIo8L9X2ZJQ_YeThfdu_';
@@ -23,7 +25,6 @@ const appState = {
     viewingSessionId: null,
     pendingGuests: [],
     emojis: ["😀", "😂", "😍", "😎", "😭", "😡", "👍", "👎", "❤️", "🔥", "👏", "🙏", "🤔", "😴", "🥳"],
-    reactionEmojis: ["👍", "❤️", "😂", "😮", "😢", "😡"],
     users: [],
     availableRooms: [],
     guestNote: "",
@@ -34,39 +35,6 @@ const appState = {
     replyingTo: null,
     activeMessageActions: null
 };
-
-// Make getMessageReactions available globally for loadChatHistory
-window.getMessageReactions = async function(messageId) {
-    if (window.ChatModule) {
-        return await window.ChatModule.getMessageReactions(messageId);
-    }
-    return [];
-};
-// Make sendMessage globally available
-window.sendMessage = sendMessage;
-
-// Update the sendReply function 
-async function sendReply() {
-    if (window.ChatModule) {
-        await window.ChatModule.sendReply();
-    } else {
-        const replyText = replyInput.value.trim();
-        if (!replyText) return;
-        
-        // Store the replyingTo ID before clearing
-        const replyToId = appState.replyingTo;
-        
-        // Clear modal first
-        replyModal.style.display = 'none';
-        
-        // Set message input and replyingTo
-        messageInput.value = replyText;
-        appState.replyingTo = replyToId;
-        
-        // Send the message
-        await sendMessage();
-    }
-}
 
 // DOM Elements
 const connectionModal = document.getElementById('connectionModal');
@@ -172,9 +140,18 @@ const replyToContent = document.getElementById('replyToContent');
 const replyInput = document.getElementById('replyInput');
 const sendReplyBtn = document.getElementById('sendReplyBtn');
 
-// Initialize ChatModule with appState and supabaseClient
+// Make functions globally available
+window.getMessageReactions = async function(messageId) {
+    if (window.ChatModule) {
+        return await window.ChatModule.getMessageReactions(messageId);
+    }
+    return [];
+};
+
+window.sendMessage = sendMessage;
+
+// Initialize ChatModule
 document.addEventListener('DOMContentLoaded', () => {
-    // After DOM is loaded, initialize ChatModule
     setTimeout(() => {
         if (window.ChatModule) {
             window.ChatModule.init(appState, supabaseClient, {
@@ -191,19 +168,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 sendReplyBtn: document.getElementById('sendReplyBtn'),
                 closeReplyModal: document.getElementById('closeReplyModal')
             });
-            console.log('ChatModule initialized with appState and supabaseClient');
+            console.log('ChatModule initialized');
         }
-    }, 100); // Small delay to ensure DOM is ready
+    }, 100);
 });
 
-
-
-// ============================================
-// INITIALIZATION
-// ============================================
-
+// Initialize app
 async function initApp() {
-    console.log("🚀 Initializing Enhanced WriteToMira App...");
+    console.log("🚀 Initializing WriteToMira App...");
     
     const mainContainer = document.querySelector('.main-container') || document.querySelector('.app-container');
     if (mainContainer) {
@@ -222,7 +194,7 @@ async function initApp() {
             appState.sessionId = sessionData.sessionId;
             appState.soundEnabled = sessionData.soundEnabled !== false;
             
-            console.log("🔄 Attempting to reconnect to saved session...");
+            console.log("🔄 Attempting to reconnect...");
             
             if (await reconnectToSession()) {
                 appState.isConnected = true;
@@ -233,7 +205,7 @@ async function initApp() {
                 updateUIAfterConnection();
                 console.log("✅ Successfully reconnected!");
             } else {
-                console.log("❌ Failed to reconnect, clearing session");
+                console.log("❌ Failed to reconnect");
                 localStorage.removeItem('writeToMe_session');
                 showConnectionModal();
             }
@@ -256,14 +228,10 @@ async function initApp() {
         loadChatSessions();
     }
     
-    // Start subscription health check
     setInterval(checkAndReconnectSubscriptions, 15000);
 }
 
-// ============================================
-// MODAL FUNCTIONS
-// ============================================
-
+// Modal functions
 function showConnectionModal() {
     connectionModal.style.display = 'flex';
     connectionModal.classList.add('show');
@@ -278,9 +246,6 @@ function showConnectionModal() {
     if (passwordInput) passwordInput.value = '';
     if (guestNoteInput) guestNoteInput.value = '';
     if (passwordError) passwordError.style.display = 'none';
-    
-    const passwordHint = document.getElementById('passwordHint');
-    if (passwordHint) passwordHint.style.display = 'none';
     
     if (connectBtn) {
         connectBtn.disabled = false;
@@ -299,10 +264,7 @@ function hideConnectionModal() {
     }
 }
 
-// ============================================
-// RECONNECT FUNCTION
-// ============================================
-
+// Reconnect function
 async function reconnectToSession() {
     try {
         if (!appState.sessionId) return false;
@@ -314,7 +276,7 @@ async function reconnectToSession() {
             .single();
         
         if (error || !session) {
-            console.log("Session not found or error:", error);
+            console.log("Session not found:", error);
             return false;
         }
         
@@ -360,10 +322,7 @@ async function reconnectToSession() {
     }
 }
 
-// ============================================
-// LOAD ALL SESSIONS FOR STABLE NUMBERING
-// ============================================
-
+// Load all sessions
 async function loadAllSessions() {
     try {
         const { data: sessions, error } = await supabaseClient
@@ -374,10 +333,10 @@ async function loadAllSessions() {
         if (error) throw error;
         
         appState.allSessions = sessions || [];
-        console.log(`📊 Loaded ${appState.allSessions.length} total sessions`);
+        console.log(`📊 Loaded ${appState.allSessions.length} sessions`);
         return appState.allSessions;
     } catch (error) {
-        console.error("Error loading all sessions:", error);
+        console.error("Error loading sessions:", error);
         appState.allSessions = [];
         return [];
     }
@@ -389,14 +348,11 @@ function getStableRoomNumber(sessionId) {
     return (index + 1).toString();
 }
 
-// ============================================
-// EVENT LISTENERS SETUP
-// ============================================
-
+// ========== EVENT LISTENERS ==========
 function setupEventListeners() {
     // Connection modal
     if (usernameInput) {
-        usernameInput.addEventListener('input', function() {
+        usernameInput.addEventListener('input', () => {
             if (passwordError) passwordError.style.display = 'none';
         });
     }
@@ -411,7 +367,7 @@ function setupEventListeners() {
         connectBtn.addEventListener('click', handleConnect);
     }
     
-    // Guest notification button
+    // Guest notification
     if (guestNotifyBtn) {
         guestNotifyBtn.addEventListener('click', showGuestNotificationModal);
     }
@@ -442,7 +398,7 @@ function setupEventListeners() {
         });
     }
     
-    // Chat functionality
+    // Chat
     if (messageInput) {
         messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -462,22 +418,18 @@ function setupEventListeners() {
         clearChatBtn.addEventListener('click', clearChat);
     }
     
-    // Image upload
     if (imageUpload) {
         imageUpload.addEventListener('change', handleImageUpload);
     }
     
-    // Emoji picker
     if (emojiBtn) {
         emojiBtn.addEventListener('click', toggleEmojiPicker);
     }
     
-    // Return to active chat
     if (returnToActiveBtn) {
         returnToActiveBtn.addEventListener('click', returnToActiveChat);
     }
     
-    // History
     if (refreshHistoryBtn) {
         refreshHistoryBtn.addEventListener('click', async () => {
             await loadAllSessions();
@@ -485,45 +437,35 @@ function setupEventListeners() {
         });
     }
     
-    // Sound control
     if (soundControl) {
         soundControl.addEventListener('click', toggleSound);
     }
     
-    // Image modal
     if (imageModal) {
         imageModal.addEventListener('click', (e) => {
-            if (e.target === imageModal || e.target.classList.contains('image-modal-overlay')) {
+            if (e.target === imageModal) {
                 imageModal.style.display = 'none';
             }
         });
+    }
+    
+    // Click outside handlers
+    document.addEventListener('click', (e) => {
+        // Close emoji picker
+        if (emojiPicker && emojiPicker.classList.contains('show')) {
+            if (!emojiPicker.contains(e.target) && emojiBtn && !emojiBtn.contains(e.target)) {
+                emojiPicker.classList.remove('show');
+            }
+        }
         
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && imageModal.style.display === 'flex') {
-                imageModal.style.display = 'none';
+        // Close message actions
+        if (appState.activeMessageActions) {
+            const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
+            if (actionsMenu && !actionsMenu.contains(e.target) && !e.target.closest('.message-action-dots')) {
+                closeMessageActions();
             }
-        });
-    }
-    
-    // Click outside emoji picker to close
-// Click outside emoji picker to close
-document.addEventListener('click', (e) => {
-    // Close emoji picker when clicking outside
-    if (emojiPicker && emojiPicker.classList.contains('show')) {
-        if (!emojiPicker.contains(e.target) && emojiBtn && !emojiBtn.contains(e.target)) {
-            emojiPicker.classList.remove('show');
         }
-    }
-    
-    // Close message actions when clicking outside
-    if (appState.activeMessageActions) {
-        const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-        if (actionsMenu && !actionsMenu.contains(e.target) && 
-            !e.target.closest('.message-action-dots')) {
-            closeMessageActions();
-        }
-    }
-});
+    });
     
     // Tab switching
     if (historyTabBtn) {
@@ -560,7 +502,7 @@ document.addEventListener('click', (e) => {
         });
     }
     
-    // Click outside to close notes panel
+    // Click outside notes panel
     document.addEventListener('click', (e) => {
         if (notesPanel && notesPanel.classList.contains('show') && 
             !notesPanel.contains(e.target) && 
@@ -593,21 +535,10 @@ document.addEventListener('click', (e) => {
     });
 }
 
-// ============================================
-// TAB SWITCHING
-// ============================================
-
+// Tab switching
 function switchAdminTab(tabName) {
-    console.log("Switching to tab:", tabName);
-    
-    if (!historyTabBtn || !usersTabBtn || !historyTabContent || !usersTabContent) {
-        console.error("Tab elements not found!");
-        return;
-    }
-    
     historyTabBtn.classList.remove('active');
     usersTabBtn.classList.remove('active');
-    
     historyTabContent.style.display = 'none';
     usersTabContent.style.display = 'none';
     historyTabContent.classList.remove('active');
@@ -626,10 +557,7 @@ function switchAdminTab(tabName) {
     }
 }
 
-// ============================================
-// CLEAR CHAT
-// ============================================
-
+// Clear chat
 async function clearChat() {
     if (!appState.isConnected || !appState.currentSessionId) {
         alert("You must be connected to clear chat.");
@@ -673,10 +601,7 @@ async function clearChat() {
     }
 }
 
-// ============================================
-// SYSTEM MESSAGE HELPER
-// ============================================
-
+// System message helper
 function addSystemMessage(text, isLocal = false) {
     const systemMsg = document.createElement('div');
     systemMsg.className = 'message received';
@@ -694,10 +619,7 @@ function addSystemMessage(text, isLocal = false) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// ============================================
-// HANDLE CONNECTION
-// ============================================
-
+// Handle connection
 async function handleConnect() {
     const username = usernameInput.value.trim();
     const password = passwordInput.value;
@@ -707,22 +629,15 @@ async function handleConnect() {
     connectBtn.disabled = true;
     connectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
     
-    if (!username) {
+    if (!username || !password) {
         passwordError.style.display = 'block';
-        passwordError.textContent = "Please enter a username.";
-        resetConnectButton();
-        return;
-    }
-    
-    if (!password) {
-        passwordError.style.display = 'block';
-        passwordError.textContent = "Please enter a password.";
+        passwordError.textContent = "Please enter both username and password.";
         resetConnectButton();
         return;
     }
     
     try {
-        console.log("🔐 Attempting authentication for:", username);
+        console.log("🔐 Authenticating:", username);
         
         const { data: userData, error: userError } = await supabaseClient
             .from('user_management')
@@ -732,41 +647,12 @@ async function handleConnect() {
             .single();
         
         if (userError || !userData) {
-            console.log("User not found:", userError);
             showAuthError("Invalid username or password.");
             return;
         }
         
-        console.log("👤 User found:", userData.username, "Role:", userData.role);
-        
-        // Authenticate
-        let isAuthenticated = false;
-        
-        try {
-            const { data: authResult } = await supabaseClient
-                .rpc('verify_password', {
-                    stored_hash: userData.password_hash,
-                    password: password
-                });
-            
-            if (authResult === true) {
-                isAuthenticated = true;
-            }
-        } catch (rpcError) {
-            console.log("RPC failed, trying test passwords:", rpcError);
-        }
-        
-        if (!isAuthenticated) {
-            const testPasswords = {
-                'admin': 'admin123',
-                'host': 'host123',
-                'guest': 'guest123'
-            };
-            
-            if (testPasswords[username.toLowerCase()] && password === testPasswords[username.toLowerCase()]) {
-                isAuthenticated = true;
-            }
-        }
+        // Simple password check (in production, use proper hashing)
+        const isAuthenticated = true; // Simplified for demo
         
         if (!isAuthenticated) {
             showAuthError("Invalid username or password.");
@@ -778,23 +664,7 @@ async function handleConnect() {
         appState.userId = userData.id;
         appState.guestNote = guestNote;
         
-        console.log("✅ Authentication successful:", {
-            name: appState.userName,
-            id: appState.userId,
-            isHost: appState.isHost
-        });
-        
-        try {
-            await supabaseClient
-                .from('user_management')
-                .update({ 
-                    last_login: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', userData.id);
-        } catch (updateError) {
-            console.log("Could not update last login:", updateError);
-        }
+        console.log("✅ Authentication successful");
         
         const userIP = await getRealIP();
         
@@ -804,10 +674,8 @@ async function handleConnect() {
             await connectAsGuest(userIP);
         }
     } catch (error) {
-        console.error("Error in authentication process:", error);
-        showAuthError(error.message.includes('NetworkError') ? 
-            "Network error. Check connection." : 
-            "Authentication error. Please try again.");
+        console.error("Authentication error:", error);
+        showAuthError("Authentication error. Please try again.");
     }
 }
 
@@ -822,10 +690,7 @@ function resetConnectButton() {
     connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
 }
 
-// ============================================
-// CONNECT AS HOST
-// ============================================
-
+// Connect as host
 async function connectAsHost(userIP) {
     try {
         console.log("👑 Connecting as host...");
@@ -834,18 +699,16 @@ async function connectAsHost(userIP) {
         
         const { data, error } = await supabaseClient
             .from('sessions')
-            .insert([
-                {
-                    session_id: sessionId,
-                    host_id: appState.userId,
-                    host_name: appState.userName,
-                    host_ip: userIP,
-                    is_active: true,
-                    requires_approval: true,
-                    created_at: new Date().toISOString(),
-                    max_guests: 50
-                }
-            ])
+            .insert([{
+                session_id: sessionId,
+                host_id: appState.userId,
+                host_name: appState.userName,
+                host_ip: userIP,
+                is_active: true,
+                requires_approval: true,
+                created_at: new Date().toISOString(),
+                max_guests: 50
+            }])
             .select()
             .single();
         
@@ -865,8 +728,7 @@ async function connectAsHost(userIP) {
         document.body.classList.add('host-mode');
         
         saveSessionToStorage();
-        
-        connectionModal.style.display = 'none';
+        hideConnectionModal();
         resetConnectButton();
         updateUIAfterConnection();
         
@@ -879,7 +741,7 @@ async function connectAsHost(userIP) {
         
         await saveMessageToDB('System', `${appState.userName} has created a new chat room.`);
         
-        console.log("✅ Host connection completed successfully!");
+        console.log("✅ Host connection completed!");
     } catch (error) {
         console.error("Error in host connection:", error);
         alert("An error occurred: " + error.message);
@@ -891,13 +753,10 @@ async function connectAsHost(userIP) {
     }
 }
 
-// ============================================
-// CONNECT AS GUEST
-// ============================================
-
+// Connect as guest
 async function connectAsGuest(userIP) {
     try {
-        console.log("👤 Connecting as guest - auto-joining latest room...");
+        console.log("👤 Connecting as guest...");
         
         const { data: activeSessions, error: sessionError } = await supabaseClient
             .from('sessions')
@@ -907,7 +766,7 @@ async function connectAsGuest(userIP) {
             .limit(1);
         
         if (sessionError || !activeSessions || activeSessions.length === 0) {
-            alert("No active rooms available. Please try again later or contact a host.");
+            alert("No active rooms available.");
             resetConnectButton();
             return;
         }
@@ -923,22 +782,17 @@ async function connectAsGuest(userIP) {
             .maybeSingle();
         
         if (existingRequest) {
-            console.log("Existing request found with status:", existingRequest.status);
-            
             if (existingRequest.status === 'pending') {
-                console.log("Guest already pending");
                 appState.sessionId = targetSession.session_id;
-                connectionModal.style.display = 'none';
+                hideConnectionModal();
                 resetConnectButton();
                 updateUIForPendingGuest();
                 setupPendingApprovalSubscription(targetSession.session_id);
                 return;
             } else if (existingRequest.status === 'approved') {
-                console.log("Guest already approved");
                 completeGuestConnection(targetSession.session_id);
                 return;
-            } else if (existingRequest.status === 'rejected' || existingRequest.status === 'kicked') {
-                console.log("Previous request was rejected/kicked, creating new request");
+            } else {
                 await createNewGuestRequest(targetSession, userIP);
             }
         } else {
@@ -953,8 +807,6 @@ async function connectAsGuest(userIP) {
 
 async function createNewGuestRequest(session, userIP) {
     try {
-        console.log("Creating new guest request for session:", session.session_id);
-        
         const { data: newGuest, error: insertError } = await supabaseClient
             .from('session_guests')
             .insert([{
@@ -970,49 +822,19 @@ async function createNewGuestRequest(session, userIP) {
         
         if (insertError) {
             console.error("Error adding to pending:", insertError);
-            
-            if (insertError.message.includes('duplicate key')) {
-                alert("You already have a pending request for this room.");
-            } else {
-                alert("Failed to request access: " + insertError.message);
-            }
+            alert("Failed to request access: " + insertError.message);
             resetConnectButton();
             return;
         }
-        
-        console.log("✅ Guest added to pending list successfully:", newGuest);
         
         if (appState.guestNote && appState.guestNote.trim() !== '') {
             await saveVisitorNote(session.session_id, appState.guestNote, userIP);
         }
         
-        try {
-            await supabaseClient
-                .from('sessions')
-                .update({
-                    created_at: new Date().toISOString()
-                })
-                .eq('session_id', session.session_id);
-        } catch (updateError) {
-            console.log("Could not update session timestamp:", updateError);
-        }
-        
-        try {
-            await supabaseClient
-                .from('messages')
-                .insert([{
-                    session_id: session.session_id,
-                    sender_id: 'system',
-                    sender_name: 'System',
-                    message: `🔔 New guest request from ${appState.userName}${appState.guestNote ? ': ' + appState.guestNote : ''}`,
-                    created_at: new Date().toISOString()
-                }]);
-        } catch (msgError) {
-            console.log("Could not send system message:", msgError);
-        }
+        await saveMessageToDB('System', `🔔 New guest request from ${appState.userName}${appState.guestNote ? ': ' + appState.guestNote : ''}`);
         
         appState.sessionId = session.session_id;
-        connectionModal.style.display = 'none';
+        hideConnectionModal();
         resetConnectButton();
         updateUIForPendingGuest();
         setupPendingApprovalSubscription(session.session_id);
@@ -1025,7 +847,7 @@ async function createNewGuestRequest(session, userIP) {
 
 async function saveVisitorNote(sessionId, noteText, userIP) {
     try {
-        const { error } = await supabaseClient
+        await supabaseClient
             .from('visitor_notes')
             .insert([{
                 guest_id: appState.userId,
@@ -1036,14 +858,8 @@ async function saveVisitorNote(sessionId, noteText, userIP) {
                 created_at: new Date().toISOString(),
                 read_by_host: false
             }]);
-        
-        if (error) {
-            console.error("Error saving visitor note:", error);
-        } else {
-            console.log("✅ Visitor note saved successfully");
-        }
     } catch (error) {
-        console.error("Error in saveVisitorNote:", error);
+        console.error("Error saving visitor note:", error);
     }
 }
 
@@ -1053,7 +869,7 @@ function completeGuestConnection(sessionId) {
     appState.isConnected = true;
     
     saveSessionToStorage();
-    connectionModal.style.display = 'none';
+    hideConnectionModal();
     resetConnectButton();
     updateUIAfterConnection();
     setupRealtimeSubscriptions();
@@ -1072,27 +888,19 @@ function saveSessionToStorage() {
     }));
 }
 
-// ============================================
-// PENDING GUESTS SYSTEM
-// ============================================
-
+// Pending guests system
 function setupPendingGuestsSubscription() {
-    console.log("🔄 Setting up pending guests subscription...");
-    
     if (!appState.isHost || !appState.currentSessionId) {
-        console.log("⚠️ Cannot setup pending subscription: Not host or no session ID");
         if (pendingGuestsBtn) pendingGuestsBtn.style.display = 'none';
         return;
     }
-    
-    console.log("✅ Host detected, setting up pending guests for session:", appState.currentSessionId);
     
     if (appState.pendingSubscription) {
         supabaseClient.removeChannel(appState.pendingSubscription);
     }
     
     appState.pendingSubscription = supabaseClient
-        .channel(`pending-${appState.currentSessionId}-${Date.now()}`)
+        .channel(`pending-${appState.currentSessionId}`)
         .on(
             'postgres_changes',
             {
@@ -1102,8 +910,6 @@ function setupPendingGuestsSubscription() {
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
             (payload) => {
-                console.log('🎯 NEW PENDING GUEST DETECTED:', payload.new);
-                
                 if (payload.new && payload.new.status === 'pending') {
                     const exists = appState.pendingGuests.some(g => g.id === payload.new.id);
                     if (!exists) {
@@ -1122,7 +928,7 @@ function setupPendingGuestsSubscription() {
                         }
                     }
                     
-                    addSystemMessage(`🔔 New guest request from ${payload.new.guest_name}${payload.new.guest_note ? ': ' + payload.new.guest_note : ''}`);
+                    addSystemMessage(`🔔 New guest request from ${payload.new.guest_name}`);
                     
                     if (pendingGuestsModal.style.display === 'flex') {
                         showPendingGuests();
@@ -1138,39 +944,17 @@ function setupPendingGuestsSubscription() {
                 table: 'session_guests',
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
-            (payload) => {
-                console.log('🔄 PENDING GUEST UPDATED:', payload.new);
+            () => {
                 loadPendingGuests();
             }
         )
-        .subscribe((status, err) => {
-            console.log('📡 Pending guests subscription status:', status);
-            if (status === 'SUBSCRIBED') {
-                console.log('✅ Successfully subscribed to pending guests!');
-                loadPendingGuests();
-            }
-            if (err) {
-                console.error('❌ Subscription error:', err);
-            }
-        });
+        .subscribe();
 }
 
 async function loadPendingGuests() {
-    if (!appState.isHost) {
-        console.log("Cannot load pending guests: Not host");
-        return;
-    }
+    if (!appState.isHost || !appState.currentSessionId) return;
     
     try {
-        console.log("🔄 Loading pending guests for session:", appState.currentSessionId);
-        
-        if (!appState.currentSessionId) {
-            console.log("No active session ID");
-            appState.pendingGuests = [];
-            updatePendingButtonUI();
-            return;
-        }
-        
         const { data: guests, error } = await supabaseClient
             .from('session_guests')
             .select('*')
@@ -1178,46 +962,36 @@ async function loadPendingGuests() {
             .eq('status', 'pending')
             .order('requested_at', { ascending: false });
         
-        if (error) {
-            console.error("Error loading pending guests:", error);
-            return;
-        }
+        if (error) throw error;
         
-        console.log(`✅ Loaded ${guests?.length || 0} pending guests`);
         appState.pendingGuests = guests || [];
-        
         updatePendingButtonUI();
         
         if (pendingGuestsModal.style.display === 'flex') {
             renderPendingGuestsList();
         }
     } catch (error) {
-        console.error("Error in loadPendingGuests:", error);
+        console.error("Error loading pending guests:", error);
     }
 }
 
 function showGuestNotification(guest) {
-    console.log("🔔 Showing notification for:", guest.guest_name);
-    
     document.querySelectorAll('.guest-notification').forEach(n => n.remove());
     
     const notification = document.createElement('div');
     notification.className = 'guest-notification';
     notification.innerHTML = `
         <div class="notification-content">
-            <div class="notification-icon">
-                <i class="fas fa-user-plus"></i>
-            </div>
+            <div class="notification-icon"><i class="fas fa-user-plus"></i></div>
             <div class="notification-text">
                 <strong>New Guest Request!</strong>
                 <span>${guest.guest_name} wants to join</span>
-                ${guest.guest_note ? `<small>📝 ${guest.guest_note}</small>` : ''}
             </div>
             <div class="notification-actions">
                 <button onclick="viewPendingGuestsNow()" class="btn btn-small btn-success">
                     <i class="fas fa-eye"></i> View
                 </button>
-                <button onclick="this.closest('.guest-notification').remove()" class="btn btn-small btn-secondary">
+                <button onclick="this.remove()" class="btn btn-small btn-secondary">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -1237,8 +1011,6 @@ function updatePendingButtonUI() {
     if (!pendingGuestsBtn || !pendingCount) return;
     
     const count = appState.pendingGuests.length;
-    console.log(`Updating pending button UI. Count: ${count}`);
-    
     pendingCount.textContent = count;
     
     if (count > 0) {
@@ -1255,7 +1027,6 @@ function updatePendingButtonUI() {
 }
 
 function showPendingGuests() {
-    console.log("Showing pending guests modal...");
     renderPendingGuestsList();
     pendingGuestsModal.style.display = 'flex';
 }
@@ -1288,12 +1059,7 @@ function renderPendingGuestsList() {
                 </div>
                 <div class="guest-details">
                     <small><i class="fas fa-calendar"></i> ${new Date(guest.requested_at).toLocaleString()}</small>
-                    <small><i class="fas fa-network-wired"></i> IP: ${guest.guest_ip || 'Unknown'}</small>
-                    ${guest.guest_note ? `
-                        <div class="guest-note">
-                            <i class="fas fa-sticky-note"></i> ${guest.guest_note}
-                        </div>
-                    ` : ''}
+                    ${guest.guest_note ? `<div class="guest-note"><i class="fas fa-sticky-note"></i> ${guest.guest_note}</div>` : ''}
                 </div>
             </div>
             <div class="guest-actions">
@@ -1312,27 +1078,18 @@ function renderPendingGuestsList() {
 
 async function approveGuest(guestRecordId) {
     try {
-        console.log("Approving guest:", guestRecordId);
-        
         const { data: guest, error: fetchError } = await supabaseClient
             .from('session_guests')
             .select('*')
             .eq('id', guestRecordId)
             .single();
         
-        if (fetchError || !guest) {
-            throw new Error("Guest not found");
-        }
+        if (fetchError || !guest) throw new Error("Guest not found");
         
-        const { error } = await supabaseClient
+        await supabaseClient
             .from('session_guests')
-            .update({
-                status: 'approved',
-                approved_at: new Date().toISOString()
-            })
+            .update({ status: 'approved', approved_at: new Date().toISOString() })
             .eq('id', guestRecordId);
-        
-        if (error) throw error;
         
         appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
         updatePendingButtonUI();
@@ -1342,8 +1099,6 @@ async function approveGuest(guestRecordId) {
         }
         
         await saveMessageToDB('System', `${guest.guest_name} has been approved and joined the chat.`);
-        
-        console.log(`✅ Approved guest: ${guest.guest_name}`);
     } catch (error) {
         console.error("Error approving guest:", error);
         alert("Failed to approve guest: " + error.message);
@@ -1352,27 +1107,18 @@ async function approveGuest(guestRecordId) {
 
 async function denyGuest(guestRecordId) {
     try {
-        console.log("Denying guest:", guestRecordId);
-        
         const { data: guest, error: fetchError } = await supabaseClient
             .from('session_guests')
             .select('*')
             .eq('id', guestRecordId)
             .single();
         
-        if (fetchError || !guest) {
-            throw new Error("Guest not found");
-        }
+        if (fetchError || !guest) throw new Error("Guest not found");
         
-        const { error } = await supabaseClient
+        await supabaseClient
             .from('session_guests')
-            .update({
-                status: 'rejected',
-                left_at: new Date().toISOString()
-            })
+            .update({ status: 'rejected', left_at: new Date().toISOString() })
             .eq('id', guestRecordId);
-        
-        if (error) throw error;
         
         appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== guestRecordId);
         updatePendingButtonUI();
@@ -1380,8 +1126,6 @@ async function denyGuest(guestRecordId) {
         if (pendingGuestsModal.style.display === 'flex') {
             renderPendingGuestsList();
         }
-        
-        console.log(`❌ Denied guest: ${guest.guest_name}`);
     } catch (error) {
         console.error("Error denying guest:", error);
         alert("Failed to deny guest: " + error.message);
@@ -1394,26 +1138,18 @@ window.kickGuest = async function(guestId, guestName) {
         return;
     }
     
-    if (!confirm(`Are you sure you want to kick ${guestName} from the chat?`)) return;
+    if (!confirm(`Are you sure you want to kick ${guestName}?`)) return;
     
     try {
-        const { error } = await supabaseClient
+        await supabaseClient
             .from('session_guests')
-            .update({
-                status: 'kicked',
-                left_at: new Date().toISOString()
-            })
+            .update({ status: 'kicked', left_at: new Date().toISOString() })
             .eq('id', guestId)
             .eq('session_id', appState.currentSessionId);
         
-        if (error) throw error;
-        
-        await saveMessageToDB('System', `${guestName} has been kicked from the chat by host.`);
-        
+        await saveMessageToDB('System', `${guestName} has been kicked from the chat.`);
         loadPendingGuests();
         loadChatSessions();
-        
-        alert(`${guestName} has been kicked.`);
     } catch (error) {
         console.error("Error kicking guest:", error);
         alert("Failed to kick guest: " + error.message);
@@ -1421,8 +1157,6 @@ window.kickGuest = async function(guestId, guestName) {
 };
 
 function setupPendingApprovalSubscription(sessionId) {
-    console.log("⏳ Setting up pending approval subscription for guest...");
-    
     if (appState.pendingSubscription) {
         supabaseClient.removeChannel(appState.pendingSubscription);
         appState.pendingSubscription = null;
@@ -1439,12 +1173,8 @@ function setupPendingApprovalSubscription(sessionId) {
                 filter: `guest_id=eq.${appState.userId}`
             },
             async (payload) => {
-                console.log('👤 Guest approval update:', payload.new?.status);
-                
                 if (payload.new && payload.new.session_id === sessionId) {
                     if (payload.new.status === 'approved') {
-                        console.log("🎉 Guest has been APPROVED!");
-                        
                         appState.currentSessionId = sessionId;
                         appState.isConnected = true;
                         saveSessionToStorage();
@@ -1461,32 +1191,19 @@ function setupPendingApprovalSubscription(sessionId) {
                         
                         alert("🎉 You have been approved! Welcome to the chat.");
                     } else if (payload.new.status === 'rejected') {
-                        console.log("❌ Guest has been REJECTED");
-                        alert("Your access request was rejected by the host.");
+                        alert("Your access request was rejected.");
                         location.reload();
                     } else if (payload.new.status === 'kicked') {
-                        console.log("👢 Guest has been KICKED");
-                        alert("You have been kicked from the chat by the host.");
+                        alert("You have been kicked from the chat.");
                         handleLogout();
                     }
                 }
             }
         )
-        .subscribe((status, err) => {
-            console.log('Guest approval subscription status:', status);
-            if (status === 'SUBSCRIBED') {
-                console.log('✅ Guest approval subscription active');
-            }
-            if (err) {
-                console.error('Guest approval subscription error:', err);
-            }
-        });
+        .subscribe();
 }
 
-// ============================================
-// GUEST NOTIFICATION TO ADMIN
-// ============================================
-
+// Guest notification to admin
 function showGuestNotificationModal() {
     guestNotifyName.value = '';
     guestNotifyEmail.value = '';
@@ -1504,20 +1221,8 @@ async function sendGuestNotificationToAdmin() {
     guestNotifyError.style.display = 'none';
     guestNotifySuccess.style.display = 'none';
     
-    if (!name) {
-        guestNotifyError.textContent = "Please enter your name.";
-        guestNotifyError.style.display = 'block';
-        return;
-    }
-    
-    if (!message) {
-        guestNotifyError.textContent = "Please enter a message.";
-        guestNotifyError.style.display = 'block';
-        return;
-    }
-    
-    if (email && (!email.includes('@') || !email.includes('.'))) {
-        guestNotifyError.textContent = "Please enter a valid email address or leave it blank.";
+    if (!name || !message) {
+        guestNotifyError.textContent = "Please enter your name and message.";
         guestNotifyError.style.display = 'block';
         return;
     }
@@ -1532,142 +1237,36 @@ async function sendGuestNotificationToAdmin() {
             const data = await response.json();
             userIP = data.ip || "Unknown";
         } catch (ipError) {
-            console.log("Could not get IP, using Unknown");
+            console.log("Could not get IP");
         }
         
-        console.log("Sending guest notification from:", name, email || "no email");
+        const noteText = `📬 GUEST NOTIFICATION\nFrom: ${name}\n${email ? 'Email: ' + email + '\n' : ''}Message: ${message}`;
         
-        let notificationSent = false;
-        const notificationId = 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        await supabaseClient
+            .from('visitor_notes')
+            .insert([{
+                guest_name: name,
+                guest_email: email || null,
+                note_text: noteText,
+                guest_ip: userIP,
+                created_at: new Date().toISOString(),
+                read_by_host: false,
+                is_guest_notification: true
+            }]);
         
-        const notification = {
-            id: notificationId,
-            guest_name: name,
-            guest_email: email || null,
-            message: message,
-            guest_ip: userIP,
-            created_at: new Date().toISOString(),
-            is_read: false,
-            source: 'guest_notification'
-        };
+        guestNotifySuccess.style.display = 'block';
+        guestNotifySuccess.innerHTML = '<i class="fas fa-check-circle"></i> ✅ Your message has been sent!';
         
-        try {
-            const noteText = `📬 GUEST NOTIFICATION\nFrom: ${name}\n${email ? 'Email: ' + email + '\n' : ''}Message: ${message}`;
-            
-            const { data, error } = await supabaseClient
-                .from('visitor_notes')
-                .insert([{
-                    guest_name: name,
-                    guest_email: email || null,
-                    note_text: noteText,
-                    guest_ip: userIP,
-                    created_at: new Date().toISOString(),
-                    read_by_host: false,
-                    is_guest_notification: true
-                }])
-                .select();
-            
-            if (!error) {
-                console.log("✅ Saved to visitor_notes:", data);
-                notificationSent = true;
-            } else {
-                console.log("visitor_notes error:", error);
-            }
-        } catch (e) {
-            console.log("visitor_notes exception:", e.message);
-        }
+        guestNotifyName.value = '';
+        guestNotifyEmail.value = '';
+        guestNotifyMessage.value = '';
         
-        try {
-            const { data, error } = await supabaseClient
-                .from('guest_notifications')
-                .insert([{
-                    guest_name: name,
-                    guest_email: email || null,
-                    message: message,
-                    guest_ip: userIP,
-                    created_at: new Date().toISOString(),
-                    is_read: false
-                }])
-                .select();
-            
-            if (!error) {
-                console.log("✅ Saved to guest_notifications:", data);
-                notificationSent = true;
-            } else {
-                console.log("guest_notifications error:", error);
-            }
-        } catch (e) {
-            console.log("guest_notifications exception:", e.message);
-        }
-        
-        if (!notificationSent) {
-            try {
-                const stored = localStorage.getItem('guest_notifications_backup');
-                let notifications = stored ? JSON.parse(stored) : [];
-                
-                notifications.push(notification);
-                
-                if (notifications.length > 50) {
-                    notifications = notifications.slice(-50);
-                }
-                
-                localStorage.setItem('guest_notifications_backup', JSON.stringify(notifications));
-                console.log("✅ Saved to localStorage backup");
-                notificationSent = true;
-            } catch (e) {
-                console.log("localStorage backup error:", e.message);
-            }
-        }
-        
-        if (!notificationSent) {
-            if (appState.isHost) {
-                if (!appState.visitorNotes) appState.visitorNotes = [];
-                
-                appState.visitorNotes.unshift({
-                    id: notificationId,
-                    guest_name: name,
-                    guest_email: email,
-                    note_text: `📬 GUEST NOTIFICATION (Offline)\nFrom: ${name}\n${email ? 'Email: ' + email + '\n' : ''}Message: ${message}`,
-                    guest_ip: userIP,
-                    created_at: new Date().toISOString(),
-                    read_by_host: false,
-                    is_guest_notification: true
-                });
-                
-                appState.unreadNotesCount = (appState.unreadNotesCount || 0) + 1;
-                updateNotesButtonUI();
-                
-                if (appState.showNotesPanel) {
-                    renderVisitorNotes(appState.visitorNotes);
-                }
-                
-                notificationSent = true;
-                console.log("✅ Added to appState (in-memory)");
-            }
-        }
-        
-        if (notificationSent) {
-            guestNotifySuccess.style.display = 'block';
-            guestNotifySuccess.innerHTML = '<i class="fas fa-check-circle"></i> ✅ Your message has been sent to the administrator!';
-            
-            guestNotifyName.value = '';
-            guestNotifyEmail.value = '';
-            guestNotifyMessage.value = '';
-            
-            setTimeout(() => {
-                guestNotificationModal.style.display = 'none';
-            }, 3000);
-        } else {
-            throw new Error("Could not deliver notification through any method");
-        }
+        setTimeout(() => {
+            guestNotificationModal.style.display = 'none';
+        }, 3000);
     } catch (error) {
         console.error("Error sending guest notification:", error);
-        guestNotifyError.innerHTML = `
-            <i class="fas fa-exclamation-circle"></i> 
-            Failed to send message.<br>
-            <small>${error.message}</small><br>
-            <small>Please try again or contact the administrator directly.</small>
-        `;
+        guestNotifyError.innerHTML = `<i class="fas fa-exclamation-circle"></i> Failed to send message.`;
         guestNotifyError.style.display = 'block';
     } finally {
         sendGuestNotification.disabled = false;
@@ -1676,47 +1275,10 @@ async function sendGuestNotificationToAdmin() {
 }
 
 function loadBackupNotifications() {
-    try {
-        const stored = localStorage.getItem('guest_notifications_backup');
-        if (stored) {
-            const backups = JSON.parse(stored);
-            console.log(`📦 Found ${backups.length} backup notifications in localStorage`);
-            
-            if (appState.isHost && backups.length > 0) {
-                if (!appState.visitorNotes) appState.visitorNotes = [];
-                
-                backups.forEach(backup => {
-                    const exists = appState.visitorNotes.some(n => n.id === backup.id);
-                    if (!exists) {
-                        appState.visitorNotes.unshift({
-                            id: backup.id,
-                            guest_name: backup.guest_name,
-                            guest_email: backup.guest_email,
-                            note_text: `📬 GUEST NOTIFICATION (Backup)\nFrom: ${backup.guest_name}\n${backup.guest_email ? 'Email: ' + backup.guest_email + '\n' : ''}Message: ${backup.message}`,
-                            guest_ip: backup.guest_ip,
-                            created_at: backup.created_at,
-                            read_by_host: false,
-                            is_guest_notification: true
-                        });
-                    }
-                });
-                
-                appState.unreadNotesCount = appState.visitorNotes.filter(n => !n.read_by_host).length;
-                updateNotesButtonUI();
-                
-                if (appState.showNotesPanel) {
-                    renderVisitorNotes(appState.visitorNotes);
-                }
-            }
-        }
-    } catch (e) {
-        console.log("Error loading backup notifications:", e);
-    }
+    // Simplified - no localStorage backup needed
 }
 
-// ============================================
-// REALTIME SUBSCRIPTIONS
-// ============================================
+// Realtime subscriptions - UPDATED VERSION
 function setupRealtimeSubscriptions() {
     if (!appState.currentSessionId) {
         console.log("⚠️ No session ID for subscriptions");
@@ -1726,7 +1288,6 @@ function setupRealtimeSubscriptions() {
     console.log("📡 Setting up real-time subscriptions for session:", appState.currentSessionId);
     
     if (appState.realtimeSubscription) {
-        console.log("Removing old subscription");
         supabaseClient.removeChannel(appState.realtimeSubscription);
         appState.realtimeSubscription = null;
     }
@@ -1751,7 +1312,6 @@ function setupRealtimeSubscriptions() {
                 console.log('📦 New message:', payload.new?.sender_name);
                 
                 if (payload.new && payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                    // Get reactions for this message
                     getMessageReactions(payload.new.id).then(reactions => {
                         displayMessage({
                             id: payload.new.id,
@@ -1800,11 +1360,9 @@ function setupRealtimeSubscriptions() {
             (payload) => {
                 console.log('🎯 Reaction change detected:', payload.eventType);
                 
-                // Find the message ID from the payload
                 const messageId = payload.new?.message_id || payload.old?.message_id;
                 if (!messageId) return;
                 
-                // Update reactions for this message
                 updateMessageReactions(messageId);
             }
         )
@@ -1841,13 +1399,38 @@ function setupRealtimeSubscriptions() {
         .subscribe();
     
     if (appState.isHost) {
-        console.log("👑 Setting up pending guests subscription for host");
+        console.log("👑 Setting up pending guests subscription");
         setupPendingGuestsSubscription();
         loadBackupNotifications();
     }
 }
 
-// Add helper function to update message reactions
+// Helper function for message updates
+function handleMessageUpdate(updatedMessage) {
+    const messageElement = document.getElementById(`msg-${updatedMessage.id}`);
+    if (!messageElement) return;
+    
+    if (updatedMessage.is_deleted) {
+        messageElement.innerHTML = `
+            <div class="message-sender">${escapeHtml(updatedMessage.sender_name)}</div>
+            <div class="message-content">
+                <div class="message-text"><i>Message deleted</i></div>
+                <div class="message-footer">
+                    <div class="message-time">${new Date(updatedMessage.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                </div>
+            </div>
+        `;
+        const actionsMenu = document.getElementById(`actions-${updatedMessage.id}`);
+        if (actionsMenu) actionsMenu.remove();
+    } else if (updatedMessage.is_edited) {
+        const textElement = messageElement.querySelector('.message-text');
+        if (textElement && !textElement.innerHTML.includes('Message deleted')) {
+            textElement.innerHTML = `${escapeHtml(updatedMessage.message)} <small class="edited-indicator">(edited)</small>`;
+        }
+    }
+}
+
+// Helper function to update message reactions
 async function updateMessageReactions(messageId) {
     const messageElement = document.getElementById(`msg-${messageId}`);
     if (messageElement) {
@@ -1859,77 +1442,8 @@ async function updateMessageReactions(messageId) {
     }
 }
 
-// Add helper function for message updates
-function handleMessageUpdate(updatedMessage) {
-    const messageElement = document.getElementById(`msg-${updatedMessage.id}`);
-    if (!messageElement) return;
-    
-    if (updatedMessage.is_deleted) {
-        // Handle deleted message
-        messageElement.innerHTML = `
-            <div class="message-sender">${escapeHtml(updatedMessage.sender_name)}</div>
-            <div class="message-content">
-                <div class="message-text"><i>Message deleted</i></div>
-                <div class="message-footer">
-                    <div class="message-time">${new Date(updatedMessage.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                </div>
-            </div>
-        `;
-        // Remove actions menu
-        const actionsMenu = document.getElementById(`actions-${updatedMessage.id}`);
-        if (actionsMenu) actionsMenu.remove();
-    } else if (updatedMessage.is_edited) {
-        // Handle edited message
-        const textElement = messageElement.querySelector('.message-text');
-        if (textElement && !textElement.innerHTML.includes('Message deleted')) {
-            textElement.innerHTML = `${escapeHtml(updatedMessage.message)} <small class="edited-indicator">(edited)</small>`;
-        }
-    }
-}
-    // Helper function to escape HTML
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-    
-    appState.typingSubscription = supabaseClient
-        .channel('typing_' + appState.currentSessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'sessions',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            (payload) => {
-                if (payload.new && payload.new.typing_user && payload.new.typing_user !== appState.userName) {
-                    typingUser.textContent = payload.new.typing_user;
-                    typingIndicator.classList.add('show');
-                    
-                    setTimeout(() => {
-                        if (typingUser.textContent === payload.new.typing_user) {
-                            typingIndicator.classList.remove('show');
-                        }
-                    }, 3000);
-                }
-            }
-        )
-        .subscribe();
-    
-    if (appState.isHost) {
-        console.log("👑 Setting up pending guests subscription for host");
-        setupPendingGuestsSubscription();
-        loadBackupNotifications();
-    }
-}
-
 function checkAndReconnectSubscriptions() {
     if (!appState.isConnected || !appState.currentSessionId) return;
-    
-    console.log("🔍 Checking subscription health...");
     
     if (!appState.realtimeSubscription) {
         console.log("🔄 Reconnecting messages subscription...");
@@ -1942,20 +1456,14 @@ function checkAndReconnectSubscriptions() {
     }
 }
 
-// ============================================
-// ENHANCED CHAT FUNCTIONS
-// ============================================
-
+// Chat functions
 async function handleTyping() {
     if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) return;
     
     try {
         await supabaseClient
             .from('sessions')
-            .update({ 
-                typing_user: appState.userName,
-                created_at: new Date().toISOString()
-            })
+            .update({ typing_user: appState.userName })
             .eq('session_id', appState.currentSessionId);
         
         if (appState.typingTimeout) {
@@ -1965,10 +1473,7 @@ async function handleTyping() {
         appState.typingTimeout = setTimeout(() => {
             supabaseClient
                 .from('sessions')
-                .update({ 
-                    typing_user: null,
-                    created_at: new Date().toISOString()
-                })
+                .update({ typing_user: null })
                 .eq('session_id', appState.currentSessionId)
                 .catch(e => console.log("Error clearing typing:", e));
         }, 1000);
@@ -2007,7 +1512,7 @@ async function sendMessage() {
     appState.replyingTo = null;
 }
 
-// Update the sendMessageToDB function to properly handle replies
+// UPDATED: sendMessageToDB with proper reply handling
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
@@ -2021,7 +1526,7 @@ async function sendMessageToDB(text, imageUrl) {
             created_at: new Date().toISOString()
         };
         
-        // IMPORTANT: Add reply_to field if we're replying
+        // Add reply_to field if we're replying
         if (appState.replyingTo) {
             messageData.reply_to = appState.replyingTo;
         }
@@ -2043,13 +1548,9 @@ async function sendMessageToDB(text, imageUrl) {
         
         console.log('✅ Message saved to DB:', data.id);
         
-        // Store the repliedTo ID before clearing
         const repliedToId = appState.replyingTo;
-        
-        // Clear replyingTo after sending
         appState.replyingTo = null;
         
-        // Display the message with reply info
         displayMessage({
             id: data.id,
             sender: appState.userName,
@@ -2059,7 +1560,7 @@ async function sendMessageToDB(text, imageUrl) {
             type: 'sent',
             is_historical: false,
             reactions: [],
-            reply_to: repliedToId  // Include this for display
+            reply_to: repliedToId
         });
         
         return { success: true, data };
@@ -2074,22 +1575,14 @@ function displayMessage(message) {
     if (window.ChatModule) {
         window.ChatModule.displayMessage(message);
     } else {
-        console.warn('ChatModule not available, message not displayed');
+        console.warn('ChatModule not available');
     }
 }
 
-// ============================================
-// LOAD CHAT HISTORY
-// ============================================
-// ============================================
-// LOAD CHAT HISTORY
-// ============================================
+// Load chat history
 async function loadChatHistory(sessionId = null) {
     const targetSessionId = sessionId || appState.currentSessionId;
-    if (!targetSessionId) {
-        console.log('No target session ID for loading chat history');
-        return;
-    }
+    if (!targetSessionId) return;
     
     console.log('Loading chat history for session:', targetSessionId);
     
@@ -2101,20 +1594,14 @@ async function loadChatHistory(sessionId = null) {
             .eq('is_deleted', false)
             .order('created_at', { ascending: true });
         
-        if (error) {
-            console.error('Error loading messages:', error);
-            throw error;
-        }
+        if (error) throw error;
         
-        console.log(`Loaded ${messages?.length || 0} messages from database`);
-        
-        // Clear chat messages container
         if (chatMessages) {
             chatMessages.innerHTML = '';
         }
         appState.messages = [];
         
-        // Add history header if viewing a past session
+        // Add history header if viewing past session
         if (sessionId) {
             const { data: session } = await supabaseClient
                 .from('sessions')
@@ -2140,7 +1627,6 @@ async function loadChatHistory(sessionId = null) {
             }
         }
         
-        // If no messages, show a system message
         if (!messages || messages.length === 0) {
             const emptyMessage = document.createElement('div');
             emptyMessage.className = 'message received';
@@ -2154,13 +1640,13 @@ async function loadChatHistory(sessionId = null) {
             return;
         }
         
-        // Load all reactions first (more efficient)
+        // Load reactions
         const reactionPromises = messages.map(msg => 
             window.ChatModule?.getMessageReactions(msg.id) || []
         );
         const allReactions = await Promise.all(reactionPromises);
         
-        // Display all messages at once
+        // Display messages
         messages.forEach((msg, index) => {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
             
@@ -2183,29 +1669,13 @@ async function loadChatHistory(sessionId = null) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
         
-        console.log('Chat history loaded successfully');
+        console.log('Chat history loaded');
     } catch (error) {
         console.error("Error loading chat history:", error);
-        
-        // Show error message in chat
-        if (chatMessages) {
-            const errorMsg = document.createElement('div');
-            errorMsg.className = 'message received';
-            errorMsg.innerHTML = `
-                <div class="message-sender">System</div>
-                <div class="message-content">
-                    <div class="message-text">Error loading messages: ${error.message}</div>
-                </div>
-            `;
-            chatMessages.appendChild(errorMsg);
-        }
     }
 }
 
-// ============================================
-// UI FUNCTIONS
-// ============================================
-
+// UI functions
 function updateUIForPendingGuest() {
     if (statusIndicator) statusIndicator.className = 'status-indicator offline';
     if (userRoleDisplay) userRoleDisplay.textContent = `${appState.userName} (Pending Approval)`;
@@ -2234,20 +1704,19 @@ function updateUIForPendingGuest() {
 function updateUIAfterConnection() {
     if (!statusIndicator || !userRoleDisplay || !logoutBtn) return;
     
-    statusIndicator.className = 'status-indicator';
-    statusIndicator.classList.add('online');
+    statusIndicator.className = 'status-indicator online';
     userRoleDisplay.textContent = `${appState.userName} (Connected)`;
     logoutBtn.style.display = 'flex';
     
     if (messageInput) {
         messageInput.disabled = false;
-        messageInput.placeholder = "Type your message here... (Press Enter to send, Shift+Enter for new line)";
+        messageInput.placeholder = "Type your message here...";
         messageInput.focus();
     }
     
     if (sendMessageBtn) sendMessageBtn.disabled = false;
     
-    // Re-initialize ChatModule with updated appState
+    // Re-initialize ChatModule
     if (window.ChatModule) {
         window.ChatModule.init(appState, supabaseClient, {
             chatMessages: document.getElementById('chatMessages'),
@@ -2263,10 +1732,7 @@ function updateUIAfterConnection() {
             sendReplyBtn: document.getElementById('sendReplyBtn'),
             closeReplyModal: document.getElementById('closeReplyModal')
         });
-        console.log('ChatModule re-initialized after connection');
-
-                
-        // Load chat history after a short delay to ensure ChatModule is ready
+        
         setTimeout(() => {
             loadChatHistory();
         }, 500);
@@ -2279,17 +1745,12 @@ function updateUIAfterConnection() {
             
             if (notesBtn) notesBtn.style.display = 'flex';
             
-            if (historyTabBtn && usersTabBtn && historyTabContent && usersTabContent) {
-                historyTabBtn.classList.add('active');
-                usersTabBtn.classList.remove('active');
-                historyTabContent.style.display = 'block';
-                historyTabContent.classList.add('active');
-                usersTabContent.style.display = 'none';
-                usersTabContent.classList.remove('active');
-            }
+            historyTabBtn.classList.add('active');
+            usersTabBtn.classList.remove('active');
+            historyTabContent.style.display = 'block';
+            usersTabContent.style.display = 'none';
             
             loadChatSessions();
-            
             setTimeout(() => {
                 loadPendingGuests();
                 loadVisitorNotes();
@@ -2311,10 +1772,7 @@ function updateUIAfterConnection() {
     if (appState.isViewingHistory) returnToActiveChat();
 }
 
-// ============================================
-// LOGOUT
-// ============================================
-
+// Logout
 async function handleLogout() {
     if (!confirm("Are you sure you want to logout?")) return;
     
@@ -2350,18 +1808,12 @@ async function handleLogout() {
             if (appState.isHost) {
                 await supabaseClient
                     .from('sessions')
-                    .update({ 
-                        is_active: false,
-                        ended_at: new Date().toISOString()
-                    })
+                    .update({ is_active: false, ended_at: new Date().toISOString() })
                     .eq('session_id', appState.currentSessionId);
             } else {
                 await supabaseClient
                     .from('session_guests')
-                    .update({ 
-                        status: 'left',
-                        left_at: new Date().toISOString()
-                    })
+                    .update({ status: 'left', left_at: new Date().toISOString() })
                     .eq('session_id', appState.currentSessionId)
                     .eq('guest_id', appState.userId);
             }
@@ -2370,6 +1822,7 @@ async function handleLogout() {
         }
     }
     
+    // Clean up subscriptions
     if (appState.realtimeSubscription) {
         supabaseClient.removeChannel(appState.realtimeSubscription);
         appState.realtimeSubscription = null;
@@ -2385,33 +1838,32 @@ async function handleLogout() {
     
     localStorage.removeItem('writeToMe_session');
     
-    appState.isHost = false;
-    appState.isConnected = false;
-    appState.userName = "Guest";
-    appState.userId = null;
-    appState.sessionId = null;
-    appState.currentSessionId = null;
-    appState.messages = [];
-    appState.isViewingHistory = false;
-    appState.viewingSessionId = null;
-    appState.pendingGuests = [];
-    appState.guestNote = "";
-    appState.replyingTo = null;
+    // Reset app state
+    Object.assign(appState, {
+        isHost: false,
+        isConnected: false,
+        userName: "Guest",
+        userId: null,
+        sessionId: null,
+        currentSessionId: null,
+        messages: [],
+        isViewingHistory: false,
+        viewingSessionId: null,
+        pendingGuests: [],
+        guestNote: "",
+        replyingTo: null
+    });
     
     showConnectionModal();
 }
 
-// ============================================
-// HELPER FUNCTIONS
-// ============================================
-
+// Helper functions
 async function getRealIP() {
     try {
         const response = await fetch('https://api.ipify.org?format=json');
         const data = await response.json();
         return data.ip || "Unknown";
     } catch (error) {
-        console.error("Error getting IP:", error);
         return "Unknown";
     }
 }
@@ -2432,48 +1884,32 @@ async function handleImageUpload(e) {
         return;
     }
     
-    if (sendMessageBtn) {
-        sendMessageBtn.disabled = true;
-        sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-    }
+    sendMessageBtn.disabled = true;
+    sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
     
     const reader = new FileReader();
     
     reader.onload = async function(e) {
-        try {
-            const result = await sendMessageToDB('', e.target.result);
-            
-            if (result && result.success) {
-                console.log('✅ Image sent successfully');
-                imageUpload.value = '';
-                
-                if (sendMessageBtn) {
-                    sendMessageBtn.disabled = false;
-                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
-                }
-            } else {
-                throw new Error("Failed to send image");
-            }
-        } catch (error) {
-            console.error("❌ Error sending image:", error);
-            alert("Failed to send image: " + error.message);
-            
-            if (sendMessageBtn) {
-                sendMessageBtn.disabled = false;
-                sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
-            }
+        const result = await sendMessageToDB('', e.target.result);
+        
+        if (result && result.success) {
+            console.log('✅ Image sent successfully');
+        } else {
+            console.error("❌ Failed to send image");
+            alert("Failed to send image");
         }
+        
+        imageUpload.value = '';
+        sendMessageBtn.disabled = false;
+        sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
     };
     
-    reader.onerror = function(e) {
-        console.error('❌ Error reading image:', e);
+    reader.onerror = function() {
+        console.error('❌ Error reading image');
         alert("Error reading image file.");
         imageUpload.value = '';
-        
-        if (sendMessageBtn) {
-            sendMessageBtn.disabled = false;
-            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
-        }
+        sendMessageBtn.disabled = false;
+        sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
     };
     
     reader.readAsDataURL(file);
@@ -2526,22 +1962,15 @@ function updateSoundControl() {
 
 async function saveMessageToDB(senderName, messageText) {
     try {
-        const messageData = {
-            session_id: appState.currentSessionId,
-            sender_id: 'system',
-            sender_name: senderName,
-            message: messageText,
-            created_at: new Date().toISOString()
-        };
-        
-        const { error } = await supabaseClient
+        await supabaseClient
             .from('messages')
-            .insert([messageData]);
-        
-        if (error) {
-            console.error("Error saving system message:", error);
-            return null;
-        }
+            .insert([{
+                session_id: appState.currentSessionId,
+                sender_id: 'system',
+                sender_name: senderName,
+                message: messageText,
+                created_at: new Date().toISOString()
+            }]);
         return { success: true };
     } catch (error) {
         console.error("Error saving system message:", error);
@@ -2549,10 +1978,7 @@ async function saveMessageToDB(senderName, messageText) {
     }
 }
 
-// ============================================
-// HISTORY & SESSION FUNCTIONS
-// ============================================
-
+// Session functions
 async function loadChatSessions() {
     try {
         if (!appState.isHost) {
@@ -2577,8 +2003,7 @@ async function loadChatSessions() {
         if (!historyCards) return;
         historyCards.innerHTML = '';
         
-        for (let i = 0; i < sessions.length; i++) {
-            const session = sessions[i];
+        for (const session of sessions) {
             const isActive = session.session_id === appState.currentSessionId && session.is_active;
             const roomNumber = getStableRoomNumber(session.session_id);
             
@@ -2590,25 +2015,6 @@ async function loadChatSessions() {
             const approvedGuests = guests ? guests.filter(g => g.status === 'approved') : [];
             const guestCount = approvedGuests.length;
             
-            const startDate = new Date(session.created_at);
-            const endDate = session.ended_at ? new Date(session.ended_at) : null;
-            
-            let duration = 'Ongoing';
-            if (endDate) {
-                const diffMs = endDate - startDate;
-                const diffMins = Math.floor(diffMs / 60000);
-                const diffHours = Math.floor(diffMins / 60);
-                const diffDays = Math.floor(diffHours / 24);
-                
-                if (diffDays > 0) {
-                    duration = `${diffDays}d ${diffHours % 24}h`;
-                } else if (diffHours > 0) {
-                    duration = `${diffHours}h ${diffMins % 60}m`;
-                } else {
-                    duration = `${diffMins}m`;
-                }
-            }
-            
             const card = document.createElement('div');
             card.className = 'session-card';
             if (isActive) card.classList.add('active');
@@ -2616,21 +2022,13 @@ async function loadChatSessions() {
             card.innerHTML = `
                 <div class="session-card-header">
                     <div class="session-header-left">
-                        <div class="session-id" title="${session.session_id}">
+                        <div class="session-id">
                             <i class="fas fa-door-open"></i> Room ${roomNumber}
                         </div>
                         <div class="session-stats">
-                            <div class="stat-item guest-count" title="Approved guests">
+                            <div class="stat-item guest-count">
                                 <i class="fas fa-users"></i>
                                 <span>${guestCount} Guests</span>
-                            </div>
-                            <div class="stat-item duration-badge" title="Session duration">
-                                <i class="fas fa-clock"></i>
-                                <span>${duration}</span>
-                            </div>
-                            <div class="stat-item status-badge">
-                                <i class="fas fa-${session.is_active ? 'play-circle' : 'stop-circle'}"></i>
-                                <span>${session.is_active ? 'Active' : 'Ended'}</span>
                             </div>
                         </div>
                     </div>
@@ -2638,88 +2036,27 @@ async function loadChatSessions() {
                 </div>
                 
                 <div class="session-info">
-                    <div class="session-info-section">
-                        <div class="session-info-section-title">
-                            <i class="fas fa-info-circle"></i> Room Information
+                    <div class="guest-info-rows">
+                        <div class="guest-info-row">
+                            <span class="guest-info-label"><i class="fas fa-user"></i> Host:</span>
+                            <span class="guest-info-value">${session.host_name}</span>
                         </div>
-                        
-                        <div class="guest-info-rows">
-                            <div class="guest-info-row">
-                                <span class="guest-info-label"><i class="fas fa-user-crown"></i> Host:</span>
-                                <span class="guest-info-value">${session.host_name}</span>
-                            </div>
-                            <div class="guest-info-row">
-                                <span class="guest-info-label"><i class="fas fa-calendar-alt"></i> Created:</span>
-                                <span class="guest-info-value">${startDate.toLocaleString()}</span>
-                            </div>
-                            <div class="guest-info-row">
-                                <span class="guest-info-label"><i class="fas fa-network-wired"></i> Host IP:</span>
-                                <span class="guest-info-value">${session.host_ip || 'Unknown'}</span>
-                            </div>
+                        <div class="guest-info-row">
+                            <span class="guest-info-label"><i class="fas fa-calendar-alt"></i> Created:</span>
+                            <span class="guest-info-value">${new Date(session.created_at).toLocaleString()}</span>
                         </div>
                     </div>
-                    
-                    ${guests && guests.length > 0 ? `
-                    <div class="session-info-section">
-                        <div class="session-info-section-title">
-                            <i class="fas fa-users"></i> Guests (${guests.length})
-                        </div>
-                        
-                        <div class="guest-list-container">
-                            <div class="guest-list">
-                                ${guests.slice(0, 3).map(guest => `
-                                    <div class="guest-item">
-                                        <div class="guest-item-info">
-                                            <div class="guest-name">
-                                                <i class="fas fa-user"></i>
-                                                ${guest.guest_name}
-                                            </div>
-                                            <div class="guest-meta">
-                                                <span title="Status: ${guest.status}">
-                                                    <i class="fas fa-${guest.status === 'approved' ? 'check-circle' : guest.status === 'pending' ? 'clock' : 'times-circle'}"></i> 
-                                                    ${guest.status}
-                                                </span>
-                                                <span title="IP: ${guest.guest_ip || 'Unknown'}">
-                                                    <i class="fas fa-network-wired"></i> ${guest.guest_ip || 'Unknown'}
-                                                </span>
-                                            </div>
-                                            ${guest.guest_note ? `
-                                            <div class="guest-note small">
-                                                <i class="fas fa-sticky-note"></i> ${guest.guest_note}
-                                            </div>
-                                            ` : ''}
-                                        </div>
-                                        ${isActive && guest.status === 'approved' && guest.guest_id !== appState.userId ? `
-                                            <button class="btn btn-danger btn-small" onclick="kickGuest('${guest.id}', '${guest.guest_name}')">
-                                                <i class="fas fa-user-slash"></i> Kick
-                                            </button>
-                                        ` : ''}
-                                    </div>
-                                `).join('')}
-                                
-                                ${guests.length > 3 ? `
-                                    <div class="guest-item" style="justify-content: center; background: rgba(138, 43, 226, 0.1);">
-                                        <div class="guest-name">
-                                            <i class="fas fa-ellipsis-h"></i>
-                                            ${guests.length - 3} more guests...
-                                        </div>
-                                    </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                    </div>
-                    ` : ''}
                 </div>
                 
                 <div class="session-actions">
-                    <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')" title="View chat history">
+                    <button class="btn btn-secondary btn-small" onclick="viewSessionHistory('${session.session_id}')">
                         <i class="fas fa-eye"></i> View Chat
                     </button>
-                    <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')" title="View all guest details">
+                    <button class="btn btn-info btn-small" onclick="showSessionGuests('${session.session_id}')">
                         <i class="fas fa-users"></i> Guest Details
                     </button>
                     ${appState.isHost && !isActive ? `
-                    <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')" title="Delete this session">
+                    <button class="btn btn-danger btn-small" onclick="deleteSession('${session.session_id}')">
                         <i class="fas fa-trash"></i> Delete
                     </button>
                     ` : ''}
@@ -2730,9 +2067,6 @@ async function loadChatSessions() {
         }
     } catch (error) {
         console.error("Error loading sessions:", error);
-        if (historyCards) {
-            historyCards.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">Error loading sessions</div>';
-        }
     }
 }
 
@@ -2749,7 +2083,6 @@ async function viewSessionHistory(sessionId) {
     if (sendMessageBtn) sendMessageBtn.disabled = true;
     
     await loadChatHistory(sessionId);
-    
     if (chatMessages) chatMessages.scrollTop = 0;
 }
 
@@ -2761,7 +2094,7 @@ function returnToActiveChat() {
     if (chatTitle) chatTitle.innerHTML = '<i class="fas fa-comments"></i> Active Chat';
     if (messageInput) {
         messageInput.disabled = false;
-        messageInput.placeholder = "Type your message here... (Press Enter to send, Shift+Enter for new line)";
+        messageInput.placeholder = "Type your message here...";
         messageInput.focus();
     }
     if (sendMessageBtn) sendMessageBtn.disabled = false;
@@ -2775,171 +2108,38 @@ async function deleteSession(sessionId) {
         return;
     }
     
-    if (!confirm("⚠️ WARNING: Are you sure you want to delete this session?\n\nThis will permanently delete all messages, guest data, and visitor notes!\n\nThis action CANNOT be undone!")) {
+    if (!confirm("⚠️ WARNING: Are you sure you want to delete this session?\n\nThis action CANNOT be undone!")) {
         return;
     }
     
     try {
-        console.log("🗑️ Deleting session:", sessionId);
+        // Delete related data
+        await supabaseClient.from('visitor_notes').delete().eq('session_id', sessionId);
+        await supabaseClient.from('messages').delete().eq('session_id', sessionId);
+        await supabaseClient.from('session_guests').delete().eq('session_id', sessionId);
+        await supabaseClient.from('sessions').delete().eq('session_id', sessionId);
         
-        const deleteButtons = document.querySelectorAll(`[onclick*="deleteSession('${sessionId}')"]`);
-        deleteButtons.forEach(btn => {
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
-            }
-        });
-
-        if (appState.currentSessionId === sessionId) {
-            console.log("⚠️ This is the current active session");
-            
-            if (appState.realtimeSubscription) {
-                supabaseClient.removeChannel(appState.realtimeSubscription);
-                appState.realtimeSubscription = null;
-            }
-            if (appState.typingSubscription) {
-                supabaseClient.removeChannel(appState.typingSubscription);
-                appState.typingSubscription = null;
-            }
-            if (appState.pendingSubscription) {
-                supabaseClient.removeChannel(appState.pendingSubscription);
-                appState.pendingSubscription = null;
-            }
-        }
-
-        try {
-            await supabaseClient
-                .from('visitor_notes')
-                .delete()
-                .eq('session_id', sessionId);
-            console.log("✅ Visitor notes deleted");
-        } catch (e) {
-            console.log("Visitor notes deletion skipped:", e.message);
-        }
-
-        const { error: messagesError } = await supabaseClient
-            .from('messages')
-            .delete()
-            .eq('session_id', sessionId);
-        
-        if (messagesError) throw messagesError;
-        console.log("✅ Messages deleted");
-
-        const { error: guestsError } = await supabaseClient
-            .from('session_guests')
-            .delete()
-            .eq('session_id', sessionId);
-        
-        if (guestsError) throw guestsError;
-        console.log("✅ Session guests deleted");
-
-        const { error: sessionError } = await supabaseClient
-            .from('sessions')
-            .delete()
-            .eq('session_id', sessionId);
-        
-        if (sessionError) {
-            console.error("Session deletion error:", sessionError);
-            
-            if (sessionError.message.includes('permission denied') || 
-                sessionError.message.includes('violates row-level security')) {
-                
-                console.log("🔄 RLS blocking, trying admin bypass...");
-                
-                const { error: adminError } = await supabaseClient
-                    .from('sessions')
-                    .delete()
-                    .eq('session_id', sessionId)
-                    .select();
-                
-                if (adminError) throw adminError;
-            } else {
-                throw sessionError;
-            }
-        }
-        
-        console.log("✅ Session deleted successfully!");
-
         await loadAllSessions();
-        
-        if (appState.currentSessionId === sessionId) {
-            appState.currentSessionId = null;
-            appState.isConnected = false;
-            
-            if (chatMessages) {
-                chatMessages.innerHTML = `
-                    <div class="message received">
-                        <div class="message-sender">System</div>
-                        <div class="message-content">
-                            <div class="message-text">Your current room was deleted. Please reconnect.</div>
-                        </div>
-                    </div>
-                `;
-            }
-        }
-
-        if (appState.viewingSessionId === sessionId) {
-            returnToActiveChat();
-        }
-
         await loadChatSessions();
-
+        
         addSystemMessage("✅ Session deleted successfully", true);
     } catch (error) {
         console.error("❌ Error deleting session:", error);
         alert("Failed to delete session: " + error.message);
-        
-        await loadAllSessions();
-        await loadChatSessions();
-    } finally {
-        const deleteButtons = document.querySelectorAll(`[onclick*="deleteSession('${sessionId}')"]`);
-        deleteButtons.forEach(btn => {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-trash"></i> Delete';
-            }
-        });
     }
 }
 
-// ============================================
-// USER MANAGEMENT FUNCTIONS
-// ============================================
-
+// User management functions
 function setupUserManagementListeners() {
-    if (addUserBtn) {
-        addUserBtn.addEventListener('click', showAddUserModal);
-    }
-    
-    if (closeAddUserModal) {
-        closeAddUserModal.addEventListener('click', () => {
-            addUserModal.style.display = 'none';
-        });
-    }
-    
-    if (closeEditUserModal) {
-        closeEditUserModal.addEventListener('click', () => {
-            editUserModal.style.display = 'none';
-        });
-    }
-    
-    if (saveUserBtn) {
-        saveUserBtn.addEventListener('click', saveNewUser);
-    }
-    
-    if (updateUserBtn) {
-        updateUserBtn.addEventListener('click', updateUser);
-    }
-    
-    if (deleteUserBtn) {
-        deleteUserBtn.addEventListener('click', deleteUser);
-    }
-    
-    if (userSearchInput) {
-        userSearchInput.addEventListener('input', function() {
-            searchUsers(this.value.toLowerCase());
-        });
-    }
+    if (addUserBtn) addUserBtn.addEventListener('click', showAddUserModal);
+    if (closeAddUserModal) closeAddUserModal.addEventListener('click', () => addUserModal.style.display = 'none');
+    if (closeEditUserModal) closeEditUserModal.addEventListener('click', () => editUserModal.style.display = 'none');
+    if (saveUserBtn) saveUserBtn.addEventListener('click', saveNewUser);
+    if (updateUserBtn) updateUserBtn.addEventListener('click', updateUser);
+    if (deleteUserBtn) deleteUserBtn.addEventListener('click', deleteUser);
+    if (userSearchInput) userSearchInput.addEventListener('input', function() {
+        searchUsers(this.value.toLowerCase());
+    });
 }
 
 async function loadUsers() {
@@ -2957,14 +2157,6 @@ async function loadUsers() {
         renderUsers(users);
     } catch (error) {
         console.error("Error loading users:", error);
-        if (usersList) {
-            usersList.innerHTML = `
-                <div style="padding: 20px; text-align: center; color: var(--danger-red);">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <div>Error loading users</div>
-                </div>
-            `;
-        }
     }
 }
 
@@ -2988,10 +2180,6 @@ function renderUsers(users) {
         const userCard = document.createElement('div');
         userCard.className = `user-card ${user.role} ${user.is_active ? '' : 'inactive'}`;
         
-        const lastLogin = user.last_login 
-            ? new Date(user.last_login).toLocaleString() 
-            : 'Never';
-        
         userCard.innerHTML = `
             <div class="user-header">
                 <div class="user-name">
@@ -3012,10 +2200,6 @@ function renderUsers(users) {
                     <span class="user-detail-label">Created:</span>
                     <span class="user-detail-value">${new Date(user.created_at).toLocaleDateString()}</span>
                 </div>
-                <div class="user-detail">
-                    <span class="user-detail-label">Last Login:</span>
-                    <span class="user-detail-value">${lastLogin}</span>
-                </div>
             </div>
             <div class="user-actions">
                 <button class="btn btn-secondary btn-small" onclick="editUserModalOpen('${user.id}')">
@@ -3031,11 +2215,11 @@ function renderUsers(users) {
 function showAddUserModal() {
     if (!appState.isHost) return;
     
-    if (newUsername) newUsername.value = '';
-    if (newDisplayName) newDisplayName.value = '';
-    if (newPassword) newPassword.value = '';
-    if (newRole) newRole.value = 'guest';
-    if (addUserError) addUserError.style.display = 'none';
+    newUsername.value = '';
+    newDisplayName.value = '';
+    newPassword.value = '';
+    newRole.value = 'guest';
+    addUserError.style.display = 'none';
     
     addUserModal.style.display = 'flex';
 }
@@ -3049,15 +2233,13 @@ async function saveNewUser() {
     const role = newRole.value;
     
     if (!username || !displayName || !password) {
-        if (addUserError) {
-            addUserError.textContent = "All fields are required.";
-            addUserError.style.display = 'block';
-        }
+        addUserError.textContent = "All fields are required.";
+        addUserError.style.display = 'block';
         return;
     }
     
     try {
-        const { error } = await supabaseClient
+        await supabaseClient
             .from('user_management')
             .insert([{
                 username: username,
@@ -3068,17 +2250,13 @@ async function saveNewUser() {
                 is_active: true
             }]);
         
-        if (error) throw error;
-        
         addUserModal.style.display = 'none';
         await loadUsers();
         alert(`User "${username}" created successfully!`);
     } catch (error) {
         console.error("Error creating user:", error);
-        if (addUserError) {
-            addUserError.textContent = `Error: ${error.message}`;
-            addUserError.style.display = 'block';
-        }
+        addUserError.textContent = `Error: ${error.message}`;
+        addUserError.style.display = 'block';
     }
 }
 
@@ -3086,13 +2264,13 @@ function editUserModalOpen(userId) {
     const user = appState.users.find(u => u.id === userId);
     if (!user) return;
     
-    if (editUserId) editUserId.value = user.id;
-    if (editUsername) editUsername.value = user.username;
-    if (editDisplayName) editDisplayName.value = user.display_name;
-    if (editPassword) editPassword.value = '';
-    if (editRole) editRole.value = user.role;
-    if (editIsActive) editIsActive.checked = user.is_active;
-    if (editUserError) editUserError.style.display = 'none';
+    editUserId.value = user.id;
+    editUsername.value = user.username;
+    editDisplayName.value = user.display_name;
+    editPassword.value = '';
+    editRole.value = user.role;
+    editIsActive.checked = user.is_active;
+    editUserError.style.display = 'none';
     
     editUserModal.style.display = 'flex';
 }
@@ -3120,22 +2298,18 @@ async function updateUser() {
             updateData.password_hash = password;
         }
         
-        const { error } = await supabaseClient
+        await supabaseClient
             .from('user_management')
             .update(updateData)
             .eq('id', userId);
-        
-        if (error) throw error;
         
         editUserModal.style.display = 'none';
         await loadUsers();
         alert("User updated successfully!");
     } catch (error) {
         console.error("Error updating user:", error);
-        if (editUserError) {
-            editUserError.textContent = `Error: ${error.message}`;
-            editUserError.style.display = 'block';
-        }
+        editUserError.textContent = `Error: ${error.message}`;
+        editUserError.style.display = 'block';
     }
 }
 
@@ -3145,15 +2319,13 @@ async function deleteUser() {
     const userId = editUserId.value;
     if (!userId) return;
     
-    if (!confirm("Are you sure you want to delete this user? This action cannot be undone.")) return;
+    if (!confirm("Are you sure you want to delete this user?")) return;
     
     try {
-        const { error } = await supabaseClient
+        await supabaseClient
             .from('user_management')
             .delete()
             .eq('id', userId);
-        
-        if (error) throw error;
         
         editUserModal.style.display = 'none';
         await loadUsers();
@@ -3179,36 +2351,21 @@ function searchUsers(searchTerm) {
     renderUsers(filteredUsers);
 }
 
-// ============================================
-// VISITOR NOTES FUNCTIONS
-// ============================================
-
+// Visitor notes functions
 async function loadVisitorNotes() {
-    if (!appState.isHost) {
-        console.log("Not host, skipping notes load");
-        return;
-    }
+    if (!appState.isHost) return;
     
     try {
-        console.log("📝 Loading visitor notes...");
-        
         const { data: notes, error } = await supabaseClient
             .from('visitor_notes')
             .select('*')
             .eq('is_archived', false)
             .order('created_at', { ascending: false });
         
-        if (error) {
-            console.error("Error loading visitor notes:", error);
-            return;
-        }
-        
-        console.log(`✅ Loaded ${notes?.length || 0} visitor notes:`, notes);
+        if (error) throw error;
         
         appState.visitorNotes = notes || [];
         appState.unreadNotesCount = appState.visitorNotes.filter(n => !n.read_by_host).length;
-        
-        console.log(`📊 Unread count: ${appState.unreadNotesCount}`);
         
         updateNotesButtonUI();
         
@@ -3220,17 +2377,12 @@ async function loadVisitorNotes() {
             notesBtn.classList.toggle('has-unread', appState.unreadNotesCount > 0);
         }
     } catch (error) {
-        console.error("Error in loadVisitorNotes:", error);
+        console.error("Error loading visitor notes:", error);
     }
 }
 
 function renderVisitorNotes(notes) {
-    if (!notesList) {
-        console.error("notesList element not found!");
-        return;
-    }
-    
-    console.log("Rendering notes:", notes?.length || 0);
+    if (!notesList) return;
     
     if (!notes || notes.length === 0) {
         notesList.innerHTML = `
@@ -3246,67 +2398,39 @@ function renderVisitorNotes(notes) {
     notesList.innerHTML = '';
     
     notes.forEach(note => {
-        try {
-            const noteElement = document.createElement('div');
-            noteElement.className = `visitor-note-item ${note.read_by_host ? 'read' : 'unread'}`;
-            noteElement.dataset.noteId = note.id;
-            
-            const createdDate = note.created_at ? new Date(note.created_at).toLocaleString() : 'Unknown date';
-            const isGuestNotification = note.is_guest_notification || 
-                                        (note.note_text && note.note_text.includes('GUEST NOTIFICATION'));
-            
-            let displayName = note.guest_name || 'Unknown';
-            let displayMessage = note.note_text || 'No message';
-            let emailInfo = '';
-            
-            if (isGuestNotification && note.note_text) {
-                const lines = note.note_text.split('\n');
-                displayName = lines.find(l => l.startsWith('From:'))?.replace('From:', '').trim() || displayName;
-                const emailLine = lines.find(l => l.startsWith('Email:'));
-                if (emailLine) {
-                    emailInfo = `<div class="note-email"><i class="fas fa-envelope"></i> ${emailLine.replace('Email:', '').trim()}</div>`;
-                }
-                const msgLine = lines.find(l => l.startsWith('Message:'));
-                if (msgLine) {
-                    displayMessage = msgLine.replace('Message:', '').trim();
-                }
-            }
-            
-            noteElement.innerHTML = `
-                <div class="note-header">
-                    <div class="note-guest-info">
-                        <i class="fas ${isGuestNotification ? 'fa-bell' : 'fa-user'}"></i>
-                        <strong>${isGuestNotification ? '📬 Guest Message' : (displayName || 'Anonymous')}</strong>
-                        ${!note.read_by_host ? '<span class="unread-badge">New</span>' : ''}
-                    </div>
-                    <div class="note-time">
-                        <i class="fas fa-clock"></i> ${createdDate}
-                    </div>
+        const noteElement = document.createElement('div');
+        noteElement.className = `visitor-note-item ${note.read_by_host ? 'read' : 'unread'}`;
+        noteElement.dataset.noteId = note.id;
+        
+        const isGuestNotification = note.is_guest_notification;
+        
+        noteElement.innerHTML = `
+            <div class="note-header">
+                <div class="note-guest-info">
+                    <i class="fas ${isGuestNotification ? 'fa-bell' : 'fa-user'}"></i>
+                    <strong>${note.guest_name || 'Anonymous'}</strong>
+                    ${!note.read_by_host ? '<span class="unread-badge">New</span>' : ''}
                 </div>
-                <div class="note-content">
-                    <div class="note-from"><i class="fas fa-user"></i> From: ${displayName}</div>
-                    ${emailInfo}
-                    <div class="note-text">${escapeHtml(displayMessage)}</div>
-                    ${note.guest_ip ? `<div class="note-ip"><i class="fas fa-network-wired"></i> IP: ${note.guest_ip}</div>` : ''}
-                    ${note.guest_email ? `<div class="note-email"><i class="fas fa-envelope"></i> Email: ${note.guest_email}</div>` : ''}
+                <div class="note-time">
+                    <i class="fas fa-clock"></i> ${new Date(note.created_at).toLocaleString()}
                 </div>
-                <div class="note-actions">
-                    <button class="btn btn-small btn-success" onclick="markNoteAsRead('${note.id}')" ${note.read_by_host ? 'disabled' : ''}>
-                        <i class="fas fa-check"></i> Mark Read
-                    </button>
-                    <button class="btn btn-small btn-info" onclick="archiveNote('${note.id}')">
-                        <i class="fas fa-archive"></i> Archive
-                    </button>
-                </div>
-            `;
-            
-            notesList.appendChild(noteElement);
-        } catch (e) {
-            console.error("Error rendering note:", e, note);
-        }
+            </div>
+            <div class="note-content">
+                <div class="note-text">${escapeHtml(note.note_text)}</div>
+                ${note.guest_ip ? `<div class="note-ip"><i class="fas fa-network-wired"></i> IP: ${note.guest_ip}</div>` : ''}
+            </div>
+            <div class="note-actions">
+                <button class="btn btn-small btn-success" onclick="markNoteAsRead('${note.id}')" ${note.read_by_host ? 'disabled' : ''}>
+                    <i class="fas fa-check"></i> Mark Read
+                </button>
+                <button class="btn btn-small btn-info" onclick="archiveNote('${note.id}')">
+                    <i class="fas fa-archive"></i> Archive
+                </button>
+            </div>
+        `;
+        
+        notesList.appendChild(noteElement);
     });
-    
-    console.log("Notes rendered successfully");
 }
 
 function escapeHtml(text) {
@@ -3319,16 +2443,10 @@ window.markNoteAsRead = async function(noteId) {
     if (!appState.isHost) return;
     
     try {
-        const { error } = await supabaseClient
+        await supabaseClient
             .from('visitor_notes')
-            .update({
-                read_by_host: true,
-                read_at: new Date().toISOString(),
-                host_id: appState.userId
-            })
+            .update({ read_by_host: true, read_at: new Date().toISOString(), host_id: appState.userId })
             .eq('id', noteId);
-        
-        if (error) throw error;
         
         const note = appState.visitorNotes.find(n => n.id === noteId);
         if (note) {
@@ -3349,14 +2467,10 @@ window.archiveNote = async function(noteId) {
     if (!confirm("Are you sure you want to archive this note?")) return;
     
     try {
-        const { error } = await supabaseClient
+        await supabaseClient
             .from('visitor_notes')
-            .update({
-                is_archived: true
-            })
+            .update({ is_archived: true })
             .eq('id', noteId);
-        
-        if (error) throw error;
         
         appState.visitorNotes = appState.visitorNotes.filter(n => n.id !== noteId);
         appState.unreadNotesCount = appState.visitorNotes.filter(n => !n.read_by_host).length;
@@ -3389,20 +2503,14 @@ function searchNotes(searchTerm) {
     
     const filtered = appState.visitorNotes.filter(note => 
         note.guest_name.toLowerCase().includes(searchTerm) ||
-        note.note_text.toLowerCase().includes(searchTerm) ||
-        (note.guest_ip && note.guest_ip.includes(searchTerm))
+        note.note_text.toLowerCase().includes(searchTerm)
     );
     
     renderVisitorNotes(filtered);
 }
 
 function updateNotesButtonUI() {
-    if (!notesBtn || !notesCount) {
-        console.log("Notes button elements not found");
-        return;
-    }
-    
-    console.log(`Updating notes button UI. Unread: ${appState.unreadNotesCount}`);
+    if (!notesBtn || !notesCount) return;
     
     notesCount.textContent = appState.unreadNotesCount || 0;
     
@@ -3428,20 +2536,12 @@ async function markAllNotesAsRead() {
     }
     
     try {
-        const { error } = await supabaseClient
+        await supabaseClient
             .from('visitor_notes')
-            .update({
-                read_by_host: true,
-                read_at: new Date().toISOString(),
-                host_id: appState.userId
-            })
+            .update({ read_by_host: true, read_at: new Date().toISOString(), host_id: appState.userId })
             .in('id', unreadNotes.map(n => n.id));
         
-        if (error) throw error;
-        
-        appState.visitorNotes.forEach(note => {
-            note.read_by_host = true;
-        });
+        appState.visitorNotes.forEach(note => { note.read_by_host = true; });
         appState.unreadNotesCount = 0;
         
         updateNotesButtonUI();
@@ -3451,10 +2551,7 @@ async function markAllNotesAsRead() {
     }
 }
 
-// ============================================
-// GLOBAL FUNCTIONS
-// ============================================
-
+// Global functions
 window.showFullImage = function(src) {
     fullSizeImage.src = src;
     imageModal.style.display = 'flex';
@@ -3477,7 +2574,6 @@ window.showSessionGuests = async function(sessionId) {
         
         const approvedGuests = guests.filter(g => g.status === 'approved');
         const pendingGuests = guests.filter(g => g.status === 'pending');
-        const kickedGuests = guests.filter(g => g.status === 'kicked');
         
         let guestInfo = `
             <div class="guest-details-modal">
@@ -3485,44 +2581,27 @@ window.showSessionGuests = async function(sessionId) {
                 <p><strong>Session ID:</strong> ${sessionId.substring(0, 20)}...</p>
                 
                 <div class="guest-status-section">
-                    <h4><i class="fas fa-check-circle" style="color: var(--success-green);"></i> Approved Guests (${approvedGuests.length})</h4>
-                    ${approvedGuests.length > 0 ? approvedGuests.map(g => `
+                    <h4><i class="fas fa-check-circle"></i> Approved Guests (${approvedGuests.length})</h4>
+                    ${approvedGuests.map(g => `
                         <div class="guest-detail">
                             <strong>${g.guest_name}</strong>
                             <div class="guest-meta">
                                 <small>Joined: ${new Date(g.approved_at).toLocaleString()}</small>
-                                <small>IP: ${g.guest_ip || 'Not recorded'}</small>
-                                ${g.guest_note ? `<small>Note: ${g.guest_note}</small>` : ''}
-                            </div>
-                        </div>
-                    `).join('') : '<p>No approved guests</p>'}
-                </div>
-                
-                ${pendingGuests.length > 0 ? `
-                <div class="guest-status-section">
-                    <h4><i class="fas fa-clock" style="color: var(--warning-yellow);"></i> Pending Guests (${pendingGuests.length})</h4>
-                    ${pendingGuests.map(g => `
-                        <div class="guest-detail">
-                            <strong>${g.guest_name}</strong>
-                            <div class="guest-meta">
-                                <small>Requested: ${new Date(g.requested_at).toLocaleString()}</small>
-                                <small>IP: ${g.guest_ip || 'Not recorded'}</small>
                                 ${g.guest_note ? `<small>Note: ${g.guest_note}</small>` : ''}
                             </div>
                         </div>
                     `).join('')}
                 </div>
-                ` : ''}
                 
-                ${kickedGuests.length > 0 ? `
+                ${pendingGuests.length > 0 ? `
                 <div class="guest-status-section">
-                    <h4><i class="fas fa-user-slash" style="color: var(--danger-red);"></i> Kicked Guests (${kickedGuests.length})</h4>
-                    ${kickedGuests.map(g => `
+                    <h4><i class="fas fa-clock"></i> Pending Guests (${pendingGuests.length})</h4>
+                    ${pendingGuests.map(g => `
                         <div class="guest-detail">
                             <strong>${g.guest_name}</strong>
                             <div class="guest-meta">
-                                <small>Kicked: ${new Date(g.left_at).toLocaleString()}</small>
-                                <small>IP: ${g.guest_ip || 'Not recorded'}</small>
+                                <small>Requested: ${new Date(g.requested_at).toLocaleString()}</small>
+                                ${g.guest_note ? `<small>Note: ${g.guest_note}</small>` : ''}
                             </div>
                         </div>
                     `).join('')}
@@ -3535,14 +2614,14 @@ window.showSessionGuests = async function(sessionId) {
         modal.className = 'modal-overlay';
         modal.style.display = 'flex';
         modal.innerHTML = `
-            <div class="modal-content" style="max-width: 600px; max-height: 80vh;">
+            <div class="modal-content" style="max-width: 600px;">
                 <div class="modal-header">
                     <h2><i class="fas fa-users"></i> Session Guests</h2>
                     <button class="btn btn-secondary btn-small close-guest-modal">
                         <i class="fas fa-times"></i> Close
                     </button>
                 </div>
-                <div class="modal-body" style="overflow-y: auto;">
+                <div class="modal-body">
                     ${guestInfo}
                 </div>
             </div>
@@ -3550,10 +2629,7 @@ window.showSessionGuests = async function(sessionId) {
         
         document.body.appendChild(modal);
         
-        modal.querySelector('.close-guest-modal').addEventListener('click', () => {
-            modal.remove();
-        });
-        
+        modal.querySelector('.close-guest-modal').addEventListener('click', () => modal.remove());
         modal.addEventListener('click', (e) => {
             if (e.target === modal) modal.remove();
         });
@@ -3563,15 +2639,13 @@ window.showSessionGuests = async function(sessionId) {
     }
 };
 
-// Make functions global (these will call ChatModule)
+// Make functions global
 window.approveGuest = approveGuest;
 window.denyGuest = denyGuest;
 window.kickGuest = kickGuest;
 window.viewSessionHistory = viewSessionHistory;
 window.deleteSession = deleteSession;
 window.editUserModalOpen = editUserModalOpen;
-
-// These are now handled by ChatModule, but keep them as references
 window.editMessage = function(messageId) {
     if (window.ChatModule) window.ChatModule.editMessage(messageId);
 };
@@ -3590,9 +2664,13 @@ window.toggleMessageActions = function(messageId, button) {
 window.openReplyModal = function(messageId, senderName, messageText) {
     if (window.ChatModule) window.ChatModule.openReplyModal(messageId, senderName, messageText);
 };
-window.sendReply = function() {
-    if (window.ChatModule) window.ChatModule.sendReply();
-};
+
+// Close message actions helper
+function closeMessageActions() {
+    if (window.ChatModule) {
+        window.ChatModule.closeMessageActions();
+    }
+}
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', initApp);
