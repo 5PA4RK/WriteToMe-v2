@@ -1924,6 +1924,45 @@ function setupRealtimeSubscriptions() {
         if (err) {
             console.error('❌ Messages subscription error:', err);
         }
+
+        // Add this inside setupRealtimeSubscriptions function, after the messages subscription
+
+// Subscribe to message reactions
+supabaseClient
+.channel('reactions_' + appState.currentSessionId)
+.on(
+    'postgres_changes',
+    {
+        event: '*', // Listen to INSERT, UPDATE, DELETE
+        schema: 'public',
+        table: 'message_reactions',
+        filter: `message_id=in.(select id from messages where session_id=eq.${appState.currentSessionId})`
+    },
+    async (payload) => {
+        console.log('🎯 Reaction update detected:', payload);
+        
+        // Find the message element
+        const messageId = payload.new?.message_id || payload.old?.message_id;
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        
+        if (messageElement) {
+            // Get updated reactions for this message
+            const reactions = await window.ChatModule.getMessageReactions(messageId);
+            
+            // Update reactions display
+            const reactionsContainer = messageElement.querySelector('.message-reactions');
+            if (reactionsContainer && window.ChatModule) {
+                window.ChatModule.renderReactions(reactionsContainer, reactions);
+            }
+        }
+    }
+)
+.subscribe((status, err) => {
+    console.log('📡 REACTIONS Subscription status:', status);
+    if (err) {
+        console.error('❌ Reactions subscription error:', err);
+    }
+});
     });
 
     // Helper function to escape HTML
