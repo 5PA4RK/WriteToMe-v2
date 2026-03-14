@@ -2057,7 +2057,7 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to_id: appState.replyingTo || null  // Use reply_to_id
+            reply_to_id: appState.replyingTo || null  // Make sure this is reply_to_id
         };
         
         console.log('Message data with reply_to_id:', messageData);
@@ -2094,7 +2094,7 @@ async function sendMessageToDB(text, imageUrl) {
                 type: 'sent',
                 is_historical: false,
                 reactions: reactions,
-                reply_to_id: appState.replyingTo
+                reply_to_id: appState.replyingTo  // Pass reply_to_id
             });
         }
         
@@ -2198,34 +2198,27 @@ async function loadChatHistory(sessionId = null) {
         const allReactions = await Promise.all(reactionPromises);
         
         // Display all messages at once
-        messages.forEach((msg, index) => {
-            const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
-            
-            if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-                window.ChatModule.displayMessage({
-                    id: msg.id,
-                    sender: msg.sender_name,
-                    text: msg.message,
-                    image: msg.image_url,
-                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    type: messageType,
-                    is_historical: !!sessionId,
-                    reactions: allReactions[index] || [],
-                    reply_to: msg.reply_to  // Make sure this is included
-                });
-            } else {
-                // Fallback to old display method
-                displayMessage({
-                    id: msg.id,
-                    sender: msg.sender_name,
-                    text: msg.message,
-                    image: msg.image_url,
-                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    type: messageType,
-                    is_historical: !!sessionId
-                });
-            }
+// In loadChatHistory function, find this section and update it:
+
+// Display all messages at once
+messages.forEach((msg, index) => {
+    const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
+    
+    if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
+        // Make sure we're passing the correct reply_to_id
+        window.ChatModule.displayMessage({
+            id: msg.id,
+            sender: msg.sender_name,
+            text: msg.message,
+            image: msg.image_url,
+            time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            type: messageType,
+            is_historical: !!sessionId,
+            reactions: allReactions[index] || [],
+            reply_to_id: msg.reply_to_id || msg.reply_to || null  // Try both fields
         });
+    }
+});
         
         if (chatMessages) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
