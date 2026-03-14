@@ -56,12 +56,14 @@ async function sendReply() {
         // Store the replyingTo ID before clearing
         const replyToId = appState.replyingTo;
         
-        messageInput.value = replyText;
+        // Clear modal first
         replyModal.style.display = 'none';
         
-        // Make sure replyingTo is still set when sending
+        // Set message input and replyingTo
+        messageInput.value = replyText;
         appState.replyingTo = replyToId;
         
+        // Send the message
         await sendMessage();
     }
 }
@@ -1715,7 +1717,6 @@ function loadBackupNotifications() {
 // ============================================
 // REALTIME SUBSCRIPTIONS
 // ============================================
-
 function setupRealtimeSubscriptions() {
     if (!appState.currentSessionId) {
         console.log("⚠️ No session ID for subscriptions");
@@ -1735,42 +1736,42 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
+    // Create a single channel for all message-related events
     appState.realtimeSubscription = supabaseClient
-        .channel('messages_' + appState.currentSessionId)
+        .channel(`room-${appState.currentSessionId}`)
         .on(
             'postgres_changes',
             {
                 event: 'INSERT',
                 schema: 'public',
-                table: 'messages'
+                table: 'messages',
+                filter: `session_id=eq.${appState.currentSessionId}`
             },
             (payload) => {
-                console.log('📦 Realtime message received:', payload.new?.sender_name);
+                console.log('📦 New message:', payload.new?.sender_name);
                 
-                if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                    if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                        // Get reactions for this message
-                        getMessageReactions(payload.new.id).then(reactions => {
-                            displayMessage({
-                                id: payload.new.id,
-                                sender: payload.new.sender_name,
-                                text: payload.new.message,
-                                image: payload.new.image_url,
-                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                                type: 'received',
-                                is_historical: false,
-                                reactions: reactions,
-                                reply_to: payload.new.reply_to
-                            });
+                if (payload.new && payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                    // Get reactions for this message
+                    getMessageReactions(payload.new.id).then(reactions => {
+                        displayMessage({
+                            id: payload.new.id,
+                            sender: payload.new.sender_name,
+                            text: payload.new.message,
+                            image: payload.new.image_url,
+                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                            type: 'received',
+                            is_historical: false,
+                            reactions: reactions,
+                            reply_to: payload.new.reply_to
                         });
-                        
-                        if (appState.soundEnabled && !payload.new.is_notification) {
-                            try {
-                                messageSound.currentTime = 0;
-                                messageSound.play().catch(e => console.log("Audio play failed:", e));
-                            } catch (e) {
-                                console.log("Audio error:", e);
-                            }
+                    });
+                    
+                    if (appState.soundEnabled && !payload.new.is_notification) {
+                        try {
+                            messageSound.currentTime = 0;
+                            messageSound.play().catch(e => console.log("Audio play failed:", e));
+                        } catch (e) {
+                            console.log("Audio error:", e);
                         }
                     }
                 }
@@ -1786,42 +1787,9 @@ function setupRealtimeSubscriptions() {
             },
             (payload) => {
                 console.log('📝 Message updated:', payload.new?.id);
-                
-                const messageElement = document.getElementById(`msg-${payload.new.id}`);
-                if (messageElement) {
-                    if (payload.new.is_deleted) {
-                        // Handle deleted message
-                        messageElement.innerHTML = `
-                            <div class="message-sender">${escapeHtml(payload.new.sender_name)}</div>
-                            <div class="message-content">
-                                <div class="message-text"><i>Message deleted</i></div>
-                                <div class="message-footer">
-                                    <div class="message-time">${new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                                </div>
-                            </div>
-                        `;
-                        // Remove actions menu
-                        const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
-                        if (actionsMenu) actionsMenu.remove();
-                    } else {
-                        // Handle edited message
-                        const textElement = messageElement.querySelector('.message-text');
-                        if (textElement && !textElement.innerHTML.includes('Message deleted')) {
-                            textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
-                        }
-                    }
-                    
-                    // Update reactions
-                    getMessageReactions(payload.new.id).then(reactions => {
-                        const reactionsContainer = messageElement.querySelector('.message-reactions');
-                        if (reactionsContainer && window.ChatModule) {
-                            window.ChatModule.renderReactions(reactionsContainer, reactions);
-                        }
-                    });
-                }
+                handleMessageUpdate(payload.new);
             }
         )
-        // Add reaction changes subscription
         .on(
             'postgres_changes',
             {
@@ -1836,27 +1804,88 @@ function setupRealtimeSubscriptions() {
                 const messageId = payload.new?.message_id || payload.old?.message_id;
                 if (!messageId) return;
                 
-                // Find the message element in the DOM
-                const messageElement = document.getElementById(`msg-${messageId}`);
-                if (messageElement) {
-                    // Get updated reactions and render them
-                    getMessageReactions(messageId).then(reactions => {
-                        const reactionsContainer = messageElement.querySelector('.message-reactions');
-                        if (reactionsContainer && window.ChatModule) {
-                            window.ChatModule.renderReactions(reactionsContainer, reactions);
-                        }
-                    });
-                }
+                // Update reactions for this message
+                updateMessageReactions(messageId);
             }
         )
         .subscribe((status, err) => {
-            console.log('📡 MESSAGES Subscription status:', status);
+            console.log('📡 Subscription status:', status);
             if (err) {
-                console.error('❌ Messages subscription error:', err);
+                console.error('❌ Subscription error:', err);
             }
         });
+    
+    appState.typingSubscription = supabaseClient
+        .channel(`typing-${appState.currentSessionId}`)
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'sessions',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                if (payload.new && payload.new.typing_user && payload.new.typing_user !== appState.userName) {
+                    typingUser.textContent = payload.new.typing_user;
+                    typingIndicator.classList.add('show');
+                    
+                    setTimeout(() => {
+                        if (typingUser.textContent === payload.new.typing_user) {
+                            typingIndicator.classList.remove('show');
+                        }
+                    }, 3000);
+                }
+            }
+        )
+        .subscribe();
+    
+    if (appState.isHost) {
+        console.log("👑 Setting up pending guests subscription for host");
+        setupPendingGuestsSubscription();
+        loadBackupNotifications();
+    }
+}
 
+// Add helper function to update message reactions
+async function updateMessageReactions(messageId) {
+    const messageElement = document.getElementById(`msg-${messageId}`);
+    if (messageElement) {
+        const reactions = await getMessageReactions(messageId);
+        const reactionsContainer = messageElement.querySelector('.message-reactions');
+        if (reactionsContainer && window.ChatModule) {
+            window.ChatModule.renderReactions(reactionsContainer, reactions);
+        }
+    }
+}
 
+// Add helper function for message updates
+function handleMessageUpdate(updatedMessage) {
+    const messageElement = document.getElementById(`msg-${updatedMessage.id}`);
+    if (!messageElement) return;
+    
+    if (updatedMessage.is_deleted) {
+        // Handle deleted message
+        messageElement.innerHTML = `
+            <div class="message-sender">${escapeHtml(updatedMessage.sender_name)}</div>
+            <div class="message-content">
+                <div class="message-text"><i>Message deleted</i></div>
+                <div class="message-footer">
+                    <div class="message-time">${new Date(updatedMessage.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                </div>
+            </div>
+        `;
+        // Remove actions menu
+        const actionsMenu = document.getElementById(`actions-${updatedMessage.id}`);
+        if (actionsMenu) actionsMenu.remove();
+    } else if (updatedMessage.is_edited) {
+        // Handle edited message
+        const textElement = messageElement.querySelector('.message-text');
+        if (textElement && !textElement.innerHTML.includes('Message deleted')) {
+            textElement.innerHTML = `${escapeHtml(updatedMessage.message)} <small class="edited-indicator">(edited)</small>`;
+        }
+    }
+}
     // Helper function to escape HTML
 function escapeHtml(text) {
     if (!text) return '';
@@ -1977,6 +2006,8 @@ async function sendMessage() {
     messageInput.style.height = 'auto';
     appState.replyingTo = null;
 }
+
+// Update the sendMessageToDB function to properly handle replies
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
@@ -1987,9 +2018,13 @@ async function sendMessageToDB(text, imageUrl) {
             sender_id: appState.userId,
             sender_name: appState.userName,
             message: text || '',
-            created_at: new Date().toISOString(),
-            reply_to: appState.replyingTo || null  // Make sure this is included
+            created_at: new Date().toISOString()
         };
+        
+        // IMPORTANT: Add reply_to field if we're replying
+        if (appState.replyingTo) {
+            messageData.reply_to = appState.replyingTo;
+        }
         
         if (imageUrl) {
             messageData.image_url = imageUrl;
@@ -2008,10 +2043,13 @@ async function sendMessageToDB(text, imageUrl) {
         
         console.log('✅ Message saved to DB:', data.id);
         
-        // Clear replyingTo after sending
+        // Store the repliedTo ID before clearing
         const repliedToId = appState.replyingTo;
+        
+        // Clear replyingTo after sending
         appState.replyingTo = null;
         
+        // Display the message with reply info
         displayMessage({
             id: data.id,
             sender: appState.userName,
@@ -2021,7 +2059,7 @@ async function sendMessageToDB(text, imageUrl) {
             type: 'sent',
             is_historical: false,
             reactions: [],
-            reply_to: repliedToId  // Include this
+            reply_to: repliedToId  // Include this for display
         });
         
         return { success: true, data };
