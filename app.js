@@ -1714,117 +1714,7 @@ function loadBackupNotifications() {
 // REALTIME SUBSCRIPTIONS
 // ============================================
 
-function setupRealtimeSubscriptions() {
-    if (!appState.currentSessionId) {
-        console.log("⚠️ No session ID for subscriptions");
-        return;
-    }
-    
-    console.log("📡 Setting up real-time subscriptions for session:", appState.currentSessionId);
-    
-    if (appState.realtimeSubscription) {
-        console.log("Removing old subscription");
-        supabaseClient.removeChannel(appState.realtimeSubscription);
-        appState.realtimeSubscription = null;
-    }
-    
-    if (appState.typingSubscription) {
-        supabaseClient.removeChannel(appState.typingSubscription);
-        appState.typingSubscription = null;
-    }
-    
-    appState.realtimeSubscription = supabaseClient
-    .channel('messages_' + appState.currentSessionId)
-    .on(
-        'postgres_changes',
-        {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'messages'
-        },
-        (payload) => {
-            console.log('📦 Realtime message received:', payload.new?.sender_name);
-            
-            if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                    // Get reactions for this message
-                    getMessageReactions(payload.new.id).then(reactions => {
-                        displayMessage({
-                            id: payload.new.id,
-                            sender: payload.new.sender_name,
-                            text: payload.new.message,
-                            image: payload.new.image_url,
-                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                            type: 'received',
-                            is_historical: false,
-                            reactions: reactions,
-                            reply_to: payload.new.reply_to
-                        });
-                    });
-                    
-                    if (appState.soundEnabled && !payload.new.is_notification) {
-                        try {
-                            messageSound.currentTime = 0;
-                            messageSound.play().catch(e => console.log("Audio play failed:", e));
-                        } catch (e) {
-                            console.log("Audio error:", e);
-                        }
-                    }
-                }
-            }
-        }
-    )
-    .on(
-        'postgres_changes',
-        {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'messages',
-            filter: `session_id=eq.${appState.currentSessionId}`
-        },
-        (payload) => {
-            console.log('📝 Message updated:', payload.new?.id);
-            
-            const messageElement = document.getElementById(`msg-${payload.new.id}`);
-            if (messageElement) {
-                if (payload.new.is_deleted) {
-                    // Handle deleted message
-                    messageElement.innerHTML = `
-                        <div class="message-sender">${escapeHtml(payload.new.sender_name)}</div>
-                        <div class="message-content">
-                            <div class="message-text"><i>Message deleted</i></div>
-                            <div class="message-footer">
-                                <div class="message-time">${new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                            </div>
-                        </div>
-                    `;
-                    // Remove actions menu
-                    const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
-                    if (actionsMenu) actionsMenu.remove();
-                } else {
-                    // Handle edited message
-                    const textElement = messageElement.querySelector('.message-text');
-                    if (textElement && !textElement.innerHTML.includes('Message deleted')) {
-                        textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
-                    }
-                }
-                
-                // Update reactions
-                getMessageReactions(payload.new.id).then(reactions => {
-                    const reactionsContainer = messageElement.querySelector('.message-reactions');
-                    if (reactionsContainer && window.ChatModule) {
-                        window.ChatModule.renderReactions(reactionsContainer, reactions);
-                    }
-                });
-            }
-        }
-    )
-    .subscribe((status, err) => {
-        console.log('📡 MESSAGES Subscription status:', status);
-        if (err) {
-            console.error('❌ Messages subscription error:', err);
-        }
-    });
+
 
     // Helper function to escape HTML
 function escapeHtml(text) {
@@ -1864,7 +1754,7 @@ function escapeHtml(text) {
         setupPendingGuestsSubscription();
         loadBackupNotifications();
     }
-}
+
 
 function checkAndReconnectSubscriptions() {
     if (!appState.isConnected || !appState.currentSessionId) return;
@@ -1998,18 +1888,83 @@ async function sendMessageToDB(text, imageUrl) {
         return null;
     }
 }
-
+// Display a message in the chat
 function displayMessage(message) {
-    if (window.ChatModule) {
-        window.ChatModule.displayMessage(message);
-    } else {
-        console.warn('ChatModule not available, message not displayed');
+    console.log('Displaying message:', message);
+    
+    if (!chatMessages) {
+        console.error('Chat messages container not found');
+        return;
     }
+    
+    if (appState && appState.isViewingHistory && message.is_historical === false) {
+        return;
+    }
+    
+    // Check if message already exists
+    if (document.getElementById(`msg-${message.id}`)) {
+        console.log('Message already exists, skipping');
+        return;
+    }
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${message.type}`;
+    if (message.is_historical) {
+        messageDiv.classList.add('historical');
+    }
+    messageDiv.id = `msg-${message.id}`;
+    
+    let messageContent = '';
+    
+    // Add reply reference if this is a reply
+    if (message.reply_to) {
+        messageContent += `<div class="message-reply-ref"><i class="fas fa-reply"></i> Replying to a message</div>`;
+    }
+    
+    if (message.text) {
+        messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
+    }
+    
+    if (message.image) {
+        messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
+    }
+    
+    // Add reactions section
+    const reactionsHtml = `<div class="message-reactions"></div>`;
+    
+    // Add action button (three dots) - only for non-system messages and if user is sender
+    const actionButton = message.sender !== 'System' ? 
+        `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>` : '';
+    
+    messageDiv.innerHTML = `
+        <div class="message-sender">${escapeHtml(message.sender)}</div>
+        <div class="message-content">
+            ${messageContent}
+            ${reactionsHtml}
+            <div class="message-footer">
+                <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
+                ${actionButton}
+            </div>
+        </div>
+    `;
+    
+    chatMessages.appendChild(messageDiv);
+    
+    // Render existing reactions
+    const reactionsContainer = messageDiv.querySelector('.message-reactions');
+    if (message.reactions && message.reactions.length > 0) {
+        renderReactions(reactionsContainer, message.reactions);
+    }
+    
+    // Store in appState.messages if available
+    if (appState && appState.messages && Array.isArray(appState.messages)) {
+        appState.messages.push(message);
+    }
+    
+    // Scroll to bottom
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// ============================================
-// LOAD CHAT HISTORY
-// ============================================
 // ============================================
 // LOAD CHAT HISTORY
 // ============================================
@@ -2043,6 +1998,21 @@ async function loadChatHistory(sessionId = null) {
         }
         appState.messages = [];
         
+        // Add system welcome message if no messages
+        if (!messages || messages.length === 0) {
+            const welcomeMsg = document.createElement('div');
+            welcomeMsg.className = 'message received';
+            welcomeMsg.innerHTML = `
+                <div class="message-sender">System</div>
+                <div class="message-content">
+                    <div class="message-text">Welcome to the chat room! Start the conversation.</div>
+                    <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                </div>
+            `;
+            chatMessages.appendChild(welcomeMsg);
+            return;
+        }
+        
         // Add history header if viewing a past session
         if (sessionId) {
             const { data: session } = await supabaseClient
@@ -2063,33 +2033,20 @@ async function loadChatHistory(sessionId = null) {
                             <i class="fas fa-door-open"></i> Chat History - Room ${roomNumber}
                             <br><small>Host: ${session.host_name} | Date: ${new Date(session.created_at).toLocaleDateString()}</small>
                         </div>
+                        <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                     </div>
                 `;
                 chatMessages.appendChild(historyHeader);
             }
         }
         
-        // If no messages, show a system message
-        if (!messages || messages.length === 0) {
-            const emptyMessage = document.createElement('div');
-            emptyMessage.className = 'message received';
-            emptyMessage.innerHTML = `
-                <div class="message-sender">System</div>
-                <div class="message-content">
-                    <div class="message-text">No messages in this room yet.</div>
-                </div>
-            `;
-            chatMessages.appendChild(emptyMessage);
-            return;
-        }
-        
         // Load all reactions first (more efficient)
         const reactionPromises = messages.map(msg => 
-            window.ChatModule?.getMessageReactions(msg.id) || []
+            window.ChatModule?.getMessageReactions(msg.id) || Promise.resolve([])
         );
         const allReactions = await Promise.all(reactionPromises);
         
-        // Display all messages at once
+        // Display all messages
         messages.forEach((msg, index) => {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
             
@@ -2105,9 +2062,33 @@ async function loadChatHistory(sessionId = null) {
                     reactions: allReactions[index] || [],
                     reply_to: msg.reply_to
                 });
+            } else {
+                // Fallback display if ChatModule not available
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${messageType}`;
+                if (sessionId) {
+                    messageDiv.classList.add('historical');
+                }
+                messageDiv.id = `msg-${msg.id}`;
+                
+                let messageContent = msg.message || '';
+                if (msg.image_url) {
+                    messageContent += `<img src="${msg.image_url}" class="message-image" onclick="window.showFullImage('${msg.image_url}')">`;
+                }
+                
+                messageDiv.innerHTML = `
+                    <div class="message-sender">${escapeHtml(msg.sender_name)}</div>
+                    <div class="message-content">
+                        <div class="message-text">${messageContent}</div>
+                        <div class="message-time">${new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                    </div>
+                `;
+                
+                chatMessages.appendChild(messageDiv);
             }
         });
         
+        // Scroll to bottom
         if (chatMessages) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
@@ -2124,13 +2105,13 @@ async function loadChatHistory(sessionId = null) {
                 <div class="message-sender">System</div>
                 <div class="message-content">
                     <div class="message-text">Error loading messages: ${error.message}</div>
+                    <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                 </div>
             `;
             chatMessages.appendChild(errorMsg);
         }
     }
 }
-
 // ============================================
 // UI FUNCTIONS
 // ============================================
