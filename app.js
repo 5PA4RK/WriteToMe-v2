@@ -32,7 +32,8 @@ const appState = {
     showNotesPanel: false,
     allSessions: [],
     replyingTo: null,
-    activeMessageActions: null
+    activeMessageActions: null,
+    isLoadingHistory: false  // ADD THIS LINE
 };
 
 
@@ -2017,6 +2018,10 @@ async function handleTyping() {
     }
 }
 
+// ============================================
+// ENHANCED CHAT FUNCTIONS
+// ============================================
+
 async function sendMessage() {
     if (!appState.isConnected || appState.isViewingHistory) {
         alert("You cannot send messages right now.");
@@ -2046,6 +2051,7 @@ async function sendMessage() {
     messageInput.style.height = 'auto';
     appState.replyingTo = null;
 }
+
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
@@ -2057,7 +2063,7 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to_id: appState.replyingTo || null  // Change to reply_to_id
+            reply_to_id: appState.replyingTo || null  // FIXED: Use reply_to_id, not reply_to
         };
         
         console.log('Message data with reply_to_id:', messageData);
@@ -2094,7 +2100,7 @@ async function sendMessageToDB(text, imageUrl) {
                 type: 'sent',
                 is_historical: false,
                 reactions: reactions,
-                reply_to_id: appState.replyingTo
+                reply_to_id: appState.replyingTo  // FIXED: Pass reply_to_id
             });
         }
         
@@ -2110,13 +2116,6 @@ async function sendMessageToDB(text, imageUrl) {
     }
 }
 
-function displayMessage(message) {
-    if (window.ChatModule) {
-        window.ChatModule.displayMessage(message);
-    } else {
-        console.warn('ChatModule not available, message not displayed');
-    }
-}
 
 // ============================================
 // LOAD CHAT HISTORY
@@ -2129,6 +2128,14 @@ async function loadChatHistory(sessionId = null) {
     }
     
     console.log('Loading chat history for session:', targetSessionId);
+    
+    // Prevent double loading by checking if we're already loading
+    if (appState.isLoadingHistory) {
+        console.log('Already loading history, skipping...');
+        return;
+    }
+    
+    appState.isLoadingHistory = true;
     
     try {
         const { data: messages, error } = await supabaseClient
@@ -2198,11 +2205,12 @@ async function loadChatHistory(sessionId = null) {
         const allReactions = await Promise.all(reactionPromises);
         
         // Display all messages at once
-        messages.forEach((msg, index) => {
+        for (const msg of messages) {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
+            const reactions = allReactions[messages.indexOf(msg)] || [];
             
             if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-                window.ChatModule.displayMessage({
+                await window.ChatModule.displayMessage({
                     id: msg.id,
                     sender: msg.sender_name,
                     text: msg.message,
@@ -2210,22 +2218,11 @@ async function loadChatHistory(sessionId = null) {
                     time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                     type: messageType,
                     is_historical: !!sessionId,
-                    reactions: allReactions[index] || [],
-                    reply_to_id: msg.reply_to_id || msg.reply_to  // Try both fields
-                });
-            } else {
-                // Fallback to old display method
-                displayMessage({
-                    id: msg.id,
-                    sender: msg.sender_name,
-                    text: msg.message,
-                    image: msg.image_url,
-                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    type: messageType,
-                    is_historical: !!sessionId
+                    reactions: reactions,
+                    reply_to_id: msg.reply_to_id || msg.reply_to || null  // FIXED: Check both fields
                 });
             }
-        });
+        }
         
         if (chatMessages) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -2247,6 +2244,8 @@ async function loadChatHistory(sessionId = null) {
             `;
             chatMessages.appendChild(errorMsg);
         }
+    } finally {
+        appState.isLoadingHistory = false;
     }
 }
 
