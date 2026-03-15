@@ -22,7 +22,7 @@ const ChatModule = (function() {
     }
 
 
-    // Display a message in the chat
+
 // Display a message in the chat
 function displayMessage(message) {
     if (!elements.chatMessages) {
@@ -35,10 +35,23 @@ function displayMessage(message) {
         return;
     }
     
-    // Check if message already exists to prevent duplicates
-    if (document.getElementById(`msg-${message.id}`)) {
+    // Check if message already exists to prevent duplicates - MORE ROBUST CHECK
+    const existingMessage = document.getElementById(`msg-${message.id}`);
+    if (existingMessage) {
         console.log('Message already exists, skipping display:', message.id);
         return;
+    }
+    
+    // Also check in appState.messages as a backup
+    if (appState && appState.messages && Array.isArray(appState.messages)) {
+        const existsInState = appState.messages.some(m => m.id === message.id);
+        if (existsInState) {
+            // Double-check DOM again
+            if (document.getElementById(`msg-${message.id}`)) {
+                console.log('Message found in state and DOM, skipping:', message.id);
+                return;
+            }
+        }
     }
     
     const messageDiv = document.createElement('div');
