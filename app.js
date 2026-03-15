@@ -55,6 +55,7 @@ window.getMessageReactions = async function(messageId) {
 // Make sendMessage globally available
 window.sendMessage = sendMessage;
 
+
 // Update the sendReply function
 async function sendReply() {
     if (window.ChatModule) {
@@ -63,8 +64,17 @@ async function sendReply() {
         const replyText = replyInput.value.trim();
         if (!replyText) return;
         
-        messageInput.value = replyText;
+        // Store the replyTo ID before clearing
+        const replyToId = appState.replyingTo;
+        
+        // Clear modal first
         replyModal.style.display = 'none';
+        appState.replyingTo = null;
+        
+        // Set the message input
+        messageInput.value = replyText;
+        
+        // Send the message - but only if we're not in ChatModule mode
         await sendMessage();
     }
 }
@@ -1949,7 +1959,7 @@ async function sendMessage() {
     
     messageInput.value = '';
     messageInput.style.height = 'auto';
-    appState.replyingTo = null;
+    // Don't clear replyingTo here - it's cleared in sendMessageToDB
 }
 async function sendMessageToDB(text, imageUrl) {
     try {
@@ -1961,9 +1971,12 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            // REMOVED: reactions: [],
-            reply_to: appState.replyingTo || null
+            reply_to: appState.replyingTo || null  // This will now be properly set
         };
+        
+        // Clear reply_to after using it
+        const replyToId = appState.replyingTo;
+        appState.replyingTo = null; // Clear immediately to prevent reuse
         
         if (imageUrl) {
             messageData.image_url = imageUrl;
@@ -1990,8 +2003,8 @@ async function sendMessageToDB(text, imageUrl) {
             time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             type: 'sent',
             is_historical: false,
-            reactions: [], // Keep this for display
-            reply_to: appState.replyingTo
+            reactions: [],
+            reply_to: replyToId  // Use the stored value, not appState.replyingTo
         });
         
         return { success: true, data };
