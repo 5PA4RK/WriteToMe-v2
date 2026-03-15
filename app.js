@@ -35,6 +35,7 @@ const appState = {
     activeMessageActions: null
 };
 
+
 // Make getMessageReactions available globally for loadChatHistory
 window.getMessageReactions = async function(messageId) {
     if (window.ChatModule) {
@@ -46,17 +47,51 @@ window.getMessageReactions = async function(messageId) {
 window.sendMessage = sendMessage;
 
 // Update the sendReply function
+// Update the sendReply function
 async function sendReply() {
-    if (window.ChatModule) {
-        await window.ChatModule.sendReply();
-    } else {
-        const replyText = replyInput.value.trim();
-        if (!replyText) return;
-        
-        messageInput.value = replyText;
-        replyModal.style.display = 'none';
-        await sendMessage();
+    console.log('sendReply called');
+    
+    const replyInput = document.getElementById('replyInput');
+    if (!replyInput) {
+        console.error('Reply input not found');
+        return;
     }
+    
+    const replyText = replyInput.value.trim();
+    if (!replyText) {
+        alert('Please enter a reply message.');
+        return;
+    }
+    
+    const replyModal = document.getElementById('replyModal');
+    const replyingToId = replyModal ? replyModal.dataset.replyingTo : appState.replyingTo;
+    
+    console.log('Sending reply to message ID:', replyingToId);
+    console.log('Reply text:', replyText);
+    
+    // Set the message input value
+    if (messageInput) {
+        messageInput.value = replyText;
+    }
+    
+    // Make sure appState.replyingTo is set
+    if (replyingToId) {
+        appState.replyingTo = replyingToId;
+    }
+    
+    // Close the modal
+    if (replyModal) {
+        replyModal.style.display = 'none';
+        delete replyModal.dataset.replyingTo;
+    }
+    
+    // Clear the reply input
+    if (replyInput) {
+        replyInput.value = '';
+    }
+    
+    // Send the message
+    await sendMessage();
 }
 // Make replyToMessage globally available
 window.replyToMessage = function(messageId) {
@@ -599,9 +634,49 @@ document.addEventListener('click', (e) => {
         });
     }
     
-    if (sendReplyBtn) {
-        sendReplyBtn.addEventListener('click', sendReply);
-    }
+// In setupEventListeners function, find the sendReplyBtn listener and update it:
+
+if (sendReplyBtn) {
+    // Remove any existing listeners to avoid duplicates
+    sendReplyBtn.replaceWith(sendReplyBtn.cloneNode(true));
+    const newSendReplyBtn = document.getElementById('sendReplyBtn');
+    
+    newSendReplyBtn.addEventListener('click', async () => {
+        console.log('Send reply button clicked');
+        
+        const replyInput = document.getElementById('replyInput');
+        const replyText = replyInput?.value.trim();
+        
+        if (!replyText) {
+            alert('Please enter a reply message.');
+            return;
+        }
+        
+        const replyModal = document.getElementById('replyModal');
+        const replyingToId = replyModal?.dataset.replyingTo || appState?.replyingTo;
+        
+        console.log('Sending reply to:', replyingToId);
+        
+        if (messageInput) {
+            messageInput.value = replyText;
+        }
+        
+        if (replyingToId) {
+            appState.replyingTo = replyingToId;
+        }
+        
+        if (replyModal) {
+            replyModal.style.display = 'none';
+            delete replyModal.dataset.replyingTo;
+        }
+        
+        if (replyInput) {
+            replyInput.value = '';
+        }
+        
+        await sendMessage();
+    });
+}
     
     window.addEventListener('click', (e) => {
         if (e.target === replyModal) {
@@ -1758,23 +1833,26 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-    appState.realtimeSubscription = supabaseClient
-    .channel('messages_' + appState.currentSessionId)
-    .on(
+    // Create a single channel for all subscriptions
+    const channel = supabaseClient.channel('room_' + appState.currentSessionId);
+    
+    // Messages INSERT subscription
+    channel.on(
         'postgres_changes',
         {
             event: 'INSERT',
             schema: 'public',
-            table: 'messages'
+            table: 'messages',
+            filter: `session_id=eq.${appState.currentSessionId}`
         },
         (payload) => {
             console.log('📦 Realtime message received:', payload.new?.sender_name);
             
-            if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                    // Get reactions for this message
-                    getMessageReactions(payload.new.id).then(reactions => {
-                        displayMessage({
+            if (payload.new && payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                // Get reactions for this message
+                getMessageReactions(payload.new.id).then(reactions => {
+                    if (window.ChatModule) {
+                        window.ChatModule.displayMessage({
                             id: payload.new.id,
                             sender: payload.new.sender_name,
                             text: payload.new.message,
@@ -1783,22 +1861,23 @@ function setupRealtimeSubscriptions() {
                             type: 'received',
                             is_historical: false,
                             reactions: reactions,
-                            reply_to: payload.new.reply_to
+                            reply_to_id: payload.new.reply_to_id || payload.new.reply_to
                         });
-                    });
-                    
-                    if (appState.soundEnabled && !payload.new.is_notification) {
-                        try {
-                            messageSound.currentTime = 0;
-                            messageSound.play().catch(e => console.log("Audio play failed:", e));
-                        } catch (e) {
-                            console.log("Audio error:", e);
-                        }
+                    }
+                });
+                
+                if (appState.soundEnabled && !payload.new.is_notification) {
+                    try {
+                        messageSound.currentTime = 0;
+                        messageSound.play().catch(e => console.log("Audio play failed:", e));
+                    } catch (e) {
+                        console.log("Audio error:", e);
                     }
                 }
             }
         }
     )
+    // Messages UPDATE subscription (for edits and deletes)
     .on(
         'postgres_changes',
         {
@@ -1811,7 +1890,7 @@ function setupRealtimeSubscriptions() {
             console.log('📝 Message updated:', payload.new?.id);
             
             const messageElement = document.getElementById(`msg-${payload.new.id}`);
-            if (messageElement) {
+            if (messageElement && window.ChatModule) {
                 if (payload.new.is_deleted) {
                     // Handle deleted message
                     messageElement.innerHTML = `
@@ -1833,32 +1912,56 @@ function setupRealtimeSubscriptions() {
                         textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
                     }
                 }
-                
-                // Update reactions
-                getMessageReactions(payload.new.id).then(reactions => {
-                    const reactionsContainer = messageElement.querySelector('.message-reactions');
-                    if (reactionsContainer && window.ChatModule) {
-                        window.ChatModule.renderReactions(reactionsContainer, reactions);
-                    }
-                });
             }
         }
     )
-    .subscribe((status, err) => {
-        console.log('📡 MESSAGES Subscription status:', status);
+    // Message Reactions subscription (NEW)
+    .on(
+        'postgres_changes',
+        {
+            event: '*', // Listen to INSERT, UPDATE, DELETE
+            schema: 'public',
+            table: 'message_reactions'
+        },
+        async (payload) => {
+            console.log('😊 Reaction event received:', payload.eventType, payload.new || payload.old);
+            
+            // Find the message ID from the payload
+            const messageId = payload.new?.message_id || payload.old?.message_id;
+            if (!messageId) return;
+            
+            // Find the message element
+            const messageElement = document.getElementById(`msg-${messageId}`);
+            if (!messageElement) return;
+            
+            // Get updated reactions for this message
+            const updatedReactions = await getMessageReactions(messageId);
+            
+            // Update reactions in UI
+            const reactionsContainer = messageElement.querySelector('.message-reactions');
+            if (reactionsContainer && window.ChatModule) {
+                window.ChatModule.renderReactions(reactionsContainer, updatedReactions);
+            }
+        }
+    );
+    
+    // Subscribe to the channel
+    appState.realtimeSubscription = channel.subscribe((status, err) => {
+        console.log('📡 REALTIME Subscription status:', status);
         if (err) {
-            console.error('❌ Messages subscription error:', err);
+            console.error('❌ Subscription error:', err);
         }
     });
 
     // Helper function to escape HTML
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
     
+    // Typing subscription (keep separate)
     appState.typingSubscription = supabaseClient
         .channel('typing_' + appState.currentSessionId)
         .on(
@@ -1982,7 +2085,7 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to_id: appState.replyingTo || null  // Use reply_to_id instead of reply_to
+            reply_to_id: appState.replyingTo || null  // Make sure this is reply_to_id
         };
         
         console.log('Message data with reply_to_id:', messageData);
@@ -2008,17 +2111,18 @@ async function sendMessageToDB(text, imageUrl) {
         // Get reactions for this message (empty initially)
         const reactions = [];
         
+        // Use ChatModule to display message if available
         if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
             window.ChatModule.displayMessage({
-                id: msg.id,
-                sender: msg.sender_name,
-                text: msg.message,
-                image: msg.image_url,
-                time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: messageType,
-                is_historical: !!sessionId,
-                reactions: allReactions[index] || [],
-                reply_to_id: msg.reply_to_id  // Use reply_to_id instead of reply_to
+                id: data.id,
+                sender: appState.userName,
+                text: text,
+                image: imageUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false,
+                reactions: reactions,
+                reply_to_id: appState.replyingTo  // Pass reply_to_id
             });
         }
         
@@ -2122,34 +2226,27 @@ async function loadChatHistory(sessionId = null) {
         const allReactions = await Promise.all(reactionPromises);
         
         // Display all messages at once
-        messages.forEach((msg, index) => {
-            const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
-            
-            if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-                window.ChatModule.displayMessage({
-                    id: msg.id,
-                    sender: msg.sender_name,
-                    text: msg.message,
-                    image: msg.image_url,
-                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    type: messageType,
-                    is_historical: !!sessionId,
-                    reactions: allReactions[index] || [],
-                    reply_to: msg.reply_to  // Make sure this is included
-                });
-            } else {
-                // Fallback to old display method
-                displayMessage({
-                    id: msg.id,
-                    sender: msg.sender_name,
-                    text: msg.message,
-                    image: msg.image_url,
-                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    type: messageType,
-                    is_historical: !!sessionId
-                });
-            }
+// In loadChatHistory function, find this section and update it:
+
+// Display all messages at once
+messages.forEach((msg, index) => {
+    const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
+    
+    if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
+        // Make sure we're passing the correct reply_to_id
+        window.ChatModule.displayMessage({
+            id: msg.id,
+            sender: msg.sender_name,
+            text: msg.message,
+            image: msg.image_url,
+            time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            type: messageType,
+            is_historical: !!sessionId,
+            reactions: allReactions[index] || [],
+            reply_to_id: msg.reply_to_id || msg.reply_to || null  // Try both fields
         });
+    }
+});
         
         if (chatMessages) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
