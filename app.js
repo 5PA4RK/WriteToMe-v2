@@ -1,3 +1,6 @@
+// Add this at the top of app.js with other global variables
+let isSendingMessage = false;
+
 // Supabase Configuration
 const SUPABASE_URL = 'https://plqvqenoroacvzwtgoxq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_91IHQ5--y4tDIo8L9X2ZJQ_YeThfdu_';
@@ -431,16 +434,19 @@ function setupEventListeners() {
     }
     
     // Chat functionality
-    if (messageInput) {
-        messageInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-        
-        messageInput.addEventListener('input', handleTyping);
-    }
+// In the setupEventListeners function, update the messageInput keydown handler:
+if (messageInput) {
+    messageInput.addEventListener('keydown', (e) => {
+        // Check if it's Enter without Shift AND not during a send operation
+        if (e.key === 'Enter' && !e.shiftKey && !isSendingMessage) {
+            e.preventDefault();
+            e.stopPropagation(); // Stop event from bubbling
+            sendMessage();
+        }
+    });
+    
+    messageInput.addEventListener('input', handleTyping);
+}
     
     if (sendMessageBtn) {
         sendMessageBtn.addEventListener('click', sendMessage);
@@ -1926,10 +1932,18 @@ async function handleTyping() {
     }
 }
 
+// Update the sendMessage function
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
     console.log('Current replyingTo:', appState.replyingTo);
     console.log('Current tempReplyTo:', window.__tempReplyTo);
+    console.log('isSendingMessage:', isSendingMessage);
+    
+    // Prevent double-sending
+    if (isSendingMessage) {
+        console.log('Message already sending, skipping...');
+        return;
+    }
     
     if (!appState.isConnected || appState.isViewingHistory) {
         alert("You cannot send messages right now.");
@@ -1941,20 +1955,25 @@ async function sendMessage() {
     
     if (!messageText && !imageFile) return;
     
+    // Set sending flag
+    isSendingMessage = true;
+    
     let imageUrl = null;
     
     if (imageFile) {
         const reader = new FileReader();
         reader.onload = async function(e) {
             imageUrl = e.target.result;
-            // Pass both sources
             await sendMessageToDB(messageText, imageUrl, window.__tempReplyTo || appState.replyingTo);
+            // Reset sending flag after completion
+            isSendingMessage = false;
         };
         reader.readAsDataURL(imageFile);
         imageUpload.value = '';
     } else {
-        // Pass both sources
         await sendMessageToDB(messageText, null, window.__tempReplyTo || appState.replyingTo);
+        // Reset sending flag after completion
+        isSendingMessage = false;
     }
     
     messageInput.value = '';
