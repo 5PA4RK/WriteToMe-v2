@@ -57,6 +57,8 @@ window.sendMessage = sendMessage;
 
 
 // Update the sendReply function
+// COMMENT OUT OR REMOVE THIS ENTIRE FUNCTION FROM app.js
+/*
 async function sendReply() {
     if (window.ChatModule) {
         await window.ChatModule.sendReply();
@@ -64,20 +66,12 @@ async function sendReply() {
         const replyText = replyInput.value.trim();
         if (!replyText) return;
         
-        // Store the replyTo ID before clearing
-        const replyToId = appState.replyingTo;
-        
-        // Clear modal first
-        replyModal.style.display = 'none';
-        appState.replyingTo = null;
-        
-        // Set the message input
         messageInput.value = replyText;
-        
-        // Send the message - but only if we're not in ChatModule mode
+        replyModal.style.display = 'none';
         await sendMessage();
     }
 }
+*/
 
 // DOM Elements
 const connectionModal = document.getElementById('connectionModal');
