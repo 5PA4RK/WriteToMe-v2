@@ -57,38 +57,16 @@ window.sendMessage = sendMessage;
 
 // Update the sendReply function
 async function sendReply() {
-    const replyText = replyInput.value.trim();
-    if (!replyText) return;
-    
-    // Store the replyingTo reference
-    const replyingToId = appState.replyingTo;
-    
-    // Clear the modal first
-    replyModal.style.display = 'none';
-    
-    // Format the message with quote for mobile (and desktop)
-    let finalMessage = replyText;
-    
-    // Get the original message content to quote it
-    if (replyingToId) {
-        const messageElement = document.getElementById(`msg-${replyingToId}`);
-        if (messageElement) {
-            const sender = messageElement.querySelector('.message-sender')?.textContent || 'Someone';
-            const messageText = messageElement.querySelector('.message-text')?.textContent || '';
-            
-            // Format with a quote block for all devices
-            finalMessage = `> **${sender}:** ${messageText}\n\n${replyText}`;
-        }
+    if (window.ChatModule) {
+        await window.ChatModule.sendReply();
+    } else {
+        const replyText = replyInput.value.trim();
+        if (!replyText) return;
+        
+        messageInput.value = replyText;
+        replyModal.style.display = 'none';
+        await sendMessage();
     }
-    
-    // Set the message input
-    messageInput.value = finalMessage;
-    
-    // Send the message using the existing sendMessage function
-    await sendMessage();
-    
-    // Clear the reply reference
-    appState.replyingTo = null;
 }
 
 // DOM Elements
