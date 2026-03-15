@@ -1,4 +1,3 @@
-
 // chat.js - Enhanced Chat Functionality
 // This file handles all chat-related features: messages, reactions, replies, editing, deleting
 
@@ -56,6 +55,7 @@ const ChatModule = (function() {
             closeReplyModal.addEventListener('click', () => {
                 replyModal.style.display = 'none';
                 if (appState) appState.replyingTo = null;
+                delete replyModal.dataset.replyingTo;
             });
         }
 
@@ -63,6 +63,7 @@ const ChatModule = (function() {
             if (e.target === replyModal) {
                 replyModal.style.display = 'none';
                 if (appState) appState.replyingTo = null;
+                delete replyModal.dataset.replyingTo;
             }
         });
 
@@ -79,225 +80,217 @@ const ChatModule = (function() {
         });
     }
 
-// Get message by ID
-// Get message by ID
-async function getMessageById(messageId) {
-    if (!supabaseClient) {
-        console.error('Supabase client not initialized');
-        return null;
-    }
-    
-    if (!messageId) {
-        console.error('No message ID provided');
-        return null;
-    }
-    
-    try {
-        console.log('Fetching message by ID:', messageId);
-        
-        const { data, error } = await supabaseClient
-            .from('messages')
-            .select('*')
-            .eq('id', messageId)
-            .single();
-        
-        if (error) {
-            console.error('Error fetching message:', error);
+    // Get message by ID
+    async function getMessageById(messageId) {
+        if (!supabaseClient) {
+            console.error('Supabase client not initialized');
             return null;
         }
         
-        return data;
-    } catch (error) {
-        console.error("Error in getMessageById:", error);
-        return null;
+        if (!messageId) {
+            console.error('No message ID provided');
+            return null;
+        }
+        
+        try {
+            console.log('Fetching message by ID:', messageId);
+            
+            const { data, error } = await supabaseClient
+                .from('messages')
+                .select('*')
+                .eq('id', messageId)
+                .single();
+            
+            if (error) {
+                console.error('Error fetching message:', error);
+                return null;
+            }
+            
+            return data;
+        } catch (error) {
+            console.error("Error in getMessageById:", error);
+            return null;
+        }
     }
-}
 
-// Display a message in the chat
-// Display a message in the chat
-async function displayMessage(message) {
-    if (!chatMessages) {
-        console.error('Chat messages container not found');
-        return;
+    // Load quoted message
+    async function loadQuotedMessage(messageId, replyToId) {
+        try {
+            const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
+            if (!container) return;
+            
+            // Show loading state
+            container.innerHTML = `<div class="quoted-message loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>`;
+            
+            const originalMsg = await getMessageById(replyToId);
+            
+            if (originalMsg) {
+                const originalText = originalMsg.message || 'Image message';
+                const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
+                
+                container.innerHTML = `
+                    <div class="quoted-message">
+                        <div class="quoted-sender">
+                            <i class="fas fa-reply"></i> ${escapeHtml(originalMsg.sender_name)}:
+                        </div>
+                        <div class="quoted-text">${escapeHtml(previewText)}</div>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="quoted-message error">
+                        <i class="fas fa-exclamation-circle"></i> Message not found
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading quoted message:', error);
+            const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
+            if (container) {
+                container.innerHTML = `
+                    <div class="quoted-message error">
+                        <i class="fas fa-exclamation-circle"></i> Error loading
+                    </div>
+                `;
+            }
+        }
     }
-    
-    if (appState && appState.isViewingHistory && message.is_historical === false) {
-        return;
-    }
-    
-    // Check if message already exists
-    if (document.getElementById(`msg-${message.id}`)) {
-        console.log('Message already exists, skipping:', message.id);
-        return;
-    }
-    
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${message.type}`;
-    if (message.is_historical) {
-        messageDiv.classList.add('historical');
-    }
-    messageDiv.id = `msg-${message.id}`;
-    messageDiv.dataset.messageId = message.id;
-    
-    let messageContent = '';
-    
-    // Check for reply_to_id (prioritize this)
-    const replyToId = message.reply_to_id || message.reply_to;
-    
-    // If this is a reply, create a container that will be updated
-    if (replyToId) {
-        messageContent += `<div class="quoted-message-container" data-reply-id="${replyToId}" data-message-id="${message.id}"></div>`;
-    }
-    
-    if (message.text) {
-        messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
-    }
-    
-    if (message.image) {
-        messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
-    }
-    
-    // Add reactions section
-    const reactionsHtml = `<div class="message-reactions"></div>`;
-    
-    // Add action button (three dots)
-    const actionButton = `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
-    
-    // Actions menu (initially hidden)
-    const actionsMenu = `
-        <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
-            ${message.sender === (appState ? appState.userName : '') ? `
-                <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
-                <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
+
+    // Display a message in the chat
+    async function displayMessage(message) {
+        if (!chatMessages) {
+            console.error('Chat messages container not found');
+            return;
+        }
+        
+        if (appState && appState.isViewingHistory && message.is_historical === false) {
+            return;
+        }
+        
+        // Check if message already exists
+        if (document.getElementById(`msg-${message.id}`)) {
+            console.log('Message already exists, skipping:', message.id);
+            return;
+        }
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${message.type}`;
+        if (message.is_historical) {
+            messageDiv.classList.add('historical');
+        }
+        messageDiv.id = `msg-${message.id}`;
+        messageDiv.dataset.messageId = message.id;
+        
+        let messageContent = '';
+        
+        // Check for reply_to_id (prioritize this)
+        const replyToId = message.reply_to_id || message.reply_to;
+        console.log('Displaying message with reply_to_id:', replyToId);
+        
+        // If this is a reply, create a container that will be updated
+        if (replyToId) {
+            messageContent += `<div class="quoted-message-container" data-reply-id="${replyToId}" data-message-id="${message.id}"></div>`;
+        }
+        
+        if (message.text) {
+            messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
+        }
+        
+        if (message.image) {
+            messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
+        }
+        
+        // Add reactions section
+        const reactionsHtml = `<div class="message-reactions"></div>`;
+        
+        // Add action button (three dots)
+        const actionButton = `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
+        
+        // Actions menu (initially hidden)
+        const actionsMenu = `
+            <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
+                ${message.sender === (appState ? appState.userName : '') ? `
+                    <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
+                    <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
+                    <div class="menu-divider"></div>
+                ` : ''}
+                <button onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
+                    <i class="fas fa-reply"></i> Reply
+                </button>
                 <div class="menu-divider"></div>
-            ` : ''}
-            <button onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
-                <i class="fas fa-reply"></i> Reply
-            </button>
-            <div class="menu-divider"></div>
-            <div class="reaction-section">
-                <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
-                <div class="reaction-quick-picker">
-                    ${reactionEmojis.map(emoji => 
-                        `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
-                    ).join('')}
+                <div class="reaction-section">
+                    <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+                    <div class="reaction-quick-picker">
+                        ${reactionEmojis.map(emoji => 
+                            `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                        ).join('')}
+                    </div>
                 </div>
             </div>
-        </div>
-    `;
-    
-    messageDiv.innerHTML = `
-        <div class="message-sender">${escapeHtml(message.sender)}</div>
-        <div class="message-content">
-            ${messageContent}
-            ${reactionsHtml}
-            <div class="message-footer">
-                <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
-                ${actionButton}
+        `;
+        
+        messageDiv.innerHTML = `
+            <div class="message-sender">${escapeHtml(message.sender)}</div>
+            <div class="message-content">
+                ${messageContent}
+                ${reactionsHtml}
+                <div class="message-footer">
+                    <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
+                    ${actionButton}
+                </div>
             </div>
-        </div>
-        ${actionsMenu}
-    `;
-    
-    chatMessages.appendChild(messageDiv);
-    
-    // If this is a reply, fetch and update the quoted message
-    if (replyToId) {
-        setTimeout(async () => {
-            await loadQuotedMessage(message.id, replyToId);
-        }, 100);
+            ${actionsMenu}
+        `;
+        
+        chatMessages.appendChild(messageDiv);
+        
+        // If this is a reply, fetch and update the quoted message
+        if (replyToId) {
+            setTimeout(async () => {
+                await loadQuotedMessage(message.id, replyToId);
+            }, 100);
+        }
+        
+        // Render existing reactions
+        const reactionsContainer = messageDiv.querySelector('.message-reactions');
+        if (message.reactions && message.reactions.length > 0) {
+            renderReactions(reactionsContainer, message.reactions);
+        }
+        
+        // Store in appState.messages if available
+        if (appState && appState.messages && Array.isArray(appState.messages)) {
+            const exists = appState.messages.some(m => m.id === message.id);
+            if (!exists) {
+                appState.messages.push(message);
+            }
+        }
+        
+        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
-    
-    // Render existing reactions
-    const reactionsContainer = messageDiv.querySelector('.message-reactions');
-    if (message.reactions && message.reactions.length > 0) {
-        renderReactions(reactionsContainer, message.reactions);
-    }
-    
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
 
-// Load quoted message
-async function loadQuotedMessage(messageId, replyToId) {
-    try {
-        const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
+    // Render reactions for a message
+    function renderReactions(container, reactions) {
         if (!container) return;
         
-        // Show loading state
-        container.innerHTML = `<div class="quoted-message loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>`;
-        
-        const originalMsg = await getMessageById(replyToId);
-        
-        if (originalMsg) {
-            const originalText = originalMsg.message || 'Image message';
-            const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
-            
-            container.innerHTML = `
-                <div class="quoted-message">
-                    <div class="quoted-sender">
-                        <i class="fas fa-reply"></i> ${escapeHtml(originalMsg.sender_name)}:
-                    </div>
-                    <div class="quoted-text">${escapeHtml(previewText)}</div>
-                </div>
-            `;
-        } else {
-            container.innerHTML = `
-                <div class="quoted-message error">
-                    <i class="fas fa-exclamation-circle"></i> Message not found
-                </div>
-            `;
+        if (!reactions || reactions.length === 0) {
+            container.innerHTML = '';
+            return;
         }
-    } catch (error) {
-        console.error('Error loading quoted message:', error);
-        const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
-        if (container) {
-            container.innerHTML = `
-                <div class="quoted-message error">
-                    <i class="fas fa-exclamation-circle"></i> Error loading
-                </div>
-            `;
-        }
-    }
-}
-// Load all quoted messages after chat history is loaded
-function loadAllQuotedMessages() {
-    console.log('Loading all quoted messages...');
-    const containers = document.querySelectorAll('.quoted-message-container');
-    console.log('Found containers:', containers.length);
-    
-    containers.forEach(container => {
-        const messageId = container.dataset.messageId;
-        const replyToId = container.dataset.replyId;
         
-        if (messageId && replyToId) {
-            loadQuotedMessage(messageId, replyToId);
+        // Group reactions by emoji
+        const reactionCounts = {};
+        reactions.forEach(r => {
+            reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+        });
+        
+        let html = '';
+        for (const [emoji, count] of Object.entries(reactionCounts)) {
+            const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
+            html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
         }
-    });
-}
-
-// Render reactions for a message
-function renderReactions(container, reactions) {
-    if (!container) return;
-    
-    if (!reactions || reactions.length === 0) {
-        container.innerHTML = '';
-        return;
+        
+        container.innerHTML = html;
     }
-    
-    // Group reactions by emoji
-    const reactionCounts = {};
-    reactions.forEach(r => {
-        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-    });
-    
-    let html = '';
-    for (const [emoji, count] of Object.entries(reactionCounts)) {
-        const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
-        html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
-    }
-    
-    container.innerHTML = html;
-}
 
     // Toggle message actions menu
     function toggleMessageActions(messageId, button) {
@@ -350,45 +343,62 @@ function renderReactions(container, reactions) {
     }
 
     // Add or remove reaction
-// Add or remove reaction
-async function addReaction(messageId, emoji) {
-    console.log('Adding reaction:', emoji, 'to message:', messageId);
-    closeMessageActions();
-    
-    if (!supabaseClient) {
-        console.error('Supabase client not initialized');
-        alert('Cannot add reaction: Database connection not initialized');
-        return;
-    }
-    
-    if (!appState || !appState.userId) {
-        console.error('User not logged in');
-        alert('You must be logged in to add reactions');
-        return;
-    }
-    
-    try {
-        const messageElement = document.getElementById(`msg-${messageId}`);
-        if (!messageElement) {
-            console.error('Message element not found');
+    async function addReaction(messageId, emoji) {
+        console.log('Adding reaction:', emoji, 'to message:', messageId);
+        closeMessageActions();
+        
+        if (!supabaseClient) {
+            console.error('Supabase client not initialized');
+            alert('Cannot add reaction: Database connection not initialized');
             return;
         }
         
-        const reactions = await getMessageReactions(messageId);
+        if (!appState || !appState.userId) {
+            console.error('User not logged in');
+            alert('You must be logged in to add reactions');
+            return;
+        }
         
-        // Check if user already reacted with ANY emoji on this message
-        const userReaction = reactions.find(r => r.user_id === appState.userId);
-        
-        if (userReaction) {
-            // If user already reacted with a different emoji, remove the old one first
-            if (userReaction.emoji !== emoji) {
-                // Remove old reaction
-                await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
-                
-                // Add new reaction
+        try {
+            const messageElement = document.getElementById(`msg-${messageId}`);
+            if (!messageElement) {
+                console.error('Message element not found');
+                return;
+            }
+            
+            const reactions = await getMessageReactions(messageId);
+            
+            // Check if user already reacted with ANY emoji on this message
+            const userReaction = reactions.find(r => r.user_id === appState.userId);
+            
+            if (userReaction) {
+                // If user already reacted with a different emoji, remove the old one first
+                if (userReaction.emoji !== emoji) {
+                    // Remove old reaction
+                    await supabaseClient
+                        .from('message_reactions')
+                        .delete()
+                        .eq('id', userReaction.id);
+                    
+                    // Add new reaction
+                    await supabaseClient
+                        .from('message_reactions')
+                        .insert([{
+                            message_id: messageId,
+                            user_id: appState.userId,
+                            user_name: appState.userName,
+                            emoji: emoji,
+                            created_at: new Date().toISOString()
+                        }]);
+                } else {
+                    // User clicked the same emoji - remove it (toggle off)
+                    await supabaseClient
+                        .from('message_reactions')
+                        .delete()
+                        .eq('id', userReaction.id);
+                }
+            } else {
+                // No existing reaction, add new one
                 await supabaseClient
                     .from('message_reactions')
                     .insert([{
@@ -398,225 +408,210 @@ async function addReaction(messageId, emoji) {
                         emoji: emoji,
                         created_at: new Date().toISOString()
                     }]);
-            } else {
-                // User clicked the same emoji - remove it (toggle off)
-                await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
             }
-        } else {
-            // No existing reaction, add new one
-            await supabaseClient
-                .from('message_reactions')
-                .insert([{
-                    message_id: messageId,
-                    user_id: appState.userId,
-                    user_name: appState.userName,
-                    emoji: emoji,
-                    created_at: new Date().toISOString()
-                }]);
+            
+            // Get updated reactions
+            const updatedReactions = await getMessageReactions(messageId);
+            
+            // Update UI
+            const reactionsContainer = messageElement.querySelector('.message-reactions');
+            if (reactionsContainer) {
+                renderReactions(reactionsContainer, updatedReactions);
+            }
+            
+            console.log('Reaction added successfully');
+            
+        } catch (error) {
+            console.error("Error adding reaction:", error);
+            alert("Failed to add reaction: " + error.message);
         }
-        
-        // No need to manually update UI here - the real-time subscription will handle it
-        console.log('Reaction added/deleted successfully, real-time subscription will update UI');
-        
-    } catch (error) {
-        console.error("Error adding reaction:", error);
-        alert("Failed to add reaction: " + error.message);
     }
-}
+
     // Toggle reaction (wrapper for addReaction)
     async function toggleReaction(messageId, emoji) {
         await addReaction(messageId, emoji);
     }
 
     // Get reactions for a message
-// Get reactions for a message
-async function getMessageReactions(messageId) {
-    if (!supabaseClient) {
-        console.error('Supabase client not initialized');
-        return [];
-    }
-    
-    try {
-        const { data, error } = await supabaseClient
-            .from('message_reactions')
-            .select('*')
-            .eq('message_id', messageId);
-        
-        if (error) {
-            console.error('Error getting reactions:', error);
+    async function getMessageReactions(messageId) {
+        if (!supabaseClient) {
+            console.error('Supabase client not initialized');
             return [];
         }
-        return data || [];
-    } catch (error) {
-        console.error("Error in getMessageReactions:", error);
-        return [];
-    }
-}
-
-// Open reply modal
-function openReplyModal(messageId, senderName, messageText) {
-    console.log('Opening reply modal for message:', messageId);
-    
-    if (!replyModal || !replyToName || !replyToContent || !replyInput) {
-        console.error('Reply modal elements not found');
-        return;
-    }
-    
-    replyToName.textContent = senderName || 'Unknown';
-    replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
-    replyInput.value = '';
-    
-    // Store the message ID in the modal's dataset AND in appState
-    replyModal.dataset.replyingTo = messageId;
-    
-    if (appState) {
-        appState.replyingTo = messageId;
-        console.log('Set appState.replyingTo to:', messageId);
-    }
-    
-    replyModal.style.display = 'flex';
-    replyInput.focus();
-}
-
-
-// Send reply
-async function sendReply() {
-    const replyText = replyInput.value.trim();
-    if (!replyText) {
-        alert('Please enter a reply message.');
-        return;
-    }
-    
-    // Get the message ID we're replying to
-    const replyingToId = replyModal.dataset.replyingTo || (appState ? appState.replyingTo : null);
-    
-    console.log('Sending reply to message ID:', replyingToId);
-    console.log('Reply text:', replyText);
-    
-    if (messageInput) {
-        messageInput.value = replyText;
-    }
-    
-    // Make sure appState.replyingTo is set
-    if (appState && replyingToId) {
-        appState.replyingTo = replyingToId;
-    }
-    
-    replyModal.style.display = 'none';
-    
-    // Clear the data attribute
-    delete replyModal.dataset.replyingTo;
-    
-    // Clear the reply input
-    replyInput.value = '';
-    
-    // Trigger send message
-    if (typeof window.sendMessage === 'function') {
-        await window.sendMessage();
-    } else {
-        console.warn('No sendMessage function found');
-        alert('Cannot send reply: Message function not available');
-    }
-}
-
-
-// Edit message
-async function editMessage(messageId) {
-    console.log('Editing message:', messageId);
-    closeMessageActions();
-    
-    if (!supabaseClient) {
-        console.error('Supabase client not initialized');
-        alert('Cannot edit message: Database connection not initialized');
-        return;
-    }
-    
-    const messageElement = document.getElementById(`msg-${messageId}`);
-    if (!messageElement) {
-        console.error('Message element not found');
-        return;
-    }
-    
-    const textElement = messageElement.querySelector('.message-text');
-    const currentText = textElement ? textElement.textContent.replace(/\s*\(edited\)\s*$/, '') : '';
-    
-    const newText = prompt("Edit your message:", currentText);
-    if (newText !== null && newText.trim() !== '') {
+        
         try {
+            const { data, error } = await supabaseClient
+                .from('message_reactions')
+                .select('*')
+                .eq('message_id', messageId);
+            
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("Error getting reactions:", error);
+            return [];
+        }
+    }
+
+    // Open reply modal
+    function openReplyModal(messageId, senderName, messageText) {
+        console.log('Opening reply modal for message:', messageId);
+        
+        if (!replyModal || !replyToName || !replyToContent || !replyInput) {
+            console.error('Reply modal elements not found');
+            return;
+        }
+        
+        replyToName.textContent = senderName || 'Unknown';
+        replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
+        replyInput.value = '';
+        
+        // Store the message ID in the modal's dataset AND in appState
+        replyModal.dataset.replyingTo = messageId;
+        
+        if (appState) {
+            appState.replyingTo = messageId;
+            console.log('Set appState.replyingTo to:', messageId);
+        }
+        
+        replyModal.style.display = 'flex';
+        replyInput.focus();
+    }
+
+    // Send reply
+    async function sendReply() {
+        const replyText = replyInput.value.trim();
+        if (!replyText) {
+            alert('Please enter a reply message.');
+            return;
+        }
+        
+        // Get the message ID we're replying to
+        const replyingToId = replyModal.dataset.replyingTo || (appState ? appState.replyingTo : null);
+        
+        console.log('Sending reply to message ID:', replyingToId);
+        console.log('Reply text:', replyText);
+        
+        if (messageInput) {
+            messageInput.value = replyText;
+        }
+        
+        // Make sure appState.replyingTo is set
+        if (appState && replyingToId) {
+            appState.replyingTo = replyingToId;
+        }
+        
+        replyModal.style.display = 'none';
+        
+        // Clear the data attribute
+        delete replyModal.dataset.replyingTo;
+        
+        // Clear the reply input
+        replyInput.value = '';
+        
+        // Trigger send message
+        if (typeof window.sendMessage === 'function') {
+            await window.sendMessage();
+        } else {
+            console.warn('No sendMessage function found');
+            alert('Cannot send reply: Message function not available');
+        }
+    }
+
+    // Edit message
+    async function editMessage(messageId) {
+        console.log('Editing message:', messageId);
+        closeMessageActions();
+        
+        if (!supabaseClient) {
+            console.error('Supabase client not initialized');
+            alert('Cannot edit message: Database connection not initialized');
+            return;
+        }
+        
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        if (!messageElement) {
+            console.error('Message element not found');
+            return;
+        }
+        
+        const textElement = messageElement.querySelector('.message-text');
+        const currentText = textElement ? textElement.textContent.replace(/\s*\(edited\)\s*$/, '') : '';
+        
+        const newText = prompt("Edit your message:", currentText);
+        if (newText !== null && newText.trim() !== '') {
+            try {
+                const { error } = await supabaseClient
+                    .from('messages')
+                    .update({
+                        message: newText.trim(),
+                        edited_at: new Date().toISOString(),
+                        is_edited: true
+                    })
+                    .eq('id', messageId)
+                    .eq('sender_id', appState?.userId);
+                
+                if (error) {
+                    console.error('Error editing message:', error);
+                    alert('Failed to edit message: ' + error.message);
+                    return;
+                }
+                
+                console.log('Message edited successfully');
+                // The UI will be updated by the realtime subscription
+                
+            } catch (error) {
+                console.error("Error editing message:", error);
+                alert("Failed to edit message: " + error.message);
+            }
+        }
+    }
+
+    // Delete message
+    async function deleteMessage(messageId) {
+        console.log('Deleting message:', messageId);
+        closeMessageActions();
+        
+        if (!supabaseClient) {
+            console.error('Supabase client not initialized');
+            alert('Cannot delete message: Database connection not initialized');
+            return;
+        }
+        
+        if (!confirm("Are you sure you want to delete this message?")) return;
+        
+        try {
+            // First delete reactions
+            await supabaseClient
+                .from('message_reactions')
+                .delete()
+                .eq('message_id', messageId);
+            
+            // Then mark message as deleted
             const { error } = await supabaseClient
                 .from('messages')
                 .update({
-                    message: newText.trim(),
-                    edited_at: new Date().toISOString(),
-                    is_edited: true
+                    is_deleted: true,
+                    deleted_at: new Date().toISOString(),
+                    deleted_by: appState?.userId
                 })
                 .eq('id', messageId)
                 .eq('sender_id', appState?.userId);
             
             if (error) {
-                console.error('Error editing message:', error);
-                alert('Failed to edit message: ' + error.message);
+                console.error('Error deleting message:', error);
+                alert('Failed to delete message: ' + error.message);
                 return;
             }
             
-            console.log('Message edited successfully');
+            console.log('Message deleted successfully');
             // The UI will be updated by the realtime subscription
             
         } catch (error) {
-            console.error("Error editing message:", error);
-            alert("Failed to edit message: " + error.message);
+            console.error("Error deleting message:", error);
+            alert("Failed to delete message: " + error.message);
         }
     }
-}
-
-// Delete message
-async function deleteMessage(messageId) {
-    console.log('Deleting message:', messageId);
-    closeMessageActions();
-    
-    if (!supabaseClient) {
-        console.error('Supabase client not initialized');
-        alert('Cannot delete message: Database connection not initialized');
-        return;
-    }
-    
-    if (!confirm("Are you sure you want to delete this message?")) return;
-    
-    try {
-        // First delete reactions
-        await supabaseClient
-            .from('message_reactions')
-            .delete()
-            .eq('message_id', messageId);
-        
-        // Then mark message as deleted
-        const { error } = await supabaseClient
-            .from('messages')
-            .update({
-                is_deleted: true,
-                deleted_at: new Date().toISOString(),
-                deleted_by: appState?.userId
-            })
-            .eq('id', messageId)
-            .eq('sender_id', appState?.userId);
-        
-        if (error) {
-            console.error('Error deleting message:', error);
-            alert('Failed to delete message: ' + error.message);
-            return;
-        }
-        
-        console.log('Message deleted successfully');
-        // The UI will be updated by the realtime subscription
-        
-    } catch (error) {
-        console.error("Error deleting message:", error);
-        alert("Failed to delete message: " + error.message);
-    }
-}
 
     // Handle typing indicator
     async function handleTyping() {
@@ -694,7 +689,6 @@ async function deleteMessage(messageId) {
         addReaction,
         toggleReaction,
         getMessageReactions,
-        getMessageById,  // Add this line
         getMessageById,
         openReplyModal,
         sendReply,
