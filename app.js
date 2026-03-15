@@ -1822,37 +1822,41 @@ function setupRealtimeSubscriptions() {
     
     console.log("📡 Setting up real-time subscriptions for session:", appState.currentSessionId);
     
+    // Clean up existing subscriptions
     if (appState.realtimeSubscription) {
-        console.log("Removing old subscription");
+        console.log("Removing old message subscription");
         supabaseClient.removeChannel(appState.realtimeSubscription);
         appState.realtimeSubscription = null;
     }
     
     if (appState.typingSubscription) {
+        console.log("Removing old typing subscription");
         supabaseClient.removeChannel(appState.typingSubscription);
         appState.typingSubscription = null;
     }
     
-    // Create a single channel for all subscriptions
-    const channel = supabaseClient.channel('room_' + appState.currentSessionId);
-    
-    // Messages INSERT subscription
-    channel.on(
-        'postgres_changes',
-        {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'messages',
-            filter: `session_id=eq.${appState.currentSessionId}`
-        },
-        (payload) => {
-            console.log('📦 Realtime message received:', payload.new?.sender_name);
-            
-            if (payload.new && payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                // Get reactions for this message
-                getMessageReactions(payload.new.id).then(reactions => {
-                    if (window.ChatModule) {
-                        window.ChatModule.displayMessage({
+    // Create new message subscription
+    appState.realtimeSubscription = supabaseClient
+        .channel('messages-channel-' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                console.log('📦 NEW MESSAGE RECEIVED:', payload.new);
+                
+                // Don't process messages from current user (they're already displayed)
+                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                    // Get reactions for this message
+                    getMessageReactions(payload.new.id).then(reactions => {
+                        // Use reply_to_id if available, fallback to reply_to
+                        const replyToId = payload.new.reply_to_id || payload.new.reply_to;
+                        
+                        displayMessage({
                             id: payload.new.id,
                             sender: payload.new.sender_name,
                             text: payload.new.message,
@@ -1861,38 +1865,38 @@ function setupRealtimeSubscriptions() {
                             type: 'received',
                             is_historical: false,
                             reactions: reactions,
-                            reply_to_id: payload.new.reply_to_id || payload.new.reply_to
+                            reply_to_id: replyToId
                         });
-                    }
-                });
-                
-                if (appState.soundEnabled && !payload.new.is_notification) {
-                    try {
-                        messageSound.currentTime = 0;
-                        messageSound.play().catch(e => console.log("Audio play failed:", e));
-                    } catch (e) {
-                        console.log("Audio error:", e);
+                    });
+                    
+                    // Play sound if enabled
+                    if (appState.soundEnabled && !payload.new.is_notification) {
+                        try {
+                            messageSound.currentTime = 0;
+                            messageSound.play().catch(e => console.log("Audio play failed:", e));
+                        } catch (e) {
+                            console.log("Audio error:", e);
+                        }
                     }
                 }
             }
-        }
-    )
-    // Messages UPDATE subscription (for edits and deletes)
-    .on(
-        'postgres_changes',
-        {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'messages',
-            filter: `session_id=eq.${appState.currentSessionId}`
-        },
-        (payload) => {
-            console.log('📝 Message updated:', payload.new?.id);
-            
-            const messageElement = document.getElementById(`msg-${payload.new.id}`);
-            if (messageElement && window.ChatModule) {
+        )
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'messages',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                console.log('📝 MESSAGE UPDATED:', payload.new);
+                
+                const messageElement = document.getElementById(`msg-${payload.new.id}`);
+                if (!messageElement) return;
+                
+                // Handle deleted messages
                 if (payload.new.is_deleted) {
-                    // Handle deleted message
                     messageElement.innerHTML = `
                         <div class="message-sender">${escapeHtml(payload.new.sender_name)}</div>
                         <div class="message-content">
@@ -1905,65 +1909,39 @@ function setupRealtimeSubscriptions() {
                     // Remove actions menu
                     const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
                     if (actionsMenu) actionsMenu.remove();
-                } else {
-                    // Handle edited message
+                } 
+                // Handle edited messages
+                else if (payload.new.is_edited) {
                     const textElement = messageElement.querySelector('.message-text');
                     if (textElement && !textElement.innerHTML.includes('Message deleted')) {
-                        textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
+                        // Remove any existing edited indicator first
+                        let cleanText = payload.new.message;
+                        textElement.innerHTML = `${escapeHtml(cleanText)} <small class="edited-indicator">(edited)</small>`;
                     }
                 }
+                
+                // Update reactions
+                getMessageReactions(payload.new.id).then(reactions => {
+                    const reactionsContainer = messageElement.querySelector('.message-reactions');
+                    if (reactionsContainer && window.ChatModule) {
+                        window.ChatModule.renderReactions(reactionsContainer, reactions);
+                    }
+                });
             }
-        }
-    )
-    // Message Reactions subscription (NEW)
-    .on(
-        'postgres_changes',
-        {
-            event: '*', // Listen to INSERT, UPDATE, DELETE
-            schema: 'public',
-            table: 'message_reactions'
-        },
-        async (payload) => {
-            console.log('😊 Reaction event received:', payload.eventType, payload.new || payload.old);
-            
-            // Find the message ID from the payload
-            const messageId = payload.new?.message_id || payload.old?.message_id;
-            if (!messageId) return;
-            
-            // Find the message element
-            const messageElement = document.getElementById(`msg-${messageId}`);
-            if (!messageElement) return;
-            
-            // Get updated reactions for this message
-            const updatedReactions = await getMessageReactions(messageId);
-            
-            // Update reactions in UI
-            const reactionsContainer = messageElement.querySelector('.message-reactions');
-            if (reactionsContainer && window.ChatModule) {
-                window.ChatModule.renderReactions(reactionsContainer, updatedReactions);
+        )
+        .subscribe((status, err) => {
+            console.log('📡 Messages subscription status:', status);
+            if (err) {
+                console.error('❌ Messages subscription error:', err);
             }
-        }
-    );
-    
-    // Subscribe to the channel
-    appState.realtimeSubscription = channel.subscribe((status, err) => {
-        console.log('📡 REALTIME Subscription status:', status);
-        if (err) {
-            console.error('❌ Subscription error:', err);
-        }
-    });
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ Successfully subscribed to messages!');
+            }
+        });
 
-    // Helper function to escape HTML
-    function escapeHtml(text) {
-        if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-    
-    // Typing subscription (keep separate)
+    // Typing subscription
     appState.typingSubscription = supabaseClient
-        .channel('typing_' + appState.currentSessionId)
+        .channel('typing-channel-' + appState.currentSessionId)
         .on(
             'postgres_changes',
             {
@@ -1977,6 +1955,7 @@ function setupRealtimeSubscriptions() {
                     typingUser.textContent = payload.new.typing_user;
                     typingIndicator.classList.add('show');
                     
+                    // Clear after 3 seconds
                     setTimeout(() => {
                         if (typingUser.textContent === payload.new.typing_user) {
                             typingIndicator.classList.remove('show');
@@ -1985,8 +1964,11 @@ function setupRealtimeSubscriptions() {
                 }
             }
         )
-        .subscribe();
+        .subscribe((status) => {
+            console.log('📡 Typing subscription status:', status);
+        });
     
+    // Set up pending guests subscription for host
     if (appState.isHost) {
         console.log("👑 Setting up pending guests subscription for host");
         setupPendingGuestsSubscription();
@@ -2074,6 +2056,7 @@ async function sendMessage() {
     messageInput.style.height = 'auto';
     appState.replyingTo = null;
 }
+
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
@@ -2085,7 +2068,9 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to_id: appState.replyingTo || null  // Make sure this is reply_to_id
+            reply_to_id: appState.replyingTo || null,  // Use reply_to_id, not reply_to
+            is_edited: false,
+            is_deleted: false
         };
         
         console.log('Message data with reply_to_id:', messageData);
@@ -2111,20 +2096,18 @@ async function sendMessageToDB(text, imageUrl) {
         // Get reactions for this message (empty initially)
         const reactions = [];
         
-        // Use ChatModule to display message if available
-        if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-            window.ChatModule.displayMessage({
-                id: data.id,
-                sender: appState.userName,
-                text: text,
-                image: imageUrl,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_historical: false,
-                reactions: reactions,
-                reply_to_id: appState.replyingTo  // Pass reply_to_id
-            });
-        }
+        // Display message locally
+        displayMessage({
+            id: data.id,
+            sender: appState.userName,
+            text: text,
+            image: imageUrl,
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            type: 'sent',
+            is_historical: false,
+            reactions: reactions,
+            reply_to_id: appState.replyingTo
+        });
         
         // Clear the replyingTo after successful send
         appState.replyingTo = null;
