@@ -1955,6 +1955,7 @@ async function sendMessage() {
     messageInput.style.height = 'auto';
     // Don't clear replyingTo here - let sendMessageToDB handle it
 }
+
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
@@ -1992,6 +1993,8 @@ async function sendMessageToDB(text, imageUrl) {
         
         console.log('✅ Message saved to DB:', data.id);
         
+        // For the display, we need to ensure the original message is in appState.messages
+        // If it's not, we'll still pass the reply_to ID and let getReplyQuoteHtml handle it
         displayMessage({
             id: data.id,
             sender: appState.userName,
