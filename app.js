@@ -582,16 +582,22 @@ document.addEventListener('click', (e) => {
     });
     
     // Reply modal
-    if (closeReplyModal) {
-        closeReplyModal.addEventListener('click', () => {
-            replyModal.style.display = 'none';
-            appState.replyingTo = null;
-        });
+// In the setupEventListeners function, update the reply modal section:
+if (closeReplyModal) {
+    closeReplyModal.addEventListener('click', () => {
+        replyModal.style.display = 'none';
+        appState.replyingTo = null;
+    });
+}
+
+if (sendReplyBtn) {
+    // Remove any existing listeners first
+    sendReplyBtn.replaceWith(sendReplyBtn.cloneNode(true));
+    const newSendReplyBtn = document.getElementById('sendReplyBtn');
+    if (newSendReplyBtn) {
+        newSendReplyBtn.addEventListener('click', sendReply);
     }
-    
-    if (sendReplyBtn) {
-        sendReplyBtn.addEventListener('click', sendReply);
-    }
+}
     
     window.addEventListener('click', (e) => {
         if (e.target === replyModal) {
@@ -602,6 +608,14 @@ document.addEventListener('click', (e) => {
             guestNotificationModal.style.display = 'none';
         }
     });
+    // Add this function to properly close the reply modal
+window.closeReplyModal = function() {
+    const replyModal = document.getElementById('replyModal');
+    if (replyModal) {
+        replyModal.style.display = 'none';
+    }
+    appState.replyingTo = null;
+};
 }
 
 // ============================================
@@ -1965,18 +1979,20 @@ async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
         
+        // Capture the reply_to before clearing
+        const replyToId = appState.replyingTo;
+        
         const messageData = {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to: appState.replyingTo || null  // This will now be properly set
+            reply_to: replyToId  // Use the captured value
         };
         
-        // Clear reply_to after using it
-        const replyToId = appState.replyingTo;
-        appState.replyingTo = null; // Clear immediately to prevent reuse
+        // Clear replyingTo immediately after capturing
+        appState.replyingTo = null;
         
         if (imageUrl) {
             messageData.image_url = imageUrl;
@@ -2004,7 +2020,7 @@ async function sendMessageToDB(text, imageUrl) {
             type: 'sent',
             is_historical: false,
             reactions: [],
-            reply_to: replyToId  // Use the stored value, not appState.replyingTo
+            reply_to: replyToId  // Use the captured value
         });
         
         return { success: true, data };
