@@ -1944,6 +1944,9 @@ async function handleTyping() {
 }
 
 async function sendMessage() {
+    console.log('🔵 sendMessage called at:', new Date().toISOString());
+    console.log('Current replyingTo:', appState.replyingTo);
+    
     if (!appState.isConnected || appState.isViewingHistory) {
         alert("You cannot send messages right now.");
         return;
@@ -1954,39 +1957,35 @@ async function sendMessage() {
     
     if (!messageText && !imageFile) return;
     
-    // Log what we're sending
-    console.log('Sending message, reply_to:', appState.replyingTo);
-    
     let imageUrl = null;
     
     if (imageFile) {
         const reader = new FileReader();
         reader.onload = async function(e) {
             imageUrl = e.target.result;
-            // Pass the current replyingTo value
             await sendMessageToDB(messageText, imageUrl, appState.replyingTo);
         };
         reader.readAsDataURL(imageFile);
         imageUpload.value = '';
     } else {
-        // Pass the current replyingTo value
         await sendMessageToDB(messageText, null, appState.replyingTo);
     }
     
     messageInput.value = '';
     messageInput.style.height = 'auto';
-    // Don't clear replyingTo here - let sendMessageToDB handle it
 }
 
 async function sendMessageToDB(text, imageUrl, replyToId = null) {
+    console.log('💾 sendMessageToDB called at:', new Date().toISOString());
+    console.log('replyToId parameter:', replyToId);
+    console.log('appState.replyingTo:', appState.replyingTo);
+    
     try {
-        console.log('💾 Saving message to DB');
-        
         // Use the passed replyToId, or fall back to appState.replyingTo
         const finalReplyToId = replyToId || appState.replyingTo;
-        console.log('sendMessageToDB - reply_to:', finalReplyToId);
+        console.log('FINAL reply_to:', finalReplyToId);
         
-        // Clear it immediately so it can't be used again
+        // Clear it immediately
         appState.replyingTo = null;
         
         const messageData = {
@@ -1995,7 +1994,7 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to: finalReplyToId  // Use the captured value
+            reply_to: finalReplyToId
         };
         
         if (imageUrl) {
@@ -2013,9 +2012,9 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
             throw error;
         }
         
-        console.log('✅ Message saved to DB:', data.id);
+        console.log('✅ Message saved to DB. ID:', data.id);
+        console.log('Reply_to in DB:', data.reply_to);
         
-        // Display the message locally
         displayMessage({
             id: data.id,
             sender: appState.userName,
@@ -2025,7 +2024,7 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
             type: 'sent',
             is_historical: false,
             reactions: [],
-            reply_to: finalReplyToId  // Use the captured value
+            reply_to: finalReplyToId
         });
         
         return { success: true, data };
