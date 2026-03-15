@@ -5,62 +5,38 @@ const ChatModule = (function() {
     // Private variables
     let appState = null;
     let supabaseClient = null;
-    let messageSound = null;
-    let chatMessages = null;
-    let messageInput = null;
-    let sendMessageBtn = null;
-    let typingIndicator = null;
-    let typingUser = null;
-    let replyModal = null;
-    let replyToName = null;
-    let replyToContent = null;
-    let replyInput = null;
-    let sendReplyBtn = null;
-    let closeReplyModal = null;
-
+    let elements = {};
+    
     // Reaction emojis available
     const reactionEmojis = ["👍", "❤️", "😂", "😮", "😢", "😡"];
 
     // Initialize the chat module
-    function init(state, supabase, elements) {
+    function init(state, supabase, domElements) {
         console.log("ChatModule initializing...");
         appState = state;
         supabaseClient = supabase;
+        elements = domElements;
         
-        // DOM elements
-        chatMessages = elements.chatMessages;
-        messageInput = elements.messageInput;
-        sendMessageBtn = elements.sendMessageBtn;
-        messageSound = elements.messageSound;
-        typingIndicator = elements.typingIndicator;
-        typingUser = elements.typingUser;
-        replyModal = elements.replyModal;
-        replyToName = elements.replyToName;
-        replyToContent = elements.replyToContent;
-        replyInput = elements.replyInput;
-        sendReplyBtn = elements.sendReplyBtn;
-        closeReplyModal = elements.closeReplyModal;
-
         setupEventListeners();
         console.log("ChatModule initialized successfully");
     }
 
     // Setup event listeners
     function setupEventListeners() {
-        if (sendReplyBtn) {
-            sendReplyBtn.addEventListener('click', sendReply);
+        if (elements.sendReplyBtn) {
+            elements.sendReplyBtn.addEventListener('click', sendReply);
         }
 
-        if (closeReplyModal) {
-            closeReplyModal.addEventListener('click', () => {
-                replyModal.style.display = 'none';
+        if (elements.closeReplyModal) {
+            elements.closeReplyModal.addEventListener('click', () => {
+                elements.replyModal.style.display = 'none';
                 if (appState) appState.replyingTo = null;
             });
         }
 
         window.addEventListener('click', (e) => {
-            if (e.target === replyModal) {
-                replyModal.style.display = 'none';
+            if (e.target === elements.replyModal) {
+                elements.replyModal.style.display = 'none';
                 if (appState) appState.replyingTo = null;
             }
         });
@@ -80,17 +56,19 @@ const ChatModule = (function() {
 
     // Display a message in the chat
     function displayMessage(message) {
-        if (!chatMessages) {
+        if (!elements.chatMessages) {
             console.error('Chat messages container not found');
             return;
         }
         
-        if (appState && appState.isViewingHistory && message.is_historical === false) {
+        // Don't display if viewing history and this is not a historical message
+        if (appState && appState.isViewingHistory && !message.is_historical) {
             return;
         }
         
-        // Check if message already exists
+        // Check if message already exists to prevent duplicates
         if (document.getElementById(`msg-${message.id}`)) {
+            console.log('Message already exists, skipping display:', message.id);
             return;
         }
         
@@ -105,13 +83,15 @@ const ChatModule = (function() {
         
         // Add reply reference if this is a reply
         if (message.reply_to) {
-            messageContent += `<div class="message-reply-ref"><i class="fas fa-reply"></i> Replying to a message</div>`;
+            messageContent += getReplyQuoteHtml(message.reply_to, message);
         }
         
+        // Add message text
         if (message.text) {
             messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
         }
         
+        // Add image if present
         if (message.image) {
             messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
         }
@@ -123,9 +103,84 @@ const ChatModule = (function() {
         const actionButton = `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
         
         // Actions menu (initially hidden)
-        const actionsMenu = `
+        const actionsMenu = getActionsMenuHtml(message);
+        
+        messageDiv.innerHTML = `
+            <div class="message-sender">${escapeHtml(message.sender)}</div>
+            <div class="message-content">
+                ${messageContent}
+                ${reactionsHtml}
+                <div class="message-footer">
+                    <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
+                    ${actionButton}
+                </div>
+            </div>
+            ${actionsMenu}
+        `;
+        
+        elements.chatMessages.appendChild(messageDiv);
+        
+        // Render existing reactions
+        const reactionsContainer = messageDiv.querySelector('.message-reactions');
+        if (message.reactions && message.reactions.length > 0) {
+            renderReactions(reactionsContainer, message.reactions);
+        }
+        
+        // Store in appState.messages if available
+        if (appState && appState.messages && Array.isArray(appState.messages)) {
+            // Check if message already exists in state
+            const exists = appState.messages.some(m => m.id === message.id);
+            if (!exists) {
+                appState.messages.push(message);
+            }
+        }
+        
+        elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+    }
+
+    // Helper function to get reply quote HTML
+    function getReplyQuoteHtml(replyToId, currentMessage) {
+        let quotedSender = 'someone';
+        let quotedText = 'a message';
+        
+        // Try to find the original message in the DOM
+        const originalMsgElement = document.getElementById(`msg-${replyToId}`);
+        if (originalMsgElement) {
+            const senderEl = originalMsgElement.querySelector('.message-sender');
+            const textEl = originalMsgElement.querySelector('.message-text');
+            if (senderEl) quotedSender = senderEl.textContent;
+            if (textEl) {
+                quotedText = textEl.textContent
+                    .replace(/\s*\(edited\)\s*$/, '')
+                    .substring(0, 100);
+                if (textEl.textContent.length > 100) quotedText += '...';
+            }
+        } 
+        // Try to find in appState messages
+        else if (appState && appState.messages) {
+            const originalMsg = appState.messages.find(m => m.id === replyToId);
+            if (originalMsg) {
+                quotedSender = originalMsg.sender;
+                quotedText = (originalMsg.text || '').substring(0, 100);
+                if (originalMsg.text && originalMsg.text.length > 100) quotedText += '...';
+            }
+        }
+        
+        return `
+            <div class="message-reply-ref">
+                <i class="fas fa-reply"></i> 
+                <span>Replying to <strong>${escapeHtml(quotedSender)}</strong>: ${escapeHtml(quotedText)}</span>
+            </div>
+        `;
+    }
+
+    // Helper function to get actions menu HTML
+    function getActionsMenuHtml(message) {
+        const isOwnMessage = message.sender === (appState ? appState.userName : '');
+        
+        return `
             <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
-                ${message.sender === (appState ? appState.userName : '') ? `
+                ${isOwnMessage ? `
                     <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
                     <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
                     <div class="menu-divider"></div>
@@ -144,34 +199,6 @@ const ChatModule = (function() {
                 </div>
             </div>
         `;
-        
-        messageDiv.innerHTML = `
-            <div class="message-sender">${escapeHtml(message.sender)}</div>
-            <div class="message-content">
-                ${messageContent}
-                ${reactionsHtml}
-                <div class="message-footer">
-                    <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
-                    ${actionButton}
-                </div>
-            </div>
-            ${actionsMenu}
-        `;
-        
-        chatMessages.appendChild(messageDiv);
-        
-        // Render existing reactions
-        const reactionsContainer = messageDiv.querySelector('.message-reactions');
-        if (message.reactions && message.reactions.length > 0) {
-            renderReactions(reactionsContainer, message.reactions);
-        }
-        
-// Store in appState.messages if available
-if (appState && appState.messages && Array.isArray(appState.messages)) {
-    appState.messages.push(message);
-}
-        
-        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
     // Render reactions for a message
@@ -363,43 +390,46 @@ if (appState && appState.messages && Array.isArray(appState.messages)) {
     function openReplyModal(messageId, senderName, messageText) {
         console.log('Opening reply modal for message:', messageId);
         
-        if (!replyModal || !replyToName || !replyToContent || !replyInput) {
+        if (!elements.replyModal || !elements.replyToName || !elements.replyToContent || !elements.replyInput) {
             console.error('Reply modal elements not found');
             return;
         }
         
-        replyToName.textContent = senderName || 'Unknown';
-        replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
-        replyInput.value = '';
+        elements.replyToName.textContent = senderName || 'Unknown';
+        elements.replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
+        elements.replyInput.value = '';
         
         if (appState) appState.replyingTo = messageId;
         
-        replyModal.style.display = 'flex';
-        replyInput.focus();
+        elements.replyModal.style.display = 'flex';
+        elements.replyInput.focus();
     }
 
-
-// Send reply
-async function sendReply() {
-    const replyText = replyInput.value.trim();
-    if (!replyText) return;
-    
-    if (messageInput) {
-        messageInput.value = replyText;
+    // Send reply
+    async function sendReply() {
+        const replyText = elements.replyInput.value.trim();
+        if (!replyText) return;
+        
+        // Store the replyTo ID before clearing
+        const replyToId = appState.replyingTo;
+        
+        // Set the message input value
+        if (elements.messageInput) {
+            elements.messageInput.value = replyText;
+        }
+        
+        // Close modal and clear replyTo
+        elements.replyModal.style.display = 'none';
+        appState.replyingTo = null;
+        
+        // Trigger send message
+        if (typeof window.sendMessage === 'function') {
+            await window.sendMessage();
+        } else {
+            console.warn('No sendMessage function found');
+            alert('Cannot send reply: Message function not available');
+        }
     }
-    replyModal.style.display = 'none';
-    
-    // Trigger send message
-    if (typeof window.sendMessage === 'function') {
-        await window.sendMessage();
-    } else if (window.appState && typeof window.sendMessageToDB === 'function') {
-        // Fallback
-        await window.sendMessageToDB(replyText, null);
-    } else {
-        console.warn('No sendMessage function found');
-        alert('Cannot send reply: Message function not available');
-    }
-}
 
     // Edit message
     async function editMessage(messageId) {
@@ -534,20 +564,6 @@ async function sendReply() {
         }
     }
 
-    // Show typing indicator
-    function showTypingIndicator(userName) {
-        if (typingUser && typingIndicator) {
-            typingUser.textContent = userName;
-            typingIndicator.classList.add('show');
-            
-            setTimeout(() => {
-                if (typingUser.textContent === userName) {
-                    typingIndicator.classList.remove('show');
-                }
-            }, 3000);
-        }
-    }
-
     // Show full image
     function showFullImage(src) {
         console.log('Showing full image:', src);
@@ -582,7 +598,6 @@ async function sendReply() {
         editMessage,
         deleteMessage,
         handleTyping,
-        showTypingIndicator,
         showFullImage,
         escapeHtml
     };
