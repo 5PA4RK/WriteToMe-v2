@@ -32,10 +32,8 @@ const appState = {
     showNotesPanel: false,
     allSessions: [],
     replyingTo: null,
-    activeMessageActions: null,
-    isLoadingHistory: false  // ADD THIS LINE
+    activeMessageActions: null
 };
-
 
 // Make getMessageReactions available globally for loadChatHistory
 window.getMessageReactions = async function(messageId) {
@@ -48,51 +46,17 @@ window.getMessageReactions = async function(messageId) {
 window.sendMessage = sendMessage;
 
 // Update the sendReply function
-// Update the sendReply function
 async function sendReply() {
-    console.log('sendReply called');
-    
-    const replyInput = document.getElementById('replyInput');
-    if (!replyInput) {
-        console.error('Reply input not found');
-        return;
-    }
-    
-    const replyText = replyInput.value.trim();
-    if (!replyText) {
-        alert('Please enter a reply message.');
-        return;
-    }
-    
-    const replyModal = document.getElementById('replyModal');
-    const replyingToId = replyModal ? replyModal.dataset.replyingTo : appState.replyingTo;
-    
-    console.log('Sending reply to message ID:', replyingToId);
-    console.log('Reply text:', replyText);
-    
-    // Set the message input value
-    if (messageInput) {
+    if (window.ChatModule) {
+        await window.ChatModule.sendReply();
+    } else {
+        const replyText = replyInput.value.trim();
+        if (!replyText) return;
+        
         messageInput.value = replyText;
-    }
-    
-    // Make sure appState.replyingTo is set
-    if (replyingToId) {
-        appState.replyingTo = replyingToId;
-    }
-    
-    // Close the modal
-    if (replyModal) {
         replyModal.style.display = 'none';
-        delete replyModal.dataset.replyingTo;
+        await sendMessage();
     }
-    
-    // Clear the reply input
-    if (replyInput) {
-        replyInput.value = '';
-    }
-    
-    // Send the message
-    await sendMessage();
 }
 // Make replyToMessage globally available
 window.replyToMessage = function(messageId) {
@@ -635,49 +599,9 @@ document.addEventListener('click', (e) => {
         });
     }
     
-// In setupEventListeners function, find the sendReplyBtn listener and update it:
-
-if (sendReplyBtn) {
-    // Remove any existing listeners to avoid duplicates
-    sendReplyBtn.replaceWith(sendReplyBtn.cloneNode(true));
-    const newSendReplyBtn = document.getElementById('sendReplyBtn');
-    
-    newSendReplyBtn.addEventListener('click', async () => {
-        console.log('Send reply button clicked');
-        
-        const replyInput = document.getElementById('replyInput');
-        const replyText = replyInput?.value.trim();
-        
-        if (!replyText) {
-            alert('Please enter a reply message.');
-            return;
-        }
-        
-        const replyModal = document.getElementById('replyModal');
-        const replyingToId = replyModal?.dataset.replyingTo || appState?.replyingTo;
-        
-        console.log('Sending reply to:', replyingToId);
-        
-        if (messageInput) {
-            messageInput.value = replyText;
-        }
-        
-        if (replyingToId) {
-            appState.replyingTo = replyingToId;
-        }
-        
-        if (replyModal) {
-            replyModal.style.display = 'none';
-            delete replyModal.dataset.replyingTo;
-        }
-        
-        if (replyInput) {
-            replyInput.value = '';
-        }
-        
-        await sendMessage();
-    });
-}
+    if (sendReplyBtn) {
+        sendReplyBtn.addEventListener('click', sendReply);
+    }
     
     window.addEventListener('click', (e) => {
         if (e.target === replyModal) {
@@ -1839,40 +1763,37 @@ function setupRealtimeSubscriptions() {
     .on(
         'postgres_changes',
         {
-            event: 'INSERT',  // Only listen for INSERT events
+            event: 'INSERT',
             schema: 'public',
-            table: 'messages',
-            filter: `session_id=eq.${appState.currentSessionId}`
+            table: 'messages'
         },
         (payload) => {
-            console.log('📦 NEW MESSAGE RECEIVED:', payload.new);
+            console.log('📦 Realtime message received:', payload.new?.sender_name);
             
-            // Only process if it's a new message (not from current user)
-            if (payload.new && payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                // Get reactions for this message
-                getMessageReactions(payload.new.id).then(reactions => {
-                    // Make sure we're using reply_to_id
-                    const replyToId = payload.new.reply_to_id || payload.new.reply_to;
-                    
-                    displayMessage({
-                        id: payload.new.id,
-                        sender: payload.new.sender_name,
-                        text: payload.new.message,
-                        image: payload.new.image_url,
-                        time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                        type: 'received',
-                        is_historical: false,
-                        reactions: reactions,
-                        reply_to_id: replyToId  // Use reply_to_id
+            if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                    // Get reactions for this message
+                    getMessageReactions(payload.new.id).then(reactions => {
+                        displayMessage({
+                            id: payload.new.id,
+                            sender: payload.new.sender_name,
+                            text: payload.new.message,
+                            image: payload.new.image_url,
+                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                            type: 'received',
+                            is_historical: false,
+                            reactions: reactions,
+                            reply_to: payload.new.reply_to
+                        });
                     });
-                });
-                
-                if (appState.soundEnabled && !payload.new.is_notification) {
-                    try {
-                        messageSound.currentTime = 0;
-                        messageSound.play().catch(e => console.log("Audio play failed:", e));
-                    } catch (e) {
-                        console.log("Audio error:", e);
+                    
+                    if (appState.soundEnabled && !payload.new.is_notification) {
+                        try {
+                            messageSound.currentTime = 0;
+                            messageSound.play().catch(e => console.log("Audio play failed:", e));
+                        } catch (e) {
+                            console.log("Audio error:", e);
+                        }
                     }
                 }
             }
@@ -1887,42 +1808,39 @@ function setupRealtimeSubscriptions() {
             filter: `session_id=eq.${appState.currentSessionId}`
         },
         (payload) => {
-            console.log('📝 Message UPDATED:', payload.new?.id);
+            console.log('📝 Message updated:', payload.new?.id);
             
-            // Only handle actual edits/deletes, not new messages
-            if (payload.new && payload.old) {
-                const messageElement = document.getElementById(`msg-${payload.new.id}`);
-                if (messageElement) {
-                    if (payload.new.is_deleted) {
-                        // Handle deleted message
-                        messageElement.innerHTML = `
-                            <div class="message-sender">${escapeHtml(payload.new.sender_name)}</div>
-                            <div class="message-content">
-                                <div class="message-text"><i>Message deleted</i></div>
-                                <div class="message-footer">
-                                    <div class="message-time">${new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                                </div>
+            const messageElement = document.getElementById(`msg-${payload.new.id}`);
+            if (messageElement) {
+                if (payload.new.is_deleted) {
+                    // Handle deleted message
+                    messageElement.innerHTML = `
+                        <div class="message-sender">${escapeHtml(payload.new.sender_name)}</div>
+                        <div class="message-content">
+                            <div class="message-text"><i>Message deleted</i></div>
+                            <div class="message-footer">
+                                <div class="message-time">${new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                             </div>
-                        `;
-                        // Remove actions menu
-                        const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
-                        if (actionsMenu) actionsMenu.remove();
-                    } else if (payload.new.is_edited || payload.old.message !== payload.new.message) {
-                        // Handle edited message
-                        const textElement = messageElement.querySelector('.message-text');
-                        if (textElement && !textElement.innerHTML.includes('Message deleted')) {
-                            textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
-                        }
+                        </div>
+                    `;
+                    // Remove actions menu
+                    const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
+                    if (actionsMenu) actionsMenu.remove();
+                } else {
+                    // Handle edited message
+                    const textElement = messageElement.querySelector('.message-text');
+                    if (textElement && !textElement.innerHTML.includes('Message deleted')) {
+                        textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
                     }
-                    
-                    // Update reactions if needed
-                    getMessageReactions(payload.new.id).then(reactions => {
-                        const reactionsContainer = messageElement.querySelector('.message-reactions');
-                        if (reactionsContainer && window.ChatModule) {
-                            window.ChatModule.renderReactions(reactionsContainer, reactions);
-                        }
-                    });
                 }
+                
+                // Update reactions
+                getMessageReactions(payload.new.id).then(reactions => {
+                    const reactionsContainer = messageElement.querySelector('.message-reactions');
+                    if (reactionsContainer && window.ChatModule) {
+                        window.ChatModule.renderReactions(reactionsContainer, reactions);
+                    }
+                });
             }
         }
     )
@@ -2024,10 +1942,6 @@ async function handleTyping() {
     }
 }
 
-// ============================================
-// ENHANCED CHAT FUNCTIONS
-// ============================================
-
 async function sendMessage() {
     if (!appState.isConnected || appState.isViewingHistory) {
         alert("You cannot send messages right now.");
@@ -2057,7 +1971,6 @@ async function sendMessage() {
     messageInput.style.height = 'auto';
     appState.replyingTo = null;
 }
-
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
@@ -2069,9 +1982,7 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to_id: appState.replyingTo || null,  // Make sure this is reply_to_id
-            is_edited: false,
-            is_deleted: false
+            reply_to_id: appState.replyingTo || null  // Use reply_to_id instead of reply_to
         };
         
         console.log('Message data with reply_to_id:', messageData);
@@ -2097,18 +2008,17 @@ async function sendMessageToDB(text, imageUrl) {
         // Get reactions for this message (empty initially)
         const reactions = [];
         
-        // Use ChatModule to display message if available
         if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
             window.ChatModule.displayMessage({
-                id: data.id,
-                sender: appState.userName,
-                text: text,
-                image: imageUrl,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_historical: false,
-                reactions: reactions,
-                reply_to_id: appState.replyingTo  // Pass reply_to_id
+                id: msg.id,
+                sender: msg.sender_name,
+                text: msg.message,
+                image: msg.image_url,
+                time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: messageType,
+                is_historical: !!sessionId,
+                reactions: allReactions[index] || [],
+                reply_to_id: msg.reply_to_id  // Use reply_to_id instead of reply_to
             });
         }
         
@@ -2124,6 +2034,13 @@ async function sendMessageToDB(text, imageUrl) {
     }
 }
 
+function displayMessage(message) {
+    if (window.ChatModule) {
+        window.ChatModule.displayMessage(message);
+    } else {
+        console.warn('ChatModule not available, message not displayed');
+    }
+}
 
 // ============================================
 // LOAD CHAT HISTORY
@@ -2136,14 +2053,6 @@ async function loadChatHistory(sessionId = null) {
     }
     
     console.log('Loading chat history for session:', targetSessionId);
-    
-    // Prevent double loading by checking if we're already loading
-    if (appState.isLoadingHistory) {
-        console.log('Already loading history, skipping...');
-        return;
-    }
-    
-    appState.isLoadingHistory = true;
     
     try {
         const { data: messages, error } = await supabaseClient
@@ -2213,12 +2122,11 @@ async function loadChatHistory(sessionId = null) {
         const allReactions = await Promise.all(reactionPromises);
         
         // Display all messages at once
-        for (const msg of messages) {
+        messages.forEach((msg, index) => {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
-            const reactions = allReactions[messages.indexOf(msg)] || [];
             
             if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-                await window.ChatModule.displayMessage({
+                window.ChatModule.displayMessage({
                     id: msg.id,
                     sender: msg.sender_name,
                     text: msg.message,
@@ -2226,11 +2134,22 @@ async function loadChatHistory(sessionId = null) {
                     time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                     type: messageType,
                     is_historical: !!sessionId,
-                    reactions: reactions,
-                    reply_to_id: msg.reply_to_id || msg.reply_to || null  // FIXED: Check both fields
+                    reactions: allReactions[index] || [],
+                    reply_to: msg.reply_to  // Make sure this is included
+                });
+            } else {
+                // Fallback to old display method
+                displayMessage({
+                    id: msg.id,
+                    sender: msg.sender_name,
+                    text: msg.message,
+                    image: msg.image_url,
+                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    type: messageType,
+                    is_historical: !!sessionId
                 });
             }
-        }
+        });
         
         if (chatMessages) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -2252,8 +2171,6 @@ async function loadChatHistory(sessionId = null) {
             `;
             chatMessages.appendChild(errorMsg);
         }
-    } finally {
-        appState.isLoadingHistory = false;
     }
 }
 
