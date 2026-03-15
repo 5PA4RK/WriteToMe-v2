@@ -113,6 +113,7 @@ function displayMessage(message) {
 }
 
 // Helper function to get reply quote HTML
+// Helper function to get reply quote HTML
 function getReplyQuoteHtml(replyToId, currentMessage) {
     let quotedSender = 'someone';
     let quotedText = 'a message';
@@ -150,19 +151,19 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
     
     // If still not found, try to fetch from database as a fallback
     if (!found && supabaseClient) {
-        // We'll fetch asynchronously, but for now return a loading state
-        // The actual fetch will happen after render
-        setTimeout(async () => {
-            try {
-                const { data, error } = await supabaseClient
-                    .from('messages')
-                    .select('sender_name, message')
-                    .eq('id', replyToId)
-                    .single();
-                
+        // Store the current message ID for the setTimeout
+        const currentMsgId = currentMessage.id;
+        
+        // Fetch immediately
+        supabaseClient
+            .from('messages')
+            .select('sender_name, message')
+            .eq('id', replyToId)
+            .single()
+            .then(({ data, error }) => {
                 if (!error && data) {
                     // Update the quote element if it exists
-                    const quoteElement = document.querySelector(`#msg-${currentMessage.id} .message-reply-ref`);
+                    const quoteElement = document.querySelector(`#msg-${currentMsgId} .message-reply-ref`);
                     if (quoteElement) {
                         const span = quoteElement.querySelector('span');
                         if (span) {
@@ -171,10 +172,8 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
                         }
                     }
                 }
-            } catch (e) {
-                console.log('Error fetching original message:', e);
-            }
-        }, 100);
+            })
+            .catch(e => console.log('Error fetching original message:', e));
         
         // Return loading state
         return `
@@ -405,8 +404,7 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
         }
     }
 
-    // Open reply modal
-// In chat.js, replace the entire reply-related code with this:
+// In chat.js, replace the openReplyModal and sendReply functions:
 
 // Open reply modal
 function openReplyModal(messageId, senderName, messageText) {
@@ -417,9 +415,10 @@ function openReplyModal(messageId, senderName, messageText) {
         return;
     }
     
-    // Clear any existing state
+    // Store the message we're replying to
     if (appState) {
         appState.replyingTo = messageId;
+        console.log('Set replyingTo to:', messageId);
     }
     
     elements.replyToName.textContent = senderName || 'Unknown';
@@ -430,14 +429,14 @@ function openReplyModal(messageId, senderName, messageText) {
     elements.replyInput.focus();
 }
 
-// Send reply - simplified
+// Send reply - FIXED VERSION
 async function sendReply() {
     console.log('sendReply called from chat.js');
     
     const replyText = elements.replyInput.value.trim();
     if (!replyText) return;
     
-    // Store the replyTo ID
+    // Store the replyTo ID before doing anything
     const replyToId = appState ? appState.replyingTo : null;
     console.log('Replying to message ID:', replyToId);
     
@@ -449,17 +448,10 @@ async function sendReply() {
         elements.messageInput.value = replyText;
     }
     
-    // Clear replyTo in appState
-    if (appState) {
-        appState.replyingTo = null;
-    }
-    
-    // Call the global sendMessage function
+    // IMPORTANT: Don't clear replyingTo here - let sendMessage handle it
+    // Just call sendMessage normally
     if (typeof window.sendMessage === 'function') {
-        // Small delay to ensure state is cleared
-        setTimeout(() => {
-            window.sendMessage();
-        }, 10);
+        await window.sendMessage();
     }
 }
 
