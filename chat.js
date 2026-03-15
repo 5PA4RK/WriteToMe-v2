@@ -104,9 +104,35 @@ const ChatModule = (function() {
         let messageContent = '';
         
         // Add reply reference if this is a reply
-        if (message.reply_to) {
-            messageContent += `<div class="message-reply-ref"><i class="fas fa-reply"></i> Replying to a message</div>`;
+// Add reply reference if this is a reply
+if (message.reply_to) {
+    // Try to find the original message content
+    let quotedText = 'a message';
+    let quotedSender = 'someone';
+    
+    // Look for the original message in the DOM or in appState
+    const originalMsgElement = document.getElementById(`msg-${message.reply_to}`);
+    if (originalMsgElement) {
+        const senderEl = originalMsgElement.querySelector('.message-sender');
+        const textEl = originalMsgElement.querySelector('.message-text');
+        if (senderEl) quotedSender = senderEl.textContent;
+        if (textEl) quotedText = textEl.textContent.replace(/\s*\(edited\)\s*$/, '').substring(0, 100);
+    } else if (appState && appState.messages) {
+        // Try to find in appState
+        const originalMsg = appState.messages.find(m => m.id === message.reply_to);
+        if (originalMsg) {
+            quotedSender = originalMsg.sender;
+            quotedText = (originalMsg.text || '').substring(0, 100);
         }
+    }
+    
+    messageContent += `
+        <div class="message-reply-ref">
+            <i class="fas fa-reply"></i> 
+            <span>Replying to <strong>${escapeHtml(quotedSender)}</strong>: ${escapeHtml(quotedText)}</span>
+        </div>
+    `;
+}
         
         if (message.text) {
             messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
@@ -380,6 +406,7 @@ if (appState && appState.messages && Array.isArray(appState.messages)) {
 
 
 // Send reply
+// Send reply
 async function sendReply() {
     const replyText = replyInput.value.trim();
     if (!replyText) return;
@@ -388,6 +415,10 @@ async function sendReply() {
         messageInput.value = replyText;
     }
     replyModal.style.display = 'none';
+    
+    // Clear the replyTo after sending
+    const replyToId = appState.replyingTo;
+    appState.replyingTo = null;
     
     // Trigger send message
     if (typeof window.sendMessage === 'function') {
