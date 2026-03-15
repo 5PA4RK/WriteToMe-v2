@@ -1835,7 +1835,7 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-    // Create new message subscription
+    // Create new message subscription with proper filter
     appState.realtimeSubscription = supabaseClient
         .channel('messages-channel-' + appState.currentSessionId)
         .on(
@@ -1853,7 +1853,7 @@ function setupRealtimeSubscriptions() {
                 if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
                     // Get reactions for this message
                     getMessageReactions(payload.new.id).then(reactions => {
-                        // Use reply_to_id if available, fallback to reply_to
+                        // Use reply_to_id if available
                         const replyToId = payload.new.reply_to_id || payload.new.reply_to;
                         
                         displayMessage({
@@ -1914,9 +1914,7 @@ function setupRealtimeSubscriptions() {
                 else if (payload.new.is_edited) {
                     const textElement = messageElement.querySelector('.message-text');
                     if (textElement && !textElement.innerHTML.includes('Message deleted')) {
-                        // Remove any existing edited indicator first
-                        let cleanText = payload.new.message;
-                        textElement.innerHTML = `${escapeHtml(cleanText)} <small class="edited-indicator">(edited)</small>`;
+                        textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
                     }
                 }
                 
@@ -1955,7 +1953,6 @@ function setupRealtimeSubscriptions() {
                     typingUser.textContent = payload.new.typing_user;
                     typingIndicator.classList.add('show');
                     
-                    // Clear after 3 seconds
                     setTimeout(() => {
                         if (typingUser.textContent === payload.new.typing_user) {
                             typingIndicator.classList.remove('show');
@@ -1974,6 +1971,14 @@ function setupRealtimeSubscriptions() {
         setupPendingGuestsSubscription();
         loadBackupNotifications();
     }
+}
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function checkAndReconnectSubscriptions() {
@@ -2093,9 +2098,6 @@ async function sendMessageToDB(text, imageUrl) {
         console.log('✅ Message saved to DB:', data.id);
         console.log('Saved reply_to_id value:', data.reply_to_id);
         
-        // Get reactions for this message (empty initially)
-        const reactions = [];
-        
         // Display message locally
         displayMessage({
             id: data.id,
@@ -2105,7 +2107,7 @@ async function sendMessageToDB(text, imageUrl) {
             time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             type: 'sent',
             is_historical: false,
-            reactions: reactions,
+            reactions: [],
             reply_to_id: appState.replyingTo
         });
         
@@ -2208,15 +2210,13 @@ async function loadChatHistory(sessionId = null) {
         );
         const allReactions = await Promise.all(reactionPromises);
         
-        // Display all messages at once
-// In loadChatHistory function, find this section and update it:
 
 // Display all messages at once
+
 messages.forEach((msg, index) => {
     const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
     
     if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-        // Make sure we're passing the correct reply_to_id
         window.ChatModule.displayMessage({
             id: msg.id,
             sender: msg.sender_name,
@@ -2226,7 +2226,7 @@ messages.forEach((msg, index) => {
             type: messageType,
             is_historical: !!sessionId,
             reactions: allReactions[index] || [],
-            reply_to_id: msg.reply_to_id || msg.reply_to || null  // Try both fields
+            reply_to_id: msg.reply_to_id || msg.reply_to
         });
     }
 });
