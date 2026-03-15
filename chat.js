@@ -1,3 +1,4 @@
+
 // chat.js - Enhanced Chat Functionality
 // This file handles all chat-related features: messages, reactions, replies, editing, deleting
 
@@ -78,29 +79,44 @@ const ChatModule = (function() {
         });
     }
 
-    // Get message by ID
+// Get message by ID
 // Get message by ID
 async function getMessageById(messageId) {
-    if (!supabaseClient) return null;
+    if (!supabaseClient) {
+        console.error('Supabase client not initialized');
+        return null;
+    }
+    
+    if (!messageId) {
+        console.error('No message ID provided');
+        return null;
+    }
     
     try {
-        // The ID might be a number or string, but in your DB it's bigint
+        console.log('Fetching message by ID:', messageId);
+        
+        // Convert to number if it's a string number
+        const id = typeof messageId === 'string' && !isNaN(messageId) ? parseInt(messageId) : messageId;
+        
         const { data, error } = await supabaseClient
             .from('messages')
             .select('*')
-            .eq('id', messageId)
+            .eq('id', id)
             .single();
         
-        if (error) throw error;
+        if (error) {
+            console.error('Error fetching message:', error);
+            return null;
+        }
+        
+        console.log('Found original message:', data);
         return data;
     } catch (error) {
-        console.error("Error fetching message:", error);
+        console.error("Error in getMessageById:", error);
         return null;
     }
 }
 
-    // Display a message in the chat
-// Display a message in the chat
 // Display a message in the chat
 async function displayMessage(message) {
     if (!chatMessages) {
@@ -123,12 +139,17 @@ async function displayMessage(message) {
         messageDiv.classList.add('historical');
     }
     messageDiv.id = `msg-${message.id}`;
+    messageDiv.dataset.messageId = message.id;
     
     let messageContent = '';
     
-    // Add reply reference if this is a reply - LOOK FOR reply_to_id
-    if (message.reply_to_id) {
-        messageContent += `<div class="message-reply-ref" id="reply-ref-${message.id}"><i class="fas fa-reply"></i> <span class="reply-loading">Loading reply...</span></div>`;
+    // Check for reply_to_id (prioritize this)
+    const replyToId = message.reply_to_id || message.reply_to;
+    console.log('Displaying message with reply_to_id:', replyToId, 'Full message:', message);
+    
+    // If this is a reply, create a container that will be updated
+    if (replyToId) {
+        messageContent += `<div class="quoted-message-container" data-reply-id="${replyToId}" data-message-id="${message.id}"></div>`;
     }
     
     if (message.text) {
@@ -183,29 +204,12 @@ async function displayMessage(message) {
     
     chatMessages.appendChild(messageDiv);
     
-    // If this is a reply, fetch and display the original message reference
-    if (message.reply_to_id) {
-        try {
-            const originalMsg = await getMessageById(message.reply_to_id);
-            const replyRef = document.getElementById(`reply-ref-${message.id}`);
-            if (replyRef && originalMsg) {
-                const originalText = originalMsg.message || 'Image message';
-                const previewText = originalText.length > 50 ? originalText.substring(0, 50) + '...' : originalText;
-                replyRef.innerHTML = `
-                    <i class="fas fa-reply"></i> 
-                    Replying to <strong>${escapeHtml(originalMsg.sender_name)}</strong>: 
-                    <span class="reply-preview">${escapeHtml(previewText)}</span>
-                `;
-            } else if (replyRef) {
-                replyRef.innerHTML = `<i class="fas fa-reply"></i> Replying to a message (original not found)`;
-            }
-        } catch (error) {
-            console.error('Error loading reply reference:', error);
-            const replyRef = document.getElementById(`reply-ref-${message.id}`);
-            if (replyRef) {
-                replyRef.innerHTML = `<i class="fas fa-reply"></i> Replying to a message`;
-            }
-        }
+    // If this is a reply, fetch and update the quoted message
+    if (replyToId) {
+        // Use setTimeout to ensure the DOM is ready
+        setTimeout(async () => {
+            await loadQuotedMessage(message.id, replyToId);
+        }, 100);
     }
     
     // Render existing reactions
@@ -217,29 +221,92 @@ async function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-    // Render reactions for a message
-    function renderReactions(container, reactions) {
-        if (!container) return;
+// Helper function to load quoted message
+async function loadQuotedMessage(messageId, replyToId) {
+    try {
+        console.log(`Loading quoted message for ${messageId}, reply to: ${replyToId}`);
         
-        if (!reactions || reactions.length === 0) {
-            container.innerHTML = '';
+        const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
+        if (!container) {
+            console.log('Container not found for message:', messageId);
             return;
         }
         
-        // Group reactions by emoji
-        const reactionCounts = {};
-        reactions.forEach(r => {
-            reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-        });
+        // Show loading state
+        container.innerHTML = `<div class="quoted-message loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>`;
         
-        let html = '';
-        for (const [emoji, count] of Object.entries(reactionCounts)) {
-            const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
-            html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+        const originalMsg = await getMessageById(replyToId);
+        
+        if (originalMsg) {
+            const originalText = originalMsg.message || 'Image message';
+            const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
+            
+            container.innerHTML = `
+                <div class="quoted-message">
+                    <div class="quoted-sender">
+                        <i class="fas fa-reply"></i> ${escapeHtml(originalMsg.sender_name)}:
+                    </div>
+                    <div class="quoted-text">${escapeHtml(previewText)}</div>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="quoted-message error">
+                    <i class="fas fa-exclamation-circle"></i> Message not found
+                </div>
+            `;
         }
-        
-        container.innerHTML = html;
+    } catch (error) {
+        console.error('Error loading quoted message:', error);
+        const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
+        if (container) {
+            container.innerHTML = `
+                <div class="quoted-message error">
+                    <i class="fas fa-exclamation-circle"></i> Error loading
+                </div>
+            `;
+        }
     }
+}
+// Load all quoted messages after chat history is loaded
+function loadAllQuotedMessages() {
+    console.log('Loading all quoted messages...');
+    const containers = document.querySelectorAll('.quoted-message-container');
+    console.log('Found containers:', containers.length);
+    
+    containers.forEach(container => {
+        const messageId = container.dataset.messageId;
+        const replyToId = container.dataset.replyId;
+        
+        if (messageId && replyToId) {
+            loadQuotedMessage(messageId, replyToId);
+        }
+    });
+}
+
+// Render reactions for a message
+function renderReactions(container, reactions) {
+    if (!container) return;
+    
+    if (!reactions || reactions.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    // Group reactions by emoji
+    const reactionCounts = {};
+    reactions.forEach(r => {
+        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+    });
+    
+    let html = '';
+    for (const [emoji, count] of Object.entries(reactionCounts)) {
+        const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
+        html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+    }
+    
+    container.innerHTML = html;
+}
 
     // Toggle message actions menu
     function toggleMessageActions(messageId, button) {
@@ -292,62 +359,45 @@ async function displayMessage(message) {
     }
 
     // Add or remove reaction
-    async function addReaction(messageId, emoji) {
-        console.log('Adding reaction:', emoji, 'to message:', messageId);
-        closeMessageActions();
-        
-        if (!supabaseClient) {
-            console.error('Supabase client not initialized');
-            alert('Cannot add reaction: Database connection not initialized');
+// Add or remove reaction
+async function addReaction(messageId, emoji) {
+    console.log('Adding reaction:', emoji, 'to message:', messageId);
+    closeMessageActions();
+    
+    if (!supabaseClient) {
+        console.error('Supabase client not initialized');
+        alert('Cannot add reaction: Database connection not initialized');
+        return;
+    }
+    
+    if (!appState || !appState.userId) {
+        console.error('User not logged in');
+        alert('You must be logged in to add reactions');
+        return;
+    }
+    
+    try {
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        if (!messageElement) {
+            console.error('Message element not found');
             return;
         }
         
-        if (!appState || !appState.userId) {
-            console.error('User not logged in');
-            alert('You must be logged in to add reactions');
-            return;
-        }
+        const reactions = await getMessageReactions(messageId);
         
-        try {
-            const messageElement = document.getElementById(`msg-${messageId}`);
-            if (!messageElement) {
-                console.error('Message element not found');
-                return;
-            }
-            
-            const reactions = await getMessageReactions(messageId);
-            
-            // Check if user already reacted with ANY emoji on this message
-            const userReaction = reactions.find(r => r.user_id === appState.userId);
-            
-            if (userReaction) {
-                // If user already reacted with a different emoji, remove the old one first
-                if (userReaction.emoji !== emoji) {
-                    // Remove old reaction
-                    await supabaseClient
-                        .from('message_reactions')
-                        .delete()
-                        .eq('id', userReaction.id);
-                    
-                    // Add new reaction
-                    await supabaseClient
-                        .from('message_reactions')
-                        .insert([{
-                            message_id: messageId,
-                            user_id: appState.userId,
-                            user_name: appState.userName,
-                            emoji: emoji,
-                            created_at: new Date().toISOString()
-                        }]);
-                } else {
-                    // User clicked the same emoji - remove it (toggle off)
-                    await supabaseClient
-                        .from('message_reactions')
-                        .delete()
-                        .eq('id', userReaction.id);
-                }
-            } else {
-                // No existing reaction, add new one
+        // Check if user already reacted with ANY emoji on this message
+        const userReaction = reactions.find(r => r.user_id === appState.userId);
+        
+        if (userReaction) {
+            // If user already reacted with a different emoji, remove the old one first
+            if (userReaction.emoji !== emoji) {
+                // Remove old reaction
+                await supabaseClient
+                    .from('message_reactions')
+                    .delete()
+                    .eq('id', userReaction.id);
+                
+                // Add new reaction
                 await supabaseClient
                     .from('message_reactions')
                     .insert([{
@@ -357,50 +407,63 @@ async function displayMessage(message) {
                         emoji: emoji,
                         created_at: new Date().toISOString()
                     }]);
+            } else {
+                // User clicked the same emoji - remove it (toggle off)
+                await supabaseClient
+                    .from('message_reactions')
+                    .delete()
+                    .eq('id', userReaction.id);
             }
-            
-            // Get updated reactions
-            const updatedReactions = await getMessageReactions(messageId);
-            
-            // Update UI
-            const reactionsContainer = messageElement.querySelector('.message-reactions');
-            if (reactionsContainer) {
-                renderReactions(reactionsContainer, updatedReactions);
-            }
-            
-            console.log('Reaction added successfully');
-            
-        } catch (error) {
-            console.error("Error adding reaction:", error);
-            alert("Failed to add reaction: " + error.message);
+        } else {
+            // No existing reaction, add new one
+            await supabaseClient
+                .from('message_reactions')
+                .insert([{
+                    message_id: messageId,
+                    user_id: appState.userId,
+                    user_name: appState.userName,
+                    emoji: emoji,
+                    created_at: new Date().toISOString()
+                }]);
         }
+        
+        // No need to manually update UI here - the real-time subscription will handle it
+        console.log('Reaction added/deleted successfully, real-time subscription will update UI');
+        
+    } catch (error) {
+        console.error("Error adding reaction:", error);
+        alert("Failed to add reaction: " + error.message);
     }
-
+}
     // Toggle reaction (wrapper for addReaction)
     async function toggleReaction(messageId, emoji) {
         await addReaction(messageId, emoji);
     }
 
     // Get reactions for a message
-    async function getMessageReactions(messageId) {
-        if (!supabaseClient) {
-            console.error('Supabase client not initialized');
-            return [];
-        }
-        
-        try {
-            const { data, error } = await supabaseClient
-                .from('message_reactions')
-                .select('*')
-                .eq('message_id', messageId);
-            
-            if (error) throw error;
-            return data || [];
-        } catch (error) {
-            console.error("Error getting reactions:", error);
-            return [];
-        }
+// Get reactions for a message
+async function getMessageReactions(messageId) {
+    if (!supabaseClient) {
+        console.error('Supabase client not initialized');
+        return [];
     }
+    
+    try {
+        const { data, error } = await supabaseClient
+            .from('message_reactions')
+            .select('*')
+            .eq('message_id', messageId);
+        
+        if (error) {
+            console.error('Error getting reactions:', error);
+            return [];
+        }
+        return data || [];
+    } catch (error) {
+        console.error("Error in getMessageReactions:", error);
+        return [];
+    }
+}
 
     // Open reply modal
 // Open reply modal
@@ -646,6 +709,7 @@ async function sendReply() {
         addReaction,
         toggleReaction,
         getMessageReactions,
+        getMessageById,  // Add this line
         getMessageById,
         openReplyModal,
         sendReply,
