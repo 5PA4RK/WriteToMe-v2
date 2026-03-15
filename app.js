@@ -1745,12 +1745,15 @@ function setupRealtimeSubscriptions() {
         {
             event: 'INSERT',
             schema: 'public',
-            table: 'messages'
+            table: 'messages',
+            filter: `session_id=eq.${appState.currentSessionId}`  // Keep this filter
         },
         (payload) => {
-            console.log('📦 Realtime message received:', payload.new?.sender_name);
+            console.log('📦 Realtime message received:', payload.new?.sender_name, 'Session:', payload.new?.session_id, 'Current:', appState.currentSessionId);
             
+            // Double-check the session ID matches
             if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                // Don't show own messages (they're already displayed)
                 if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
                     // Get reactions for this message
                     getMessageReactions(payload.new.id).then(reactions => {
@@ -1825,9 +1828,12 @@ function setupRealtimeSubscriptions() {
         }
     )
     .subscribe((status, err) => {
-        console.log('📡 MESSAGES Subscription status:', status);
+        console.log('📡 MESSAGES Subscription status:', status, 'for session:', appState.currentSessionId);
         if (err) {
             console.error('❌ Messages subscription error:', err);
+        }
+        if (status === 'SUBSCRIBED') {
+            console.log('✅ Successfully subscribed to messages for session:', appState.currentSessionId);
         }
     });
 
