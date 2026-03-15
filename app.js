@@ -316,6 +316,63 @@ async function initApp() {
     setInterval(checkAndReconnectSubscriptions, 15000);
 }
 
+// Make reaction emojis globally available
+window.reactionEmojis = ["👍", "❤️", "😂", "😮", "😢", "😡"];
+
+// Ensure ChatModule functions are available
+window.ChatModule = window.ChatModule || {};
+
+// Add mobile-specific CSS for emoji picker
+const style = document.createElement('style');
+style.textContent = `
+    @media (max-width: 768px) {
+        .emoji-picker {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            top: auto;
+            width: 100%;
+            grid-template-columns: repeat(6, 1fr);
+            border-radius: 12px 12px 0 0;
+            padding: 15px;
+            max-height: 250px;
+            overflow-y: auto;
+            background: var(--bg-primary);
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.3);
+            z-index: 10000;
+        }
+        
+        .emoji-picker span {
+            font-size: 28px !important;
+            padding: 12px !important;
+            text-align: center;
+            touch-action: manipulation;
+            cursor: pointer;
+            border-radius: 8px;
+        }
+        
+        .emoji-picker span:active {
+            background: var(--bg-tertiary);
+            transform: scale(1.1);
+        }
+        
+        /* Ensure the emoji button is easily tappable */
+        #emojiBtn {
+            min-width: 44px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #emojiBtn i {
+            font-size: 24px;
+        }
+    }
+`;
+document.head.appendChild(style);
+
 // ============================================
 // MODAL FUNCTIONS
 // ============================================
@@ -561,25 +618,33 @@ function setupEventListeners() {
         });
     }
     
-    // Click outside emoji picker to close
-// Click outside emoji picker to close
+// Update the click outside handler
 document.addEventListener('click', (e) => {
     // Close emoji picker when clicking outside
+    if (emojiPicker && emojiPicker.classList.contains('show')) {
+        // Check if click is outside both picker and button
+        const isOutside = !emojiPicker.contains(e.target) && 
+                          emojiBtn && !emojiBtn.contains(e.target);
+        
+        // Also check if it's a touch event on mobile
+        const isTouch = e.type === 'touchstart';
+        
+        if (isOutside || (isTouch && isOutside)) {
+            emojiPicker.classList.remove('show');
+        }
+    }
+    
+    // Add touch event support
+}, false);
+
+// Add touch event listener for mobile
+document.addEventListener('touchstart', (e) => {
     if (emojiPicker && emojiPicker.classList.contains('show')) {
         if (!emojiPicker.contains(e.target) && emojiBtn && !emojiBtn.contains(e.target)) {
             emojiPicker.classList.remove('show');
         }
     }
-    
-    // Close message actions when clicking outside
-    if (appState.activeMessageActions) {
-        const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-        if (actionsMenu && !actionsMenu.contains(e.target) && 
-            !e.target.closest('.message-action-dots')) {
-            closeMessageActions();
-        }
-    }
-});
+}, { passive: true });
     
     // Tab switching
     if (historyTabBtn) {
@@ -1824,20 +1889,21 @@ function setupRealtimeSubscriptions() {
     
     // Clean up existing subscriptions
     if (appState.realtimeSubscription) {
-        console.log("Removing old message subscription");
+        console.log("Removing old messages subscription");
         supabaseClient.removeChannel(appState.realtimeSubscription);
         appState.realtimeSubscription = null;
     }
     
     if (appState.typingSubscription) {
-        console.log("Removing old typing subscription");
         supabaseClient.removeChannel(appState.typingSubscription);
         appState.typingSubscription = null;
     }
     
-    // Create new message subscription with proper filter
+    // Create main channel for messages and reactions
     appState.realtimeSubscription = supabaseClient
-        .channel('messages-channel-' + appState.currentSessionId)
+        .channel('messages_' + appState.currentSessionId)
+        
+        // Listen for new messages
         .on(
             'postgres_changes',
             {
@@ -1846,41 +1912,64 @@ function setupRealtimeSubscriptions() {
                 table: 'messages',
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
-            (payload) => {
-                console.log('📦 NEW MESSAGE RECEIVED:', payload.new);
+            async (payload) => {
+                console.log('📦 New message received:', payload.new?.sender_name, payload.new?.id);
                 
-                // Don't process messages from current user (they're already displayed)
-                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                    // Get reactions for this message
-                    getMessageReactions(payload.new.id).then(reactions => {
-                        // Use reply_to_id if available
-                        const replyToId = payload.new.reply_to_id || payload.new.reply_to;
+                if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                    // Don't display own messages (they're already displayed)
+                    if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
                         
-                        displayMessage({
-                            id: payload.new.id,
-                            sender: payload.new.sender_name,
-                            text: payload.new.message,
-                            image: payload.new.image_url,
-                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                            type: 'received',
-                            is_historical: false,
-                            reactions: reactions,
-                            reply_to_id: replyToId
-                        });
-                    });
-                    
-                    // Play sound if enabled
-                    if (appState.soundEnabled && !payload.new.is_notification) {
+                        // Get reactions for this message
                         try {
-                            messageSound.currentTime = 0;
-                            messageSound.play().catch(e => console.log("Audio play failed:", e));
-                        } catch (e) {
-                            console.log("Audio error:", e);
+                            const { data: reactions } = await supabaseClient
+                                .from('message_reactions')
+                                .select('*')
+                                .eq('message_id', payload.new.id);
+                            
+                            // Display the message
+                            displayMessage({
+                                id: payload.new.id,
+                                sender: payload.new.sender_name,
+                                text: payload.new.message,
+                                image: payload.new.image_url,
+                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                                type: 'received',
+                                is_historical: false,
+                                reactions: reactions || [],
+                                reply_to: payload.new.reply_to
+                            });
+                            
+                            // Play sound if enabled
+                            if (appState.soundEnabled && !payload.new.is_notification) {
+                                try {
+                                    messageSound.currentTime = 0;
+                                    messageSound.play().catch(e => console.log("Audio play failed:", e));
+                                } catch (e) {
+                                    console.log("Audio error:", e);
+                                }
+                            }
+                        } catch (error) {
+                            console.error("Error loading reactions for new message:", error);
+                            
+                            // Display message without reactions as fallback
+                            displayMessage({
+                                id: payload.new.id,
+                                sender: payload.new.sender_name,
+                                text: payload.new.message,
+                                image: payload.new.image_url,
+                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                                type: 'received',
+                                is_historical: false,
+                                reactions: [],
+                                reply_to: payload.new.reply_to
+                            });
                         }
                     }
                 }
             }
         )
+        
+        // Listen for message updates (edits/deletes)
         .on(
             'postgres_changes',
             {
@@ -1889,57 +1978,145 @@ function setupRealtimeSubscriptions() {
                 table: 'messages',
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
-            (payload) => {
-                console.log('📝 MESSAGE UPDATED:', payload.new);
+            async (payload) => {
+                console.log('📝 Message updated:', payload.new?.id);
                 
                 const messageElement = document.getElementById(`msg-${payload.new.id}`);
-                if (!messageElement) return;
-                
-                // Handle deleted messages
-                if (payload.new.is_deleted) {
-                    messageElement.innerHTML = `
-                        <div class="message-sender">${escapeHtml(payload.new.sender_name)}</div>
-                        <div class="message-content">
-                            <div class="message-text"><i>Message deleted</i></div>
-                            <div class="message-footer">
-                                <div class="message-time">${new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                if (messageElement) {
+                    if (payload.new.is_deleted) {
+                        // Handle deleted message
+                        const senderName = messageElement.querySelector('.message-sender')?.textContent || 'User';
+                        messageElement.innerHTML = `
+                            <div class="message-sender">${escapeHtml(senderName)}</div>
+                            <div class="message-content">
+                                <div class="message-text"><i>Message deleted</i></div>
+                                <div class="message-footer">
+                                    <div class="message-time">${new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                </div>
                             </div>
-                        </div>
-                    `;
-                    // Remove actions menu
-                    const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
-                    if (actionsMenu) actionsMenu.remove();
-                } 
-                // Handle edited messages
-                else if (payload.new.is_edited) {
-                    const textElement = messageElement.querySelector('.message-text');
-                    if (textElement && !textElement.innerHTML.includes('Message deleted')) {
-                        textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
+                        `;
+                        // Remove actions menu
+                        const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
+                        if (actionsMenu) actionsMenu.remove();
+                    } else {
+                        // Handle edited message
+                        const textElement = messageElement.querySelector('.message-text');
+                        if (textElement && !textElement.innerHTML.includes('Message deleted')) {
+                            textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
+                        }
+                    }
+                    
+                    // Update reactions (in case they changed)
+                    try {
+                        const { data: reactions } = await supabaseClient
+                            .from('message_reactions')
+                            .select('*')
+                            .eq('message_id', payload.new.id);
+                        
+                        const reactionsContainer = messageElement.querySelector('.message-reactions');
+                        if (reactionsContainer && window.ChatModule) {
+                            window.ChatModule.renderReactions(reactionsContainer, reactions || []);
+                        }
+                    } catch (error) {
+                        console.error("Error updating reactions after message update:", error);
                     }
                 }
-                
-                // Update reactions
-                getMessageReactions(payload.new.id).then(reactions => {
-                    const reactionsContainer = messageElement.querySelector('.message-reactions');
-                    if (reactionsContainer && window.ChatModule) {
-                        window.ChatModule.renderReactions(reactionsContainer, reactions);
-                    }
-                });
             }
         )
-        .subscribe((status, err) => {
-            console.log('📡 Messages subscription status:', status);
+        
+        // CRITICAL: Listen for ALL reaction changes (INSERT, UPDATE, DELETE)
+        .on(
+            'postgres_changes',
+            {
+                event: '*', // Listen to INSERT, UPDATE, DELETE
+                schema: 'public',
+                table: 'message_reactions'
+            },
+            async (payload) => {
+                console.log('🎯 Reaction change detected:', payload.eventType, payload.new || payload.old);
+                
+                // Get the message ID from the reaction
+                const messageId = payload.new?.message_id || payload.old?.message_id;
+                if (!messageId) return;
+                
+                // Verify this reaction belongs to our current session
+                try {
+                    // First, check if this message is in our current session
+                    const { data: message, error } = await supabaseClient
+                        .from('messages')
+                        .select('session_id')
+                        .eq('id', messageId)
+                        .single();
+                    
+                    if (error || !message || message.session_id !== appState.currentSessionId) {
+                        return; // Not in our current session, ignore
+                    }
+                    
+                    // Find the message element
+                    const messageElement = document.getElementById(`msg-${messageId}`);
+                    if (!messageElement) return;
+                    
+                    // Get updated reactions for this message
+                    const { data: reactions, error: reactionsError } = await supabaseClient
+                        .from('message_reactions')
+                        .select('*')
+                        .eq('message_id', messageId);
+                    
+                    if (reactionsError) throw reactionsError;
+                    
+                    // Update reactions display
+                    const reactionsContainer = messageElement.querySelector('.message-reactions');
+                    if (reactionsContainer && window.ChatModule) {
+                        window.ChatModule.renderReactions(reactionsContainer, reactions || []);
+                        
+                        // Add visual feedback for reaction update
+                        reactionsContainer.classList.add('reaction-updated');
+                        setTimeout(() => {
+                            reactionsContainer.classList.remove('reaction-updated');
+                        }, 300);
+                    }
+                    
+                    console.log(`✅ Reactions updated for message ${messageId}:`, reactions?.length || 0);
+                    
+                } catch (error) {
+                    console.error("Error handling reaction update:", error);
+                }
+            }
+        )
+        
+        // Subscribe to the channel
+        .subscribe(async (status, err) => {
+            console.log('📡 MESSAGES & REACTIONS Subscription status:', status);
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ Successfully subscribed to messages and reactions!');
+                
+                // Load initial reactions for all messages in view
+                const messageElements = document.querySelectorAll('.message[id^="msg-"]');
+                for (const element of messageElements) {
+                    const messageId = element.id.replace('msg-', '');
+                    try {
+                        const { data: reactions } = await supabaseClient
+                            .from('message_reactions')
+                            .select('*')
+                            .eq('message_id', messageId);
+                        
+                        const reactionsContainer = element.querySelector('.message-reactions');
+                        if (reactionsContainer && window.ChatModule) {
+                            window.ChatModule.renderReactions(reactionsContainer, reactions || []);
+                        }
+                    } catch (error) {
+                        console.error(`Error loading reactions for message ${messageId}:`, error);
+                    }
+                }
+            }
             if (err) {
                 console.error('❌ Messages subscription error:', err);
             }
-            if (status === 'SUBSCRIBED') {
-                console.log('✅ Successfully subscribed to messages!');
-            }
         });
 
-    // Typing subscription
+    // Set up typing indicator subscription
     appState.typingSubscription = supabaseClient
-        .channel('typing-channel-' + appState.currentSessionId)
+        .channel('typing_' + appState.currentSessionId)
         .on(
             'postgres_changes',
             {
@@ -1949,31 +2126,44 @@ function setupRealtimeSubscriptions() {
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
             (payload) => {
-                if (payload.new && payload.new.typing_user && payload.new.typing_user !== appState.userName) {
+                if (payload.new && payload.new.typing_user && 
+                    payload.new.typing_user !== appState.userName && 
+                    payload.new.typing_user !== null) {
+                    
+                    // Show typing indicator
                     typingUser.textContent = payload.new.typing_user;
                     typingIndicator.classList.add('show');
                     
+                    // Clear after 3 seconds
                     setTimeout(() => {
                         if (typingUser.textContent === payload.new.typing_user) {
                             typingIndicator.classList.remove('show');
                         }
                     }, 3000);
+                } else if (!payload.new.typing_user) {
+                    // Hide typing indicator if no one is typing
+                    typingIndicator.classList.remove('show');
                 }
             }
         )
-        .subscribe((status) => {
-            console.log('📡 Typing subscription status:', status);
+        .subscribe((status, err) => {
+            console.log('📡 TYPING Subscription status:', status);
+            if (err) {
+                console.error('❌ Typing subscription error:', err);
+            }
         });
     
-    // Set up pending guests subscription for host
+    // Set up pending guests subscription for hosts
     if (appState.isHost) {
         console.log("👑 Setting up pending guests subscription for host");
         setupPendingGuestsSubscription();
         loadBackupNotifications();
     }
+    
+    console.log("✅ All real-time subscriptions configured");
 }
 
-// Helper function to escape HTML
+// Helper function to escape HTML (add this if not already present)
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -2533,6 +2723,32 @@ async function handleImageUpload(e) {
 
 function toggleEmojiPicker() {
     emojiPicker.classList.toggle('show');
+    
+    // On mobile, scroll the picker into view
+    if (window.innerWidth <= 768 && emojiPicker.classList.contains('show')) {
+        setTimeout(() => {
+            emojiPicker.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
+    }
+}
+
+
+// Add this function to handle emoji selection for mobile
+function handleEmojiSelection(emoji) {
+    messageInput.value += emoji;
+    emojiPicker.classList.remove('show');
+    messageInput.focus();
+    
+    // Trigger input event to handle typing indicator
+    const inputEvent = new Event('input', { bubbles: true });
+    messageInput.dispatchEvent(inputEvent);
+    
+    // On mobile, ensure the keyboard stays hidden after emoji selection
+    if ('virtualKeyboard' in navigator) {
+        // For modern mobile browsers
+        messageInput.blur();
+        setTimeout(() => messageInput.focus(), 10);
+    }
 }
 
 function populateEmojis() {
@@ -2543,11 +2759,17 @@ function populateEmojis() {
         const emojiSpan = document.createElement('span');
         emojiSpan.className = 'emoji';
         emojiSpan.textContent = emoji;
-        emojiSpan.onclick = () => {
-            messageInput.value += emoji;
-            emojiPicker.classList.remove('show');
-            messageInput.focus();
-        };
+        // Use touch-friendly event handling
+        emojiSpan.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleEmojiSelection(emoji);
+        });
+        emojiSpan.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleEmojiSelection(emoji);
+        });
         emojiPicker.appendChild(emojiSpan);
     });
 }
