@@ -79,210 +79,217 @@ const ChatModule = (function() {
     }
 
     // Get message by ID
-    async function getMessageById(messageId) {
-        if (!supabaseClient) {
-            console.error('Supabase client not initialized');
-            return null;
-        }
-        
-        if (!messageId) {
-            console.error('No message ID provided');
-            return null;
-        }
-        
-        try {
-            console.log('Fetching message by ID:', messageId);
-            
-            const { data, error } = await supabaseClient
-                .from('messages')
-                .select('*')
-                .eq('id', messageId)
-                .single();
-            
-            if (error) {
-                console.error('Error fetching message:', error);
-                return null;
-            }
-            
-            console.log('Found original message:', data);
-            return data;
-        } catch (error) {
-            console.error("Error in getMessageById:", error);
-            return null;
-        }
+ // Get message by ID
+async function getMessageById(messageId) {
+    if (!supabaseClient) {
+        console.error('Supabase client not initialized');
+        return null;
     }
+    
+    if (!messageId) {
+        console.error('No message ID provided');
+        return null;
+    }
+    
+    try {
+        console.log('Fetching message by ID:', messageId);
+        
+        const { data, error } = await supabaseClient
+            .from('messages')
+            .select('*')
+            .eq('id', messageId)
+            .single();
+        
+        if (error) {
+            console.error('Error fetching message:', error);
+            return null;
+        }
+        
+        console.log('Found original message:', data);
+        return data;
+    } catch (error) {
+        console.error("Error in getMessageById:", error);
+        return null;
+    }
+}
 
-    // Load all quoted messages after page load
-    function loadAllQuotedMessages() {
-        console.log('Loading all quoted messages...');
-        const containers = document.querySelectorAll('.quoted-message-container');
-        console.log('Found containers:', containers.length);
+// Load all quoted messages after page load
+function loadAllQuotedMessages() {
+    console.log('Loading all quoted messages...');
+    const containers = document.querySelectorAll('.quoted-message-container');
+    console.log('Found containers:', containers.length);
+    
+    containers.forEach(container => {
+        const messageId = container.dataset.messageId;
+        const replyToId = container.dataset.replyId;
         
-        containers.forEach(container => {
-            const messageId = container.dataset.messageId;
-            const replyToId = container.dataset.replyId;
-            
-            if (messageId && replyToId) {
-                loadQuotedMessage(messageId, replyToId);
-            }
-        });
-    }
+        if (messageId && replyToId) {
+            loadQuotedMessage(messageId, replyToId);
+        }
+    });
+}
 
-    // Helper function to load quoted message
-    async function loadQuotedMessage(messageId, replyToId) {
-        try {
-            console.log(`Loading quoted message for ${messageId}, reply to: ${replyToId}`);
+// Helper function to load quoted message
+async function loadQuotedMessage(messageId, replyToId) {
+    try {
+        console.log(`Loading quoted message for ${messageId}, reply to: ${replyToId}`);
+        
+        const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
+        if (!container) {
+            console.log('Container not found for message:', messageId);
+            return;
+        }
+        
+        // Show loading state
+        container.innerHTML = `<div class="quoted-message loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>`;
+        
+        const originalMsg = await getMessageById(replyToId);
+        
+        if (originalMsg) {
+            const originalText = originalMsg.message || 'Image message';
+            const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
             
-            const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
-            if (!container) {
-                console.log('Container not found for message:', messageId);
-                return;
-            }
-            
-            // Show loading state
-            container.innerHTML = `<div class="quoted-message loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>`;
-            
-            const originalMsg = await getMessageById(replyToId);
-            
-            if (originalMsg) {
-                const originalText = originalMsg.message || 'Image message';
-                const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
-                
-                container.innerHTML = `
-                    <div class="quoted-message">
-                        <div class="quoted-sender">
-                            <i class="fas fa-reply"></i> ${escapeHtml(originalMsg.sender_name)}:
-                        </div>
-                        <div class="quoted-text">${escapeHtml(previewText)}</div>
+            container.innerHTML = `
+                <div class="quoted-message">
+                    <div class="quoted-sender">
+                        <i class="fas fa-reply"></i> ${escapeHtml(originalMsg.sender_name)}:
                     </div>
-                `;
-            } else {
-                container.innerHTML = `
-                    <div class="quoted-message error">
-                        <i class="fas fa-exclamation-circle"></i> Message not found
-                    </div>
-                `;
-            }
-        } catch (error) {
-            console.error('Error loading quoted message:', error);
-            const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
-            if (container) {
-                container.innerHTML = `
-                    <div class="quoted-message error">
-                        <i class="fas fa-exclamation-circle"></i> Error loading
-                    </div>
-                `;
-            }
+                    <div class="quoted-text">${escapeHtml(previewText)}</div>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="quoted-message error">
+                    <i class="fas fa-exclamation-circle"></i> Message not found
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading quoted message:', error);
+        const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
+        if (container) {
+            container.innerHTML = `
+                <div class="quoted-message error">
+                    <i class="fas fa-exclamation-circle"></i> Error loading
+                </div>
+            `;
         }
     }
+}
 
     // Display a message in the chat
-    async function displayMessage(message) {
-        if (!chatMessages) {
-            console.error('Chat messages container not found');
-            return;
-        }
-        
-        if (appState && appState.isViewingHistory && message.is_historical === false) {
-            return;
-        }
-        
-        // Check if message already exists
-        if (document.getElementById(`msg-${message.id}`)) {
-            return;
-        }
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${message.type}`;
-        if (message.is_historical) {
-            messageDiv.classList.add('historical');
-        }
-        messageDiv.id = `msg-${message.id}`;
-        messageDiv.dataset.messageId = message.id;
-        
-        let messageContent = '';
-        
-        // Check for reply_to_id (prioritize this)
-        const replyToId = message.reply_to_id || message.reply_to;
-        console.log('Displaying message with reply_to_id:', replyToId, 'Full message:', message);
-        
-        // If this is a reply, create a container that will be updated
-        if (replyToId) {
-            messageContent += `<div class="quoted-message-container" data-reply-id="${replyToId}" data-message-id="${message.id}"></div>`;
-        }
-        
-        if (message.text) {
-            messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
-        }
-        
-        if (message.image) {
-            messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
-        }
-        
-        // Add reactions section
-        const reactionsHtml = `<div class="message-reactions"></div>`;
-        
-        // Add action button (three dots)
-        const actionButton = `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
-        
-        // Actions menu (initially hidden)
-        const actionsMenu = `
-            <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
-                ${message.sender === (appState ? appState.userName : '') ? `
-                    <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
-                    <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
-                    <div class="menu-divider"></div>
-                ` : ''}
-                <button onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
-                    <i class="fas fa-reply"></i> Reply
-                </button>
+// Display a message in the chat
+async function displayMessage(message) {
+    if (!chatMessages) {
+        console.error('Chat messages container not found');
+        return;
+    }
+    
+    if (appState && appState.isViewingHistory && message.is_historical === false) {
+        return;
+    }
+    
+    // Check if message already exists
+    if (document.getElementById(`msg-${message.id}`)) {
+        console.log('Message already exists, skipping:', message.id);
+        return;
+    }
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${message.type}`;
+    if (message.is_historical) {
+        messageDiv.classList.add('historical');
+    }
+    messageDiv.id = `msg-${message.id}`;
+    messageDiv.dataset.messageId = message.id;
+    
+    let messageContent = '';
+    
+    // Check for reply_to_id (prioritize this)
+    const replyToId = message.reply_to_id || message.reply_to;
+    console.log('Displaying message with reply_to_id:', replyToId, 'Full message:', message);
+    
+    // If this is a reply, create a container that will be updated
+    if (replyToId) {
+        messageContent += `<div class="quoted-message-container" data-reply-id="${replyToId}" data-message-id="${message.id}"></div>`;
+    }
+    
+    if (message.text) {
+        messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
+    }
+    
+    if (message.image) {
+        messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
+    }
+    
+    // Add reactions section
+    const reactionsHtml = `<div class="message-reactions"></div>`;
+    
+    // Add action button (three dots)
+    const actionButton = `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
+    
+    // Actions menu (initially hidden)
+    const actionsMenu = `
+        <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
+            ${message.sender === (appState ? appState.userName : '') ? `
+                <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
+                <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
                 <div class="menu-divider"></div>
-                <div class="reaction-section">
-                    <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
-                    <div class="reaction-quick-picker">
-                        ${reactionEmojis.map(emoji => 
-                            `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
-                        ).join('')}
-                    </div>
+            ` : ''}
+            <button onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
+                <i class="fas fa-reply"></i> Reply
+            </button>
+            <div class="menu-divider"></div>
+            <div class="reaction-section">
+                <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+                <div class="reaction-quick-picker">
+                    ${reactionEmojis.map(emoji => 
+                        `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                    ).join('')}
                 </div>
             </div>
-        `;
-        
-        messageDiv.innerHTML = `
-            <div class="message-sender">${escapeHtml(message.sender)}</div>
-            <div class="message-content">
-                ${messageContent}
-                ${reactionsHtml}
-                <div class="message-footer">
-                    <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
-                    ${actionButton}
-                </div>
+        </div>
+    `;
+    
+    messageDiv.innerHTML = `
+        <div class="message-sender">${escapeHtml(message.sender)}</div>
+        <div class="message-content">
+            ${messageContent}
+            ${reactionsHtml}
+            <div class="message-footer">
+                <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
+                ${actionButton}
             </div>
-            ${actionsMenu}
-        `;
-        
-        chatMessages.appendChild(messageDiv);
-        
-        // If this is a reply, fetch and update the quoted message after a short delay
-        if (replyToId) {
-            setTimeout(async () => {
-                await loadQuotedMessage(message.id, replyToId);
-            }, 100);
-        }
-        
-        // Render existing reactions
-        const reactionsContainer = messageDiv.querySelector('.message-reactions');
-        if (message.reactions && message.reactions.length > 0) {
-            renderReactions(reactionsContainer, message.reactions);
-        }
-        
-        // Store in appState.messages if available
-        if (appState && appState.messages && Array.isArray(appState.messages)) {
+        </div>
+        ${actionsMenu}
+    `;
+    
+    chatMessages.appendChild(messageDiv);
+    
+    // If this is a reply, fetch and update the quoted message
+    if (replyToId) {
+        setTimeout(async () => {
+            await loadQuotedMessage(message.id, replyToId);
+        }, 100);
+    }
+    
+    // Render existing reactions
+    const reactionsContainer = messageDiv.querySelector('.message-reactions');
+    if (message.reactions && message.reactions.length > 0) {
+        renderReactions(reactionsContainer, message.reactions);
+    }
+    
+    // Store in appState.messages if available
+    if (appState && appState.messages && Array.isArray(appState.messages)) {
+        // Check if already exists to prevent duplicates
+        const exists = appState.messages.some(m => m.id === message.id);
+        if (!exists) {
             appState.messages.push(message);
         }
-        
-        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
+    
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
 
     // Render reactions for a message
     function renderReactions(container, reactions) {
@@ -700,27 +707,27 @@ const ChatModule = (function() {
         return div.innerHTML;
     }
 
-    // Public API
-    return {
-        init,
-        displayMessage,
-        loadAllQuotedMessages,
-        renderReactions,
-        toggleMessageActions,
-        closeMessageActions,
-        addReaction,
-        toggleReaction,
-        getMessageReactions,
-        getMessageById,
-        openReplyModal,
-        sendReply,
-        editMessage,
-        deleteMessage,
-        handleTyping,
-        showTypingIndicator,
-        showFullImage,
-        escapeHtml
-    };
+// Public API
+return {
+    init,
+    displayMessage,
+    loadAllQuotedMessages,
+    renderReactions,
+    toggleMessageActions,
+    closeMessageActions,
+    addReaction,
+    toggleReaction,
+    getMessageReactions,
+    getMessageById,
+    openReplyModal,
+    sendReply,
+    editMessage,
+    deleteMessage,
+    handleTyping,
+    showTypingIndicator,
+    showFullImage,
+    escapeHtml
+};
 })();
 
 // Make sure all functions are globally available
