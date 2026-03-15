@@ -503,14 +503,17 @@ document.addEventListener('click', (e) => {
         }
     }
     
-    // Close message actions when clicking outside
-    if (appState.activeMessageActions) {
-        const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-        if (actionsMenu && !actionsMenu.contains(e.target) && 
-            !e.target.closest('.message-action-dots')) {
-            closeMessageActions();
+// Close message actions when clicking outside
+if (appState.activeMessageActions) {
+    const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
+    if (actionsMenu && !actionsMenu.contains(e.target) && 
+        !e.target.closest('.message-action-dots')) {
+        // Call the ChatModule version
+        if (window.ChatModule) {
+            window.ChatModule.closeMessageActions();
         }
     }
+}
 });
     
     // Tab switching
@@ -1739,8 +1742,7 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-// In the setupRealtimeSubscriptions function, update the INSERT handler:
-appState.realtimeSubscription = supabaseClient
+    appState.realtimeSubscription = supabaseClient
     .channel('messages_' + appState.currentSessionId)
     .on(
         'postgres_changes',
@@ -1753,30 +1755,20 @@ appState.realtimeSubscription = supabaseClient
             console.log('📦 Realtime message received:', payload.new?.sender_name);
             
             if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                // Check if this message is from the current user
-                const isFromCurrentUser = payload.new.sender_id === appState.userId;
-                
-                // Only display if:
-                // 1. It's not from the current user (to avoid duplicates), OR
-                // 2. It's from the current user but we're in a different session/tab
-                // To be safe, we'll add a small delay and check if the message already exists
-                if (!isFromCurrentUser && !appState.isViewingHistory) {
+                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
                     // Get reactions for this message
                     getMessageReactions(payload.new.id).then(reactions => {
-                        // Double-check the message doesn't already exist in DOM
-                        if (!document.getElementById(`msg-${payload.new.id}`)) {
-                            displayMessage({
-                                id: payload.new.id,
-                                sender: payload.new.sender_name,
-                                text: payload.new.message,
-                                image: payload.new.image_url,
-                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                                type: 'received',
-                                is_historical: false,
-                                reactions: reactions,
-                                reply_to: payload.new.reply_to
-                            });
-                        }
+                        displayMessage({
+                            id: payload.new.id,
+                            sender: payload.new.sender_name,
+                            text: payload.new.message,
+                            image: payload.new.image_url,
+                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                            type: 'received',
+                            is_historical: false,
+                            reactions: reactions,
+                            reply_to: payload.new.reply_to
+                        });
                     });
                     
                     if (appState.soundEnabled && !payload.new.is_notification) {
@@ -1787,19 +1779,10 @@ appState.realtimeSubscription = supabaseClient
                             console.log("Audio error:", e);
                         }
                     }
-                } else if (isFromCurrentUser) {
-                    // For messages from current user, just check if they exist and play sound if needed
-                    console.log('Own message detected in realtime, skipping display to avoid duplicate');
-                    if (!document.getElementById(`msg-${payload.new.id}`)) {
-                        // If for some reason it doesn't exist, we might need to display it
-                        // But this should rarely happen
-                        console.log('Own message not found in DOM, but skipping to avoid duplicate');
-                    }
                 }
             }
         }
     )
-    // ... rest of the subscription remains the same
     .on(
         'postgres_changes',
         {
@@ -1946,6 +1929,7 @@ async function handleTyping() {
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
     console.log('Current replyingTo:', appState.replyingTo);
+    console.log('Current tempReplyTo:', window.__tempReplyTo);
     
     if (!appState.isConnected || appState.isViewingHistory) {
         alert("You cannot send messages right now.");
@@ -1963,12 +1947,14 @@ async function sendMessage() {
         const reader = new FileReader();
         reader.onload = async function(e) {
             imageUrl = e.target.result;
-            await sendMessageToDB(messageText, imageUrl, appState.replyingTo);
+            // Pass both sources
+            await sendMessageToDB(messageText, imageUrl, window.__tempReplyTo || appState.replyingTo);
         };
         reader.readAsDataURL(imageFile);
         imageUpload.value = '';
     } else {
-        await sendMessageToDB(messageText, null, appState.replyingTo);
+        // Pass both sources
+        await sendMessageToDB(messageText, null, window.__tempReplyTo || appState.replyingTo);
     }
     
     messageInput.value = '';
@@ -1979,14 +1965,16 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
     console.log('replyToId parameter:', replyToId);
     console.log('appState.replyingTo:', appState.replyingTo);
+    console.log('window.__tempReplyTo:', window.__tempReplyTo);
     
     try {
-        // Use the passed replyToId, or fall back to appState.replyingTo
-        const finalReplyToId = replyToId || appState.replyingTo;
+        // Use the passed replyToId, or check temp variable, or fall back to appState.replyingTo
+        const finalReplyToId = replyToId || window.__tempReplyTo || appState.replyingTo;
         console.log('FINAL reply_to:', finalReplyToId);
         
-        // Clear it immediately
+        // Clear all sources
         appState.replyingTo = null;
+        window.__tempReplyTo = null;
         
         const messageData = {
             session_id: appState.currentSessionId,
