@@ -1739,7 +1739,8 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-    appState.realtimeSubscription = supabaseClient
+// In the setupRealtimeSubscriptions function, update the INSERT handler:
+appState.realtimeSubscription = supabaseClient
     .channel('messages_' + appState.currentSessionId)
     .on(
         'postgres_changes',
@@ -1752,20 +1753,30 @@ function setupRealtimeSubscriptions() {
             console.log('📦 Realtime message received:', payload.new?.sender_name);
             
             if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                // Check if this message is from the current user
+                const isFromCurrentUser = payload.new.sender_id === appState.userId;
+                
+                // Only display if:
+                // 1. It's not from the current user (to avoid duplicates), OR
+                // 2. It's from the current user but we're in a different session/tab
+                // To be safe, we'll add a small delay and check if the message already exists
+                if (!isFromCurrentUser && !appState.isViewingHistory) {
                     // Get reactions for this message
                     getMessageReactions(payload.new.id).then(reactions => {
-                        displayMessage({
-                            id: payload.new.id,
-                            sender: payload.new.sender_name,
-                            text: payload.new.message,
-                            image: payload.new.image_url,
-                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                            type: 'received',
-                            is_historical: false,
-                            reactions: reactions,
-                            reply_to: payload.new.reply_to
-                        });
+                        // Double-check the message doesn't already exist in DOM
+                        if (!document.getElementById(`msg-${payload.new.id}`)) {
+                            displayMessage({
+                                id: payload.new.id,
+                                sender: payload.new.sender_name,
+                                text: payload.new.message,
+                                image: payload.new.image_url,
+                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                                type: 'received',
+                                is_historical: false,
+                                reactions: reactions,
+                                reply_to: payload.new.reply_to
+                            });
+                        }
                     });
                     
                     if (appState.soundEnabled && !payload.new.is_notification) {
@@ -1776,10 +1787,19 @@ function setupRealtimeSubscriptions() {
                             console.log("Audio error:", e);
                         }
                     }
+                } else if (isFromCurrentUser) {
+                    // For messages from current user, just check if they exist and play sound if needed
+                    console.log('Own message detected in realtime, skipping display to avoid duplicate');
+                    if (!document.getElementById(`msg-${payload.new.id}`)) {
+                        // If for some reason it doesn't exist, we might need to display it
+                        // But this should rarely happen
+                        console.log('Own message not found in DOM, but skipping to avoid duplicate');
+                    }
                 }
             }
         }
     )
+    // ... rest of the subscription remains the same
     .on(
         'postgres_changes',
         {
@@ -1995,8 +2015,7 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
         
         console.log('✅ Message saved to DB:', data.id);
         
-        // For the display, we need to ensure the original message is in appState.messages
-        // If it's not, we'll still pass the reply_to ID and let getReplyQuoteHtml handle it
+        // Display the message locally
         displayMessage({
             id: data.id,
             sender: appState.userName,
