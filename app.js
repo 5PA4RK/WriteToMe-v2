@@ -56,23 +56,6 @@ window.getMessageReactions = async function(messageId) {
 window.sendMessage = sendMessage;
 
 
-// Update the sendReply function
-// COMMENT OUT OR REMOVE THIS ENTIRE FUNCTION FROM app.js
-/*
-async function sendReply() {
-    if (window.ChatModule) {
-        await window.ChatModule.sendReply();
-    } else {
-        const replyText = replyInput.value.trim();
-        if (!replyText) return;
-        
-        messageInput.value = replyText;
-        replyModal.style.display = 'none';
-        await sendMessage();
-    }
-}
-*/
-
 // DOM Elements
 const connectionModal = document.getElementById('connectionModal');
 const connectBtn = document.getElementById('connectBtn');
@@ -1951,6 +1934,9 @@ async function sendMessage() {
     
     if (!messageText && !imageFile) return;
     
+    // Log what we're sending
+    console.log('Sending message, reply_to:', appState.replyingTo);
+    
     let imageUrl = null;
     
     if (imageFile) {
@@ -1967,14 +1953,18 @@ async function sendMessage() {
     
     messageInput.value = '';
     messageInput.style.height = 'auto';
-    // Don't clear replyingTo here - it's cleared in sendMessageToDB
+    // Don't clear replyingTo here - let sendMessageToDB handle it
 }
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
         
-        // Capture the reply_to before clearing
+        // IMPORTANT: Capture the reply_to value BEFORE any async operations
         const replyToId = appState.replyingTo;
+        console.log('sendMessageToDB - reply_to:', replyToId);
+        
+        // Clear it immediately so it can't be used again
+        appState.replyingTo = null;
         
         const messageData = {
             session_id: appState.currentSessionId,
@@ -1984,9 +1974,6 @@ async function sendMessageToDB(text, imageUrl) {
             created_at: new Date().toISOString(),
             reply_to: replyToId  // Use the captured value
         };
-        
-        // Clear replyingTo immediately after capturing
-        appState.replyingTo = null;
         
         if (imageUrl) {
             messageData.image_url = imageUrl;
