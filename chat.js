@@ -387,47 +387,55 @@ const ChatModule = (function() {
     }
 
     // Open reply modal
-    function openReplyModal(messageId, senderName, messageText) {
-        console.log('Opening reply modal for message:', messageId);
-        
-        if (!elements.replyModal || !elements.replyToName || !elements.replyToContent || !elements.replyInput) {
-            console.error('Reply modal elements not found');
-            return;
-        }
-        
-        elements.replyToName.textContent = senderName || 'Unknown';
-        elements.replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
-        elements.replyInput.value = '';
-        
-        if (appState) appState.replyingTo = messageId;
-        
-        elements.replyModal.style.display = 'flex';
-        elements.replyInput.focus();
+// Open reply modal
+function openReplyModal(messageId, senderName, messageText) {
+    console.log('Opening reply modal for message:', messageId);
+    
+    if (!elements.replyModal || !elements.replyToName || !elements.replyToContent || !elements.replyInput) {
+        console.error('Reply modal elements not found');
+        return;
     }
+    
+    // Clear any existing reply state first
+    if (appState) {
+        appState.replyingTo = null;
+    }
+    
+    elements.replyToName.textContent = senderName || 'Unknown';
+    elements.replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
+    elements.replyInput.value = '';
+    
+    if (appState) {
+        appState.replyingTo = messageId;
+        console.log('Set replyingTo to:', messageId);
+    }
+    
+    elements.replyModal.style.display = 'flex';
+    elements.replyInput.focus();
+}
 
 // Send reply
+// Replace the sendReply function in chat.js with this
 async function sendReply() {
     const replyText = elements.replyInput.value.trim();
     if (!replyText) return;
     
-    // Store the replyTo ID before clearing
-    const replyToId = appState.replyingTo;
-    
-    // Close modal and clear replyTo
+    // Close modal
     elements.replyModal.style.display = 'none';
-    appState.replyingTo = null;
     
     // Set the message input value
     if (elements.messageInput) {
         elements.messageInput.value = replyText;
     }
     
-    // Trigger send message - but make sure we're not going to trigger another reply
+    // Clear replyTo in appState
+    if (appState) {
+        appState.replyingTo = null;
+    }
+    
+    // Call the global sendMessage function
     if (typeof window.sendMessage === 'function') {
         await window.sendMessage();
-    } else {
-        console.warn('No sendMessage function found');
-        alert('Cannot send reply: Message function not available');
     }
 }
 
