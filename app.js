@@ -1746,15 +1746,24 @@ function setupRealtimeSubscriptions() {
             event: 'INSERT',
             schema: 'public',
             table: 'messages',
-            filter: `session_id=eq.${appState.currentSessionId}`  // Keep this filter
+            filter: `session_id=eq.${appState.currentSessionId}`
         },
         (payload) => {
             console.log('📦 Realtime message received:', payload.new?.sender_name, 'Session:', payload.new?.session_id, 'Current:', appState.currentSessionId);
             
             // Double-check the session ID matches
             if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                // Don't show own messages (they're already displayed)
-                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                // Check if message already exists in DOM to prevent duplicates
+                if (document.getElementById(`msg-${payload.new.id}`)) {
+                    console.log('Message already displayed, skipping');
+                    return;
+                }
+                
+                // Determine if it's sent by current user or received
+                const messageType = payload.new.sender_id === appState.userId ? 'sent' : 'received';
+                
+                // Only show received messages with sound, or show all messages including own
+                if (!appState.isViewingHistory) {
                     // Get reactions for this message
                     getMessageReactions(payload.new.id).then(reactions => {
                         displayMessage({
@@ -1763,14 +1772,15 @@ function setupRealtimeSubscriptions() {
                             text: payload.new.message,
                             image: payload.new.image_url,
                             time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                            type: 'received',
+                            type: messageType,
                             is_historical: false,
                             reactions: reactions,
                             reply_to: payload.new.reply_to
                         });
                     });
                     
-                    if (appState.soundEnabled && !payload.new.is_notification) {
+                    // Play sound only for received messages (not own messages)
+                    if (appState.soundEnabled && messageType === 'received' && !payload.new.is_notification) {
                         try {
                             messageSound.currentTime = 0;
                             messageSound.play().catch(e => console.log("Audio play failed:", e));
@@ -1959,7 +1969,7 @@ async function sendMessage() {
 }
 async function sendMessageToDB(text, imageUrl) {
     try {
-        console.log('💾 Saving message to DB');
+        console.log('💾 Saving message to DB for session:', appState.currentSessionId);
         
         const messageData = {
             session_id: appState.currentSessionId,
@@ -1967,7 +1977,6 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            // REMOVED: reactions: [],
             reply_to: appState.replyingTo || null
         };
         
@@ -1986,19 +1995,8 @@ async function sendMessageToDB(text, imageUrl) {
             throw error;
         }
         
-        console.log('✅ Message saved to DB:', data.id);
+        console.log('✅ Message saved to DB:', data.id, 'for session:', data.session_id);
         
-        displayMessage({
-            id: data.id,
-            sender: appState.userName,
-            text: text,
-            image: imageUrl,
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-            type: 'sent',
-            is_historical: false,
-            reactions: [], // Keep this for display
-            reply_to: appState.replyingTo
-        });
         
         return { success: true, data };
     } catch (error) {
