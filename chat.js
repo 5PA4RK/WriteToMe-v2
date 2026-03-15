@@ -405,31 +405,31 @@ const ChatModule = (function() {
         elements.replyInput.focus();
     }
 
-    // Send reply
-    async function sendReply() {
-        const replyText = elements.replyInput.value.trim();
-        if (!replyText) return;
-        
-        // Store the replyTo ID before clearing
-        const replyToId = appState.replyingTo;
-        
-        // Set the message input value
-        if (elements.messageInput) {
-            elements.messageInput.value = replyText;
-        }
-        
-        // Close modal and clear replyTo
-        elements.replyModal.style.display = 'none';
-        appState.replyingTo = null;
-        
-        // Trigger send message
-        if (typeof window.sendMessage === 'function') {
-            await window.sendMessage();
-        } else {
-            console.warn('No sendMessage function found');
-            alert('Cannot send reply: Message function not available');
-        }
+// Send reply
+async function sendReply() {
+    const replyText = elements.replyInput.value.trim();
+    if (!replyText) return;
+    
+    // Store the replyTo ID before clearing
+    const replyToId = appState.replyingTo;
+    
+    // Close modal and clear replyTo
+    elements.replyModal.style.display = 'none';
+    appState.replyingTo = null;
+    
+    // Set the message input value
+    if (elements.messageInput) {
+        elements.messageInput.value = replyText;
     }
+    
+    // Trigger send message - but make sure we're not going to trigger another reply
+    if (typeof window.sendMessage === 'function') {
+        await window.sendMessage();
+    } else {
+        console.warn('No sendMessage function found');
+        alert('Cannot send reply: Message function not available');
+    }
+}
 
     // Edit message
     async function editMessage(messageId) {
