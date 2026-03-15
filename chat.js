@@ -79,105 +79,28 @@ const ChatModule = (function() {
     }
 
     // Get message by ID
- // Get message by ID
+// Get message by ID
 async function getMessageById(messageId) {
-    if (!supabaseClient) {
-        console.error('Supabase client not initialized');
-        return null;
-    }
-    
-    if (!messageId) {
-        console.error('No message ID provided');
-        return null;
-    }
+    if (!supabaseClient) return null;
     
     try {
-        console.log('Fetching message by ID:', messageId);
-        
+        // The ID might be a number or string, but in your DB it's bigint
         const { data, error } = await supabaseClient
             .from('messages')
             .select('*')
             .eq('id', messageId)
             .single();
         
-        if (error) {
-            console.error('Error fetching message:', error);
-            return null;
-        }
-        
-        console.log('Found original message:', data);
+        if (error) throw error;
         return data;
     } catch (error) {
-        console.error("Error in getMessageById:", error);
+        console.error("Error fetching message:", error);
         return null;
     }
 }
 
-// Load all quoted messages after page load
-function loadAllQuotedMessages() {
-    console.log('Loading all quoted messages...');
-    const containers = document.querySelectorAll('.quoted-message-container');
-    console.log('Found containers:', containers.length);
-    
-    containers.forEach(container => {
-        const messageId = container.dataset.messageId;
-        const replyToId = container.dataset.replyId;
-        
-        if (messageId && replyToId) {
-            loadQuotedMessage(messageId, replyToId);
-        }
-    });
-}
-
-// Helper function to load quoted message
-async function loadQuotedMessage(messageId, replyToId) {
-    try {
-        console.log(`Loading quoted message for ${messageId}, reply to: ${replyToId}`);
-        
-        const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
-        if (!container) {
-            console.log('Container not found for message:', messageId);
-            return;
-        }
-        
-        // Show loading state
-        container.innerHTML = `<div class="quoted-message loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>`;
-        
-        const originalMsg = await getMessageById(replyToId);
-        
-        if (originalMsg) {
-            const originalText = originalMsg.message || 'Image message';
-            const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
-            
-            container.innerHTML = `
-                <div class="quoted-message">
-                    <div class="quoted-sender">
-                        <i class="fas fa-reply"></i> ${escapeHtml(originalMsg.sender_name)}:
-                    </div>
-                    <div class="quoted-text">${escapeHtml(previewText)}</div>
-                </div>
-            `;
-        } else {
-            container.innerHTML = `
-                <div class="quoted-message error">
-                    <i class="fas fa-exclamation-circle"></i> Message not found
-                </div>
-            `;
-        }
-    } catch (error) {
-        console.error('Error loading quoted message:', error);
-        const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
-        if (container) {
-            container.innerHTML = `
-                <div class="quoted-message error">
-                    <i class="fas fa-exclamation-circle"></i> Error loading
-                </div>
-            `;
-        }
-    }
-}
-
     // Display a message in the chat
+// Display a message in the chat
 // Display a message in the chat
 async function displayMessage(message) {
     if (!chatMessages) {
@@ -191,7 +114,6 @@ async function displayMessage(message) {
     
     // Check if message already exists
     if (document.getElementById(`msg-${message.id}`)) {
-        console.log('Message already exists, skipping:', message.id);
         return;
     }
     
@@ -201,17 +123,12 @@ async function displayMessage(message) {
         messageDiv.classList.add('historical');
     }
     messageDiv.id = `msg-${message.id}`;
-    messageDiv.dataset.messageId = message.id;
     
     let messageContent = '';
     
-    // Check for reply_to_id (prioritize this)
-    const replyToId = message.reply_to_id || message.reply_to;
-    console.log('Displaying message with reply_to_id:', replyToId, 'Full message:', message);
-    
-    // If this is a reply, create a container that will be updated
-    if (replyToId) {
-        messageContent += `<div class="quoted-message-container" data-reply-id="${replyToId}" data-message-id="${message.id}"></div>`;
+    // Add reply reference if this is a reply - LOOK FOR reply_to_id
+    if (message.reply_to_id) {
+        messageContent += `<div class="message-reply-ref" id="reply-ref-${message.id}"><i class="fas fa-reply"></i> <span class="reply-loading">Loading reply...</span></div>`;
     }
     
     if (message.text) {
@@ -266,26 +183,35 @@ async function displayMessage(message) {
     
     chatMessages.appendChild(messageDiv);
     
-    // If this is a reply, fetch and update the quoted message
-    if (replyToId) {
-        setTimeout(async () => {
-            await loadQuotedMessage(message.id, replyToId);
-        }, 100);
+    // If this is a reply, fetch and display the original message reference
+    if (message.reply_to_id) {
+        try {
+            const originalMsg = await getMessageById(message.reply_to_id);
+            const replyRef = document.getElementById(`reply-ref-${message.id}`);
+            if (replyRef && originalMsg) {
+                const originalText = originalMsg.message || 'Image message';
+                const previewText = originalText.length > 50 ? originalText.substring(0, 50) + '...' : originalText;
+                replyRef.innerHTML = `
+                    <i class="fas fa-reply"></i> 
+                    Replying to <strong>${escapeHtml(originalMsg.sender_name)}</strong>: 
+                    <span class="reply-preview">${escapeHtml(previewText)}</span>
+                `;
+            } else if (replyRef) {
+                replyRef.innerHTML = `<i class="fas fa-reply"></i> Replying to a message (original not found)`;
+            }
+        } catch (error) {
+            console.error('Error loading reply reference:', error);
+            const replyRef = document.getElementById(`reply-ref-${message.id}`);
+            if (replyRef) {
+                replyRef.innerHTML = `<i class="fas fa-reply"></i> Replying to a message`;
+            }
+        }
     }
     
     // Render existing reactions
     const reactionsContainer = messageDiv.querySelector('.message-reactions');
     if (message.reactions && message.reactions.length > 0) {
         renderReactions(reactionsContainer, message.reactions);
-    }
-    
-    // Store in appState.messages if available
-    if (appState && appState.messages && Array.isArray(appState.messages)) {
-        // Check if already exists to prevent duplicates
-        const exists = appState.messages.some(m => m.id === message.id);
-        if (!exists) {
-            appState.messages.push(message);
-        }
     }
     
     chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -477,69 +403,72 @@ async function displayMessage(message) {
     }
 
     // Open reply modal
-    function openReplyModal(messageId, senderName, messageText) {
-        console.log('Opening reply modal for message:', messageId);
-        
-        if (!replyModal || !replyToName || !replyToContent || !replyInput) {
-            console.error('Reply modal elements not found');
-            return;
-        }
-        
-        replyToName.textContent = senderName || 'Unknown';
-        replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
-        replyInput.value = '';
-        
-        // Store the message ID in the modal's dataset
-        replyModal.dataset.replyingTo = messageId;
-        
-        if (appState) {
-            appState.replyingTo = messageId;
-            console.log('Set appState.replyingTo to:', messageId);
-        }
-        
-        replyModal.style.display = 'flex';
-        replyInput.focus();
+// Open reply modal
+function openReplyModal(messageId, senderName, messageText) {
+    console.log('Opening reply modal for message:', messageId);
+    
+    if (!replyModal || !replyToName || !replyToContent || !replyInput) {
+        console.error('Reply modal elements not found');
+        return;
     }
+    
+    replyToName.textContent = senderName || 'Unknown';
+    replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
+    replyInput.value = '';
+    
+    // Store the message we're replying to in a data attribute
+    if (replyModal) {
+        replyModal.dataset.replyingTo = messageId;
+    }
+    
+    if (appState) {
+        appState.replyingTo = messageId;
+        console.log('Set appState.replyingTo to:', messageId);
+    }
+    
+    replyModal.style.display = 'flex';
+    replyInput.focus();
+}
 
     // Send reply
-    async function sendReply() {
-        const replyText = replyInput.value.trim();
-        if (!replyText) {
-            alert('Please enter a reply message.');
-            return;
-        }
-        
-        // Get the message ID we're replying to
-        const replyingToId = replyModal.dataset.replyingTo || (appState ? appState.replyingTo : null);
-        
-        console.log('Sending reply to message ID:', replyingToId);
-        console.log('Reply text:', replyText);
-        
-        if (messageInput) {
-            messageInput.value = replyText;
-        }
-        
-        // Make sure appState.replyingTo is set
-        if (appState && replyingToId) {
-            appState.replyingTo = replyingToId;
-        }
-        
-        replyModal.style.display = 'none';
-        
-        // Clear the data attribute
-        delete replyModal.dataset.replyingTo;
-        
-        // Clear the reply input
-        replyInput.value = '';
-        
-        // Trigger send message
-        if (typeof window.sendMessage === 'function') {
-            await window.sendMessage();
-        } else {
-            console.warn('No sendMessage function found');
-            alert('Cannot send reply: Message function not available');
-        }
+// Send reply
+async function sendReply() {
+    const replyText = replyInput.value.trim();
+    if (!replyText) return;
+    
+    // Get the message ID we're replying to
+    const replyingToId = replyModal.dataset.replyingTo || (appState ? appState.replyingTo : null);
+    
+    console.log('Sending reply to message ID:', replyingToId);
+    console.log('Reply text:', replyText);
+    
+    if (messageInput) {
+        messageInput.value = replyText;
     }
+    
+    // Make sure appState.replyingTo is set
+    if (appState) {
+        appState.replyingTo = replyingToId;
+    }
+    
+    replyModal.style.display = 'none';
+    
+    // Clear the data attribute
+    if (replyModal) {
+        delete replyModal.dataset.replyingTo;
+    }
+    
+    // Trigger send message
+    if (typeof window.sendMessage === 'function') {
+        await window.sendMessage();
+    } else if (window.appState && typeof window.sendMessageToDB === 'function') {
+        // Fallback
+        await window.sendMessageToDB(replyText, null);
+    } else {
+        console.warn('No sendMessage function found');
+        alert('Cannot send reply: Message function not available');
+    }
+}
 
     // Edit message
     async function editMessage(messageId) {
@@ -707,27 +636,26 @@ async function displayMessage(message) {
         return div.innerHTML;
     }
 
-// Public API
-return {
-    init,
-    displayMessage,
-    loadAllQuotedMessages,
-    renderReactions,
-    toggleMessageActions,
-    closeMessageActions,
-    addReaction,
-    toggleReaction,
-    getMessageReactions,
-    getMessageById,
-    openReplyModal,
-    sendReply,
-    editMessage,
-    deleteMessage,
-    handleTyping,
-    showTypingIndicator,
-    showFullImage,
-    escapeHtml
-};
+    // Public API
+    return {
+        init,
+        displayMessage,
+        renderReactions,
+        toggleMessageActions,
+        closeMessageActions,
+        addReaction,
+        toggleReaction,
+        getMessageReactions,
+        getMessageById,
+        openReplyModal,
+        sendReply,
+        editMessage,
+        deleteMessage,
+        handleTyping,
+        showTypingIndicator,
+        showFullImage,
+        escapeHtml
+    };
 })();
 
 // Make sure all functions are globally available
