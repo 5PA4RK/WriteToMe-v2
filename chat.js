@@ -21,38 +21,6 @@ const ChatModule = (function() {
         console.log("ChatModule initialized successfully");
     }
 
-    // Setup event listeners
-    function setupEventListeners() {
-        if (elements.sendReplyBtn) {
-            elements.sendReplyBtn.addEventListener('click', sendReply);
-        }
-
-        if (elements.closeReplyModal) {
-            elements.closeReplyModal.addEventListener('click', () => {
-                elements.replyModal.style.display = 'none';
-                if (appState) appState.replyingTo = null;
-            });
-        }
-
-        window.addEventListener('click', (e) => {
-            if (e.target === elements.replyModal) {
-                elements.replyModal.style.display = 'none';
-                if (appState) appState.replyingTo = null;
-            }
-        });
-
-        // Close message actions when clicking outside
-        document.addEventListener('click', (e) => {
-            if (appState && appState.activeMessageActions) {
-                const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-                if (actionsMenu && 
-                    !actionsMenu.contains(e.target) && 
-                    !e.target.closest('.message-action-dots')) {
-                    closeMessageActions();
-                }
-            }
-        });
-    }
 
     // Display a message in the chat
     function displayMessage(message) {
@@ -387,6 +355,8 @@ const ChatModule = (function() {
     }
 
     // Open reply modal
+// In chat.js, replace the entire reply-related code with this:
+
 // Open reply modal
 function openReplyModal(messageId, senderName, messageText) {
     console.log('Opening reply modal for message:', messageId);
@@ -396,34 +366,34 @@ function openReplyModal(messageId, senderName, messageText) {
         return;
     }
     
-    // Clear any existing reply state first
+    // Clear any existing state
     if (appState) {
-        appState.replyingTo = null;
+        appState.replyingTo = messageId;
     }
     
     elements.replyToName.textContent = senderName || 'Unknown';
     elements.replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
     elements.replyInput.value = '';
     
-    if (appState) {
-        appState.replyingTo = messageId;
-        console.log('Set replyingTo to:', messageId);
-    }
-    
     elements.replyModal.style.display = 'flex';
     elements.replyInput.focus();
 }
 
-// Send reply
-// Replace the sendReply function in chat.js with this
+// Send reply - simplified
 async function sendReply() {
+    console.log('sendReply called from chat.js');
+    
     const replyText = elements.replyInput.value.trim();
     if (!replyText) return;
     
-    // Close modal
+    // Store the replyTo ID
+    const replyToId = appState ? appState.replyingTo : null;
+    console.log('Replying to message ID:', replyToId);
+    
+    // Close modal first
     elements.replyModal.style.display = 'none';
     
-    // Set the message input value
+    // Set the message input
     if (elements.messageInput) {
         elements.messageInput.value = replyText;
     }
@@ -435,7 +405,34 @@ async function sendReply() {
     
     // Call the global sendMessage function
     if (typeof window.sendMessage === 'function') {
-        await window.sendMessage();
+        // Small delay to ensure state is cleared
+        setTimeout(() => {
+            window.sendMessage();
+        }, 10);
+    }
+}
+
+// Make sure the event listener is attached properly
+function setupEventListeners() {
+    if (elements.sendReplyBtn) {
+        // Remove any existing listeners
+        const oldBtn = elements.sendReplyBtn;
+        const newBtn = oldBtn.cloneNode(true);
+        oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+        elements.sendReplyBtn = newBtn;
+        
+        // Add fresh listener
+        elements.sendReplyBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            sendReply();
+        });
+    }
+
+    if (elements.closeReplyModal) {
+        elements.closeReplyModal.addEventListener('click', () => {
+            elements.replyModal.style.display = 'none';
+            if (appState) appState.replyingTo = null;
+        });
     }
 }
 
