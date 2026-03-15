@@ -23,124 +23,175 @@ const ChatModule = (function() {
 
 
     // Display a message in the chat
-    function displayMessage(message) {
-        if (!elements.chatMessages) {
-            console.error('Chat messages container not found');
-            return;
-        }
-        
-        // Don't display if viewing history and this is not a historical message
-        if (appState && appState.isViewingHistory && !message.is_historical) {
-            return;
-        }
-        
-        // Check if message already exists to prevent duplicates
-        if (document.getElementById(`msg-${message.id}`)) {
-            console.log('Message already exists, skipping display:', message.id);
-            return;
-        }
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${message.type}`;
-        if (message.is_historical) {
-            messageDiv.classList.add('historical');
-        }
-        messageDiv.id = `msg-${message.id}`;
-        
-        let messageContent = '';
-        
-        // Add reply reference if this is a reply
-        if (message.reply_to) {
-            messageContent += getReplyQuoteHtml(message.reply_to, message);
-        }
-        
-        // Add message text
-        if (message.text) {
-            messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
-        }
-        
-        // Add image if present
-        if (message.image) {
-            messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
-        }
-        
-        // Add reactions section
-        const reactionsHtml = `<div class="message-reactions"></div>`;
-        
-        // Add action button (three dots)
-        const actionButton = `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
-        
-        // Actions menu (initially hidden)
-        const actionsMenu = getActionsMenuHtml(message);
-        
-        messageDiv.innerHTML = `
-            <div class="message-sender">${escapeHtml(message.sender)}</div>
-            <div class="message-content">
-                ${messageContent}
-                ${reactionsHtml}
-                <div class="message-footer">
-                    <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
-                    ${actionButton}
-                </div>
-            </div>
-            ${actionsMenu}
-        `;
-        
-        elements.chatMessages.appendChild(messageDiv);
-        
-        // Render existing reactions
-        const reactionsContainer = messageDiv.querySelector('.message-reactions');
-        if (message.reactions && message.reactions.length > 0) {
-            renderReactions(reactionsContainer, message.reactions);
-        }
-        
-        // Store in appState.messages if available
-        if (appState && appState.messages && Array.isArray(appState.messages)) {
-            // Check if message already exists in state
-            const exists = appState.messages.some(m => m.id === message.id);
-            if (!exists) {
-                appState.messages.push(message);
-            }
-        }
-        
-        elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+// Display a message in the chat
+function displayMessage(message) {
+    if (!elements.chatMessages) {
+        console.error('Chat messages container not found');
+        return;
     }
-
-    // Helper function to get reply quote HTML
-    function getReplyQuoteHtml(replyToId, currentMessage) {
-        let quotedSender = 'someone';
-        let quotedText = 'a message';
-        
-        // Try to find the original message in the DOM
-        const originalMsgElement = document.getElementById(`msg-${replyToId}`);
-        if (originalMsgElement) {
-            const senderEl = originalMsgElement.querySelector('.message-sender');
-            const textEl = originalMsgElement.querySelector('.message-text');
-            if (senderEl) quotedSender = senderEl.textContent;
-            if (textEl) {
-                quotedText = textEl.textContent
-                    .replace(/\s*\(edited\)\s*$/, '')
-                    .substring(0, 100);
-                if (textEl.textContent.length > 100) quotedText += '...';
-            }
-        } 
-        // Try to find in appState messages
-        else if (appState && appState.messages) {
-            const originalMsg = appState.messages.find(m => m.id === replyToId);
-            if (originalMsg) {
-                quotedSender = originalMsg.sender;
-                quotedText = (originalMsg.text || '').substring(0, 100);
-                if (originalMsg.text && originalMsg.text.length > 100) quotedText += '...';
+    
+    // Don't display if viewing history and this is not a historical message
+    if (appState && appState.isViewingHistory && !message.is_historical) {
+        return;
+    }
+    
+    // Check if message already exists to prevent duplicates
+    if (document.getElementById(`msg-${message.id}`)) {
+        console.log('Message already exists, skipping display:', message.id);
+        return;
+    }
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${message.type}`;
+    if (message.is_historical) {
+        messageDiv.classList.add('historical');
+    }
+    messageDiv.id = `msg-${message.id}`;
+    
+    let messageContent = '';
+    
+    // Add reply reference if this is a reply
+    if (message.reply_to) {
+        messageContent += getReplyQuoteHtml(message.reply_to, message);
+    }
+    
+    // Add message text
+    if (message.text) {
+        messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
+    }
+    
+    // Add image if present
+    if (message.image) {
+        messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
+    }
+    
+    // Add reactions section
+    const reactionsHtml = `<div class="message-reactions"></div>`;
+    
+    // Add action button (three dots)
+    const actionButton = `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
+    
+    // Actions menu (initially hidden)
+    const actionsMenu = getActionsMenuHtml(message);
+    
+    messageDiv.innerHTML = `
+        <div class="message-sender">${escapeHtml(message.sender)}</div>
+        <div class="message-content">
+            ${messageContent}
+            ${reactionsHtml}
+            <div class="message-footer">
+                <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
+                ${actionButton}
+            </div>
+        </div>
+        ${actionsMenu}
+    `;
+    
+    elements.chatMessages.appendChild(messageDiv);
+    
+    // Render existing reactions
+    const reactionsContainer = messageDiv.querySelector('.message-reactions');
+    if (message.reactions && message.reactions.length > 0) {
+        renderReactions(reactionsContainer, message.reactions);
+    }
+    
+    // Store in appState.messages for future reference
+    if (appState && appState.messages && Array.isArray(appState.messages)) {
+        // Check if message already exists in state
+        const exists = appState.messages.some(m => m.id === message.id);
+        if (!exists) {
+            appState.messages.push(message);
+            
+            // Keep only last 100 messages in state to prevent memory issues
+            if (appState.messages.length > 100) {
+                appState.messages = appState.messages.slice(-100);
             }
         }
+    }
+    
+    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+}
+
+// Helper function to get reply quote HTML
+function getReplyQuoteHtml(replyToId, currentMessage) {
+    let quotedSender = 'someone';
+    let quotedText = 'a message';
+    let found = false;
+    
+    // Try to find the original message in the DOM first (most reliable for current session)
+    const originalMsgElement = document.getElementById(`msg-${replyToId}`);
+    if (originalMsgElement) {
+        const senderEl = originalMsgElement.querySelector('.message-sender');
+        const textEl = originalMsgElement.querySelector('.message-text');
+        if (senderEl) {
+            quotedSender = senderEl.textContent;
+            found = true;
+        }
+        if (textEl) {
+            // Remove any existing (edited) tag and trim
+            quotedText = textEl.textContent
+                .replace(/\s*\(edited\)\s*$/, '')
+                .substring(0, 100);
+            if (textEl.textContent.length > 100) quotedText += '...';
+            found = true;
+        }
+    } 
+    
+    // If not found in DOM, try to find in appState messages
+    if (!found && appState && appState.messages) {
+        const originalMsg = appState.messages.find(m => m.id === replyToId);
+        if (originalMsg) {
+            quotedSender = originalMsg.sender;
+            quotedText = (originalMsg.text || '').substring(0, 100);
+            if (originalMsg.text && originalMsg.text.length > 100) quotedText += '...';
+            found = true;
+        }
+    }
+    
+    // If still not found, try to fetch from database as a fallback
+    if (!found && supabaseClient) {
+        // We'll fetch asynchronously, but for now return a loading state
+        // The actual fetch will happen after render
+        setTimeout(async () => {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('messages')
+                    .select('sender_name, message')
+                    .eq('id', replyToId)
+                    .single();
+                
+                if (!error && data) {
+                    // Update the quote element if it exists
+                    const quoteElement = document.querySelector(`#msg-${currentMessage.id} .message-reply-ref`);
+                    if (quoteElement) {
+                        const span = quoteElement.querySelector('span');
+                        if (span) {
+                            const shortText = data.message.substring(0, 100);
+                            span.innerHTML = `Replying to <strong>${escapeHtml(data.sender_name)}</strong>: ${escapeHtml(shortText)}${data.message.length > 100 ? '...' : ''}`;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log('Error fetching original message:', e);
+            }
+        }, 100);
         
+        // Return loading state
         return `
             <div class="message-reply-ref">
                 <i class="fas fa-reply"></i> 
-                <span>Replying to <strong>${escapeHtml(quotedSender)}</strong>: ${escapeHtml(quotedText)}</span>
+                <span>Loading quoted message...</span>
             </div>
         `;
     }
+    
+    return `
+        <div class="message-reply-ref">
+            <i class="fas fa-reply"></i> 
+            <span>Replying to <strong>${escapeHtml(quotedSender)}</strong>: ${escapeHtml(quotedText)}</span>
+        </div>
+    `;
+}
 
     // Helper function to get actions menu HTML
     function getActionsMenuHtml(message) {
