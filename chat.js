@@ -22,7 +22,7 @@ const ChatModule = (function() {
     }
 
 
-
+    // Display a message in the chat
 // Display a message in the chat
 function displayMessage(message) {
     if (!elements.chatMessages) {
@@ -35,23 +35,10 @@ function displayMessage(message) {
         return;
     }
     
-    // Check if message already exists to prevent duplicates - MORE ROBUST CHECK
-    const existingMessage = document.getElementById(`msg-${message.id}`);
-    if (existingMessage) {
+    // Check if message already exists to prevent duplicates
+    if (document.getElementById(`msg-${message.id}`)) {
         console.log('Message already exists, skipping display:', message.id);
         return;
-    }
-    
-    // Also check in appState.messages as a backup
-    if (appState && appState.messages && Array.isArray(appState.messages)) {
-        const existsInState = appState.messages.some(m => m.id === message.id);
-        if (existsInState) {
-            // Double-check DOM again
-            if (document.getElementById(`msg-${message.id}`)) {
-                console.log('Message found in state and DOM, skipping:', message.id);
-                return;
-            }
-        }
     }
     
     const messageDiv = document.createElement('div');
@@ -442,16 +429,22 @@ function openReplyModal(messageId, senderName, messageText) {
     elements.replyInput.focus();
 }
 
-// Send reply - with debug logs
+// Send reply - FIXED VERSION
+// Send reply - FIXED VERSION with proper reply_to preservation
 async function sendReply() {
     console.log('🟢 sendReply called from chat.js at:', new Date().toISOString());
     
     const replyText = elements.replyInput.value.trim();
     if (!replyText) return;
     
-    // Store the replyTo ID
+    // Store the replyTo ID in a local variable
     const replyToId = appState ? appState.replyingTo : null;
     console.log('Replying to message ID:', replyToId);
+    
+    if (!replyToId) {
+        console.error('No replyToId found!');
+        return;
+    }
     
     // Close modal first
     elements.replyModal.style.display = 'none';
@@ -462,11 +455,23 @@ async function sendReply() {
         console.log('Message input set to:', replyText);
     }
     
+    // IMPORTANT: Store the replyToId in a temporary global variable
+    // This ensures it survives any async operations
+    window.__tempReplyTo = replyToId;
+    
+    // Clear the appState replyingTo immediately to prevent reuse
+    if (appState) {
+        appState.replyingTo = null;
+    }
+    
     // Call sendMessage
     if (typeof window.sendMessage === 'function') {
-        console.log('Calling window.sendMessage...');
+        console.log('Calling window.sendMessage with temp replyTo:', window.__tempReplyTo);
         await window.sendMessage();
         console.log('window.sendMessage completed');
+        
+        // Clear the temp variable after sendMessage completes
+        window.__tempReplyTo = null;
     }
 }
 
