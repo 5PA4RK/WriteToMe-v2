@@ -430,7 +430,7 @@ function openReplyModal(messageId, senderName, messageText) {
 }
 
 // Send reply - FIXED VERSION
-// Send reply - FIXED VERSION with proper reply_to preservation
+// Send reply - FIXED VERSION with better desktop handling
 async function sendReply() {
     console.log('🟢 sendReply called from chat.js at:', new Date().toISOString());
     
@@ -446,8 +446,13 @@ async function sendReply() {
         return;
     }
     
-    // Close modal first
+    // Close modal first and disable the button to prevent double-clicks
     elements.replyModal.style.display = 'none';
+    
+    // Temporarily disable the send button to prevent double-clicks
+    if (elements.sendReplyBtn) {
+        elements.sendReplyBtn.disabled = true;
+    }
     
     // Set the message input
     if (elements.messageInput) {
@@ -456,26 +461,35 @@ async function sendReply() {
     }
     
     // IMPORTANT: Store the replyToId in a temporary global variable
-    // This ensures it survives any async operations
     window.__tempReplyTo = replyToId;
     
-    // Clear the appState replyingTo immediately to prevent reuse
+    // Clear the appState replyingTo immediately
     if (appState) {
         appState.replyingTo = null;
     }
     
-    // Call sendMessage
-    if (typeof window.sendMessage === 'function') {
-        console.log('Calling window.sendMessage with temp replyTo:', window.__tempReplyTo);
-        await window.sendMessage();
-        console.log('window.sendMessage completed');
-        
-        // Clear the temp variable after sendMessage completes
+    try {
+        // Call sendMessage
+        if (typeof window.sendMessage === 'function') {
+            console.log('Calling window.sendMessage with temp replyTo:', window.__tempReplyTo);
+            await window.sendMessage();
+            console.log('window.sendMessage completed');
+        }
+    } catch (error) {
+        console.error('Error sending reply:', error);
+    } finally {
+        // Clear the temp variable and re-enable the button
         window.__tempReplyTo = null;
+        if (elements.sendReplyBtn) {
+            // Re-enable after a short delay
+            setTimeout(() => {
+                elements.sendReplyBtn.disabled = false;
+            }, 500);
+        }
     }
 }
 
-// Make sure the event listener is attached properly
+// In the setupEventListeners function in chat.js, update the sendReplyBtn handler:
 function setupEventListeners() {
     if (elements.sendReplyBtn) {
         // Remove any existing listeners
@@ -484,10 +498,23 @@ function setupEventListeners() {
         oldBtn.parentNode.replaceChild(newBtn, oldBtn);
         elements.sendReplyBtn = newBtn;
         
-        // Add fresh listener
+        // Add fresh listener with debounce
+        let isProcessing = false;
         elements.sendReplyBtn.addEventListener('click', function(e) {
             e.preventDefault();
-            sendReply();
+            e.stopPropagation();
+            
+            if (isProcessing) {
+                console.log('Reply already processing, skipping...');
+                return;
+            }
+            
+            isProcessing = true;
+            sendReply().finally(() => {
+                setTimeout(() => {
+                    isProcessing = false;
+                }, 1000);
+            });
         });
     }
 
@@ -496,6 +523,77 @@ function setupEventListeners() {
             elements.replyModal.style.display = 'none';
             if (appState) appState.replyingTo = null;
         });
+    }
+}
+async function sendMessageToDB(text, imageUrl, replyToId = null) {
+    console.log('💾 sendMessageToDB called at:', new Date().toISOString());
+    
+    // Generate a temporary ID to check for duplicates
+    const tempId = 'temp_' + Date.now();
+    
+    try {
+        // Use the passed replyToId, or check temp variable, or fall back to appState.replyingTo
+        const finalReplyToId = replyToId || window.__tempReplyTo || appState.replyingTo;
+        console.log('FINAL reply_to:', finalReplyToId);
+        
+        // Clear all sources
+        appState.replyingTo = null;
+        window.__tempReplyTo = null;
+        
+        const messageData = {
+            session_id: appState.currentSessionId,
+            sender_id: appState.userId,
+            sender_name: appState.userName,
+            message: text || '',
+            created_at: new Date().toISOString(),
+            reply_to: finalReplyToId
+        };
+        
+        if (imageUrl) {
+            messageData.image_url = imageUrl;
+        }
+        
+        const { data, error } = await supabaseClient
+            .from('messages')
+            .insert([messageData])
+            .select()
+            .single();
+        
+        if (error) {
+            console.error("❌ Error sending message:", error);
+            throw error;
+        }
+        
+        console.log('✅ Message saved to DB. ID:', data.id);
+        console.log('Reply_to in DB:', data.reply_to);
+        
+        // Double-check if this message ID already exists in DOM before displaying
+        if (!document.getElementById(`msg-${data.id}`)) {
+            displayMessage({
+                id: data.id,
+                sender: appState.userName,
+                text: text,
+                image: imageUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false,
+                reactions: [],
+                reply_to: finalReplyToId
+            });
+        } else {
+            console.log('Message already exists in DOM, skipping display:', data.id);
+        }
+        
+        return { success: true, data };
+    } catch (error) {
+        console.error("❌ Error in sendMessageToDB:", error);
+        alert("Failed to send message: " + error.message);
+        return null;
+    } finally {
+        // Ensure sending flag is reset
+        setTimeout(() => {
+            isSendingMessage = false;
+        }, 100);
     }
 }
 
