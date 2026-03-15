@@ -55,7 +55,6 @@ const ChatModule = (function() {
             closeReplyModal.addEventListener('click', () => {
                 replyModal.style.display = 'none';
                 if (appState) appState.replyingTo = null;
-                delete replyModal.dataset.replyingTo;
             });
         }
 
@@ -63,7 +62,6 @@ const ChatModule = (function() {
             if (e.target === replyModal) {
                 replyModal.style.display = 'none';
                 if (appState) appState.replyingTo = null;
-                delete replyModal.dataset.replyingTo;
             }
         });
 
@@ -80,84 +78,8 @@ const ChatModule = (function() {
         });
     }
 
-    // Get message by ID
-    async function getMessageById(messageId) {
-        if (!supabaseClient) {
-            console.error('Supabase client not initialized');
-            return null;
-        }
-        
-        if (!messageId) {
-            console.error('No message ID provided');
-            return null;
-        }
-        
-        try {
-            console.log('Fetching message by ID:', messageId);
-            
-            const { data, error } = await supabaseClient
-                .from('messages')
-                .select('*')
-                .eq('id', messageId)
-                .single();
-            
-            if (error) {
-                console.error('Error fetching message:', error);
-                return null;
-            }
-            
-            return data;
-        } catch (error) {
-            console.error("Error in getMessageById:", error);
-            return null;
-        }
-    }
-
-    // Load quoted message
-    async function loadQuotedMessage(messageId, replyToId) {
-        try {
-            const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
-            if (!container) return;
-            
-            // Show loading state
-            container.innerHTML = `<div class="quoted-message loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>`;
-            
-            const originalMsg = await getMessageById(replyToId);
-            
-            if (originalMsg) {
-                const originalText = originalMsg.message || 'Image message';
-                const previewText = originalText.length > 100 ? originalText.substring(0, 100) + '...' : originalText;
-                
-                container.innerHTML = `
-                    <div class="quoted-message">
-                        <div class="quoted-sender">
-                            <i class="fas fa-reply"></i> ${escapeHtml(originalMsg.sender_name)}:
-                        </div>
-                        <div class="quoted-text">${escapeHtml(previewText)}</div>
-                    </div>
-                `;
-            } else {
-                container.innerHTML = `
-                    <div class="quoted-message error">
-                        <i class="fas fa-exclamation-circle"></i> Message not found
-                    </div>
-                `;
-            }
-        } catch (error) {
-            console.error('Error loading quoted message:', error);
-            const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
-            if (container) {
-                container.innerHTML = `
-                    <div class="quoted-message error">
-                        <i class="fas fa-exclamation-circle"></i> Error loading
-                    </div>
-                `;
-            }
-        }
-    }
-
     // Display a message in the chat
-    async function displayMessage(message) {
+    function displayMessage(message) {
         if (!chatMessages) {
             console.error('Chat messages container not found');
             return;
@@ -169,7 +91,6 @@ const ChatModule = (function() {
         
         // Check if message already exists
         if (document.getElementById(`msg-${message.id}`)) {
-            console.log('Message already exists, skipping:', message.id);
             return;
         }
         
@@ -179,17 +100,12 @@ const ChatModule = (function() {
             messageDiv.classList.add('historical');
         }
         messageDiv.id = `msg-${message.id}`;
-        messageDiv.dataset.messageId = message.id;
         
         let messageContent = '';
         
-        // Check for reply_to_id (prioritize this)
-        const replyToId = message.reply_to_id || message.reply_to;
-        console.log('Displaying message with reply_to_id:', replyToId);
-        
-        // If this is a reply, create a container that will be updated
-        if (replyToId) {
-            messageContent += `<div class="quoted-message-container" data-reply-id="${replyToId}" data-message-id="${message.id}"></div>`;
+        // Add reply reference if this is a reply
+        if (message.reply_to) {
+            messageContent += `<div class="message-reply-ref"><i class="fas fa-reply"></i> Replying to a message</div>`;
         }
         
         if (message.text) {
@@ -244,26 +160,16 @@ const ChatModule = (function() {
         
         chatMessages.appendChild(messageDiv);
         
-        // If this is a reply, fetch and update the quoted message
-        if (replyToId) {
-            setTimeout(async () => {
-                await loadQuotedMessage(message.id, replyToId);
-            }, 100);
-        }
-        
         // Render existing reactions
         const reactionsContainer = messageDiv.querySelector('.message-reactions');
         if (message.reactions && message.reactions.length > 0) {
             renderReactions(reactionsContainer, message.reactions);
         }
         
-        // Store in appState.messages if available
-        if (appState && appState.messages && Array.isArray(appState.messages)) {
-            const exists = appState.messages.some(m => m.id === message.id);
-            if (!exists) {
-                appState.messages.push(message);
-            }
-        }
+// Store in appState.messages if available
+if (appState && appState.messages && Array.isArray(appState.messages)) {
+    appState.messages.push(message);
+}
         
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
@@ -466,57 +372,34 @@ const ChatModule = (function() {
         replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
         replyInput.value = '';
         
-        // Store the message ID in the modal's dataset AND in appState
-        replyModal.dataset.replyingTo = messageId;
-        
-        if (appState) {
-            appState.replyingTo = messageId;
-            console.log('Set appState.replyingTo to:', messageId);
-        }
+        if (appState) appState.replyingTo = messageId;
         
         replyModal.style.display = 'flex';
         replyInput.focus();
     }
 
-    // Send reply
-    async function sendReply() {
-        const replyText = replyInput.value.trim();
-        if (!replyText) {
-            alert('Please enter a reply message.');
-            return;
-        }
-        
-        // Get the message ID we're replying to
-        const replyingToId = replyModal.dataset.replyingTo || (appState ? appState.replyingTo : null);
-        
-        console.log('Sending reply to message ID:', replyingToId);
-        console.log('Reply text:', replyText);
-        
-        if (messageInput) {
-            messageInput.value = replyText;
-        }
-        
-        // Make sure appState.replyingTo is set
-        if (appState && replyingToId) {
-            appState.replyingTo = replyingToId;
-        }
-        
-        replyModal.style.display = 'none';
-        
-        // Clear the data attribute
-        delete replyModal.dataset.replyingTo;
-        
-        // Clear the reply input
-        replyInput.value = '';
-        
-        // Trigger send message
-        if (typeof window.sendMessage === 'function') {
-            await window.sendMessage();
-        } else {
-            console.warn('No sendMessage function found');
-            alert('Cannot send reply: Message function not available');
-        }
+
+// Send reply
+async function sendReply() {
+    const replyText = replyInput.value.trim();
+    if (!replyText) return;
+    
+    if (messageInput) {
+        messageInput.value = replyText;
     }
+    replyModal.style.display = 'none';
+    
+    // Trigger send message
+    if (typeof window.sendMessage === 'function') {
+        await window.sendMessage();
+    } else if (window.appState && typeof window.sendMessageToDB === 'function') {
+        // Fallback
+        await window.sendMessageToDB(replyText, null);
+    } else {
+        console.warn('No sendMessage function found');
+        alert('Cannot send reply: Message function not available');
+    }
+}
 
     // Edit message
     async function editMessage(messageId) {
@@ -541,7 +424,7 @@ const ChatModule = (function() {
         const newText = prompt("Edit your message:", currentText);
         if (newText !== null && newText.trim() !== '') {
             try {
-                const { error } = await supabaseClient
+                await supabaseClient
                     .from('messages')
                     .update({
                         message: newText.trim(),
@@ -551,15 +434,11 @@ const ChatModule = (function() {
                     .eq('id', messageId)
                     .eq('sender_id', appState?.userId);
                 
-                if (error) {
-                    console.error('Error editing message:', error);
-                    alert('Failed to edit message: ' + error.message);
-                    return;
+                if (textElement) {
+                    textElement.innerHTML = `${escapeHtml(newText.trim())} <small class="edited-indicator">(edited)</small>`;
                 }
                 
                 console.log('Message edited successfully');
-                // The UI will be updated by the realtime subscription
-                
             } catch (error) {
                 console.error("Error editing message:", error);
                 alert("Failed to edit message: " + error.message);
@@ -587,8 +466,8 @@ const ChatModule = (function() {
                 .delete()
                 .eq('message_id', messageId);
             
-            // Then mark message as deleted
-            const { error } = await supabaseClient
+            // Then delete/update message
+            await supabaseClient
                 .from('messages')
                 .update({
                     is_deleted: true,
@@ -598,15 +477,24 @@ const ChatModule = (function() {
                 .eq('id', messageId)
                 .eq('sender_id', appState?.userId);
             
-            if (error) {
-                console.error('Error deleting message:', error);
-                alert('Failed to delete message: ' + error.message);
-                return;
+            const messageElement = document.getElementById(`msg-${messageId}`);
+            if (messageElement) {
+                messageElement.innerHTML = `
+                    <div class="message-sender">${escapeHtml(appState?.userName || 'User')}</div>
+                    <div class="message-content">
+                        <div class="message-text"><i>Message deleted</i></div>
+                        <div class="message-footer">
+                            <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                        </div>
+                    </div>
+                `;
+                
+                // Remove actions menu
+                const actionsMenu = document.getElementById(`actions-${messageId}`);
+                if (actionsMenu) actionsMenu.remove();
             }
             
             console.log('Message deleted successfully');
-            // The UI will be updated by the realtime subscription
-            
         } catch (error) {
             console.error("Error deleting message:", error);
             alert("Failed to delete message: " + error.message);
@@ -689,7 +577,6 @@ const ChatModule = (function() {
         addReaction,
         toggleReaction,
         getMessageReactions,
-        getMessageById,
         openReplyModal,
         sendReply,
         editMessage,
@@ -731,10 +618,6 @@ window.deleteMessage = function(messageId) {
 
 window.showFullImage = function(src) {
     ChatModule.showFullImage(src);
-};
-
-window.getMessageById = function(messageId) {
-    return ChatModule.getMessageById(messageId);
 };
 
 console.log('Chat.js loaded and functions exposed globally');
