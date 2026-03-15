@@ -95,13 +95,10 @@ async function getMessageById(messageId) {
     try {
         console.log('Fetching message by ID:', messageId);
         
-        // Convert to number if it's a string number
-        const id = typeof messageId === 'string' && !isNaN(messageId) ? parseInt(messageId) : messageId;
-        
         const { data, error } = await supabaseClient
             .from('messages')
             .select('*')
-            .eq('id', id)
+            .eq('id', messageId)
             .single();
         
         if (error) {
@@ -109,7 +106,6 @@ async function getMessageById(messageId) {
             return null;
         }
         
-        console.log('Found original message:', data);
         return data;
     } catch (error) {
         console.error("Error in getMessageById:", error);
@@ -117,6 +113,7 @@ async function getMessageById(messageId) {
     }
 }
 
+// Display a message in the chat
 // Display a message in the chat
 async function displayMessage(message) {
     if (!chatMessages) {
@@ -130,6 +127,7 @@ async function displayMessage(message) {
     
     // Check if message already exists
     if (document.getElementById(`msg-${message.id}`)) {
+        console.log('Message already exists, skipping:', message.id);
         return;
     }
     
@@ -145,7 +143,6 @@ async function displayMessage(message) {
     
     // Check for reply_to_id (prioritize this)
     const replyToId = message.reply_to_id || message.reply_to;
-    console.log('Displaying message with reply_to_id:', replyToId, 'Full message:', message);
     
     // If this is a reply, create a container that will be updated
     if (replyToId) {
@@ -206,7 +203,6 @@ async function displayMessage(message) {
     
     // If this is a reply, fetch and update the quoted message
     if (replyToId) {
-        // Use setTimeout to ensure the DOM is ready
         setTimeout(async () => {
             await loadQuotedMessage(message.id, replyToId);
         }, 100);
@@ -221,16 +217,11 @@ async function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// Helper function to load quoted message
+// Load quoted message
 async function loadQuotedMessage(messageId, replyToId) {
     try {
-        console.log(`Loading quoted message for ${messageId}, reply to: ${replyToId}`);
-        
         const container = document.querySelector(`.quoted-message-container[data-message-id="${messageId}"]`);
-        if (!container) {
-            console.log('Container not found for message:', messageId);
-            return;
-        }
+        if (!container) return;
         
         // Show loading state
         container.innerHTML = `<div class="quoted-message loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>`;
@@ -465,7 +456,6 @@ async function getMessageReactions(messageId) {
     }
 }
 
-    // Open reply modal
 // Open reply modal
 function openReplyModal(messageId, senderName, messageText) {
     console.log('Opening reply modal for message:', messageId);
@@ -479,10 +469,8 @@ function openReplyModal(messageId, senderName, messageText) {
     replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
     replyInput.value = '';
     
-    // Store the message we're replying to in a data attribute
-    if (replyModal) {
-        replyModal.dataset.replyingTo = messageId;
-    }
+    // Store the message ID in the modal's dataset AND in appState
+    replyModal.dataset.replyingTo = messageId;
     
     if (appState) {
         appState.replyingTo = messageId;
@@ -493,11 +481,14 @@ function openReplyModal(messageId, senderName, messageText) {
     replyInput.focus();
 }
 
-    // Send reply
+
 // Send reply
 async function sendReply() {
     const replyText = replyInput.value.trim();
-    if (!replyText) return;
+    if (!replyText) {
+        alert('Please enter a reply message.');
+        return;
+    }
     
     // Get the message ID we're replying to
     const replyingToId = replyModal.dataset.replyingTo || (appState ? appState.replyingTo : null);
@@ -510,128 +501,122 @@ async function sendReply() {
     }
     
     // Make sure appState.replyingTo is set
-    if (appState) {
+    if (appState && replyingToId) {
         appState.replyingTo = replyingToId;
     }
     
     replyModal.style.display = 'none';
     
     // Clear the data attribute
-    if (replyModal) {
-        delete replyModal.dataset.replyingTo;
-    }
+    delete replyModal.dataset.replyingTo;
+    
+    // Clear the reply input
+    replyInput.value = '';
     
     // Trigger send message
     if (typeof window.sendMessage === 'function') {
         await window.sendMessage();
-    } else if (window.appState && typeof window.sendMessageToDB === 'function') {
-        // Fallback
-        await window.sendMessageToDB(replyText, null);
     } else {
         console.warn('No sendMessage function found');
         alert('Cannot send reply: Message function not available');
     }
 }
 
-    // Edit message
-    async function editMessage(messageId) {
-        console.log('Editing message:', messageId);
-        closeMessageActions();
-        
-        if (!supabaseClient) {
-            console.error('Supabase client not initialized');
-            alert('Cannot edit message: Database connection not initialized');
-            return;
-        }
-        
-        const messageElement = document.getElementById(`msg-${messageId}`);
-        if (!messageElement) {
-            console.error('Message element not found');
-            return;
-        }
-        
-        const textElement = messageElement.querySelector('.message-text');
-        const currentText = textElement ? textElement.textContent.replace(/\s*\(edited\)\s*$/, '') : '';
-        
-        const newText = prompt("Edit your message:", currentText);
-        if (newText !== null && newText.trim() !== '') {
-            try {
-                await supabaseClient
-                    .from('messages')
-                    .update({
-                        message: newText.trim(),
-                        edited_at: new Date().toISOString(),
-                        is_edited: true
-                    })
-                    .eq('id', messageId)
-                    .eq('sender_id', appState?.userId);
-                
-                if (textElement) {
-                    textElement.innerHTML = `${escapeHtml(newText.trim())} <small class="edited-indicator">(edited)</small>`;
-                }
-                
-                console.log('Message edited successfully');
-            } catch (error) {
-                console.error("Error editing message:", error);
-                alert("Failed to edit message: " + error.message);
-            }
-        }
-    }
 
-    // Delete message
-    async function deleteMessage(messageId) {
-        console.log('Deleting message:', messageId);
-        closeMessageActions();
-        
-        if (!supabaseClient) {
-            console.error('Supabase client not initialized');
-            alert('Cannot delete message: Database connection not initialized');
-            return;
-        }
-        
-        if (!confirm("Are you sure you want to delete this message?")) return;
-        
+// Edit message
+async function editMessage(messageId) {
+    console.log('Editing message:', messageId);
+    closeMessageActions();
+    
+    if (!supabaseClient) {
+        console.error('Supabase client not initialized');
+        alert('Cannot edit message: Database connection not initialized');
+        return;
+    }
+    
+    const messageElement = document.getElementById(`msg-${messageId}`);
+    if (!messageElement) {
+        console.error('Message element not found');
+        return;
+    }
+    
+    const textElement = messageElement.querySelector('.message-text');
+    const currentText = textElement ? textElement.textContent.replace(/\s*\(edited\)\s*$/, '') : '';
+    
+    const newText = prompt("Edit your message:", currentText);
+    if (newText !== null && newText.trim() !== '') {
         try {
-            // First delete reactions
-            await supabaseClient
-                .from('message_reactions')
-                .delete()
-                .eq('message_id', messageId);
-            
-            // Then delete/update message
-            await supabaseClient
+            const { error } = await supabaseClient
                 .from('messages')
                 .update({
-                    is_deleted: true,
-                    deleted_at: new Date().toISOString(),
-                    deleted_by: appState?.userId
+                    message: newText.trim(),
+                    edited_at: new Date().toISOString(),
+                    is_edited: true
                 })
                 .eq('id', messageId)
                 .eq('sender_id', appState?.userId);
             
-            const messageElement = document.getElementById(`msg-${messageId}`);
-            if (messageElement) {
-                messageElement.innerHTML = `
-                    <div class="message-sender">${escapeHtml(appState?.userName || 'User')}</div>
-                    <div class="message-content">
-                        <div class="message-text"><i>Message deleted</i></div>
-                        <div class="message-footer">
-                            <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                        </div>
-                    </div>
-                `;
-                
-                // Remove actions menu
-                const actionsMenu = document.getElementById(`actions-${messageId}`);
-                if (actionsMenu) actionsMenu.remove();
+            if (error) {
+                console.error('Error editing message:', error);
+                alert('Failed to edit message: ' + error.message);
+                return;
             }
             
-            console.log('Message deleted successfully');
+            console.log('Message edited successfully');
+            // The UI will be updated by the realtime subscription
+            
         } catch (error) {
-            console.error("Error deleting message:", error);
-            alert("Failed to delete message: " + error.message);
+            console.error("Error editing message:", error);
+            alert("Failed to edit message: " + error.message);
         }
     }
+}
+
+// Delete message
+async function deleteMessage(messageId) {
+    console.log('Deleting message:', messageId);
+    closeMessageActions();
+    
+    if (!supabaseClient) {
+        console.error('Supabase client not initialized');
+        alert('Cannot delete message: Database connection not initialized');
+        return;
+    }
+    
+    if (!confirm("Are you sure you want to delete this message?")) return;
+    
+    try {
+        // First delete reactions
+        await supabaseClient
+            .from('message_reactions')
+            .delete()
+            .eq('message_id', messageId);
+        
+        // Then mark message as deleted
+        const { error } = await supabaseClient
+            .from('messages')
+            .update({
+                is_deleted: true,
+                deleted_at: new Date().toISOString(),
+                deleted_by: appState?.userId
+            })
+            .eq('id', messageId)
+            .eq('sender_id', appState?.userId);
+        
+        if (error) {
+            console.error('Error deleting message:', error);
+            alert('Failed to delete message: ' + error.message);
+            return;
+        }
+        
+        console.log('Message deleted successfully');
+        // The UI will be updated by the realtime subscription
+        
+    } catch (error) {
+        console.error("Error deleting message:", error);
+        alert("Failed to delete message: " + error.message);
+    }
+}
 
     // Handle typing indicator
     async function handleTyping() {
