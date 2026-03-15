@@ -35,15 +35,6 @@ const appState = {
     activeMessageActions: null
 };
 
-window.replyToMessage = function(messageId) {
-    const messageElement = document.getElementById(`msg-${messageId}`);
-    if (messageElement) {
-        const sender = messageElement.querySelector('.message-sender').textContent;
-        const text = messageElement.querySelector('.message-text').textContent;
-        messageInput.value = `Replying to ${sender}: ${text}\n`;
-        messageInput.focus();
-    }
-};
 
 // Make getMessageReactions available globally for loadChatHistory
 window.getMessageReactions = async function(messageId) {
@@ -56,18 +47,63 @@ window.getMessageReactions = async function(messageId) {
 window.sendMessage = sendMessage;
 
 // Update the sendReply function
+// Update the sendReply function
 async function sendReply() {
-    if (window.ChatModule) {
-        await window.ChatModule.sendReply();
-    } else {
-        const replyText = replyInput.value.trim();
-        if (!replyText) return;
-        
-        messageInput.value = replyText;
-        replyModal.style.display = 'none';
-        await sendMessage();
+    console.log('sendReply called');
+    
+    const replyInput = document.getElementById('replyInput');
+    if (!replyInput) {
+        console.error('Reply input not found');
+        return;
     }
+    
+    const replyText = replyInput.value.trim();
+    if (!replyText) {
+        alert('Please enter a reply message.');
+        return;
+    }
+    
+    const replyModal = document.getElementById('replyModal');
+    const replyingToId = replyModal ? replyModal.dataset.replyingTo : appState.replyingTo;
+    
+    console.log('Sending reply to message ID:', replyingToId);
+    console.log('Reply text:', replyText);
+    
+    // Set the message input value
+    if (messageInput) {
+        messageInput.value = replyText;
+    }
+    
+    // Make sure appState.replyingTo is set
+    if (replyingToId) {
+        appState.replyingTo = replyingToId;
+    }
+    
+    // Close the modal
+    if (replyModal) {
+        replyModal.style.display = 'none';
+        delete replyModal.dataset.replyingTo;
+    }
+    
+    // Clear the reply input
+    if (replyInput) {
+        replyInput.value = '';
+    }
+    
+    // Send the message
+    await sendMessage();
 }
+// Make replyToMessage globally available
+window.replyToMessage = function(messageId) {
+    if (window.ChatModule) {
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        if (messageElement) {
+            const sender = messageElement.querySelector('.message-sender').textContent;
+            const text = messageElement.querySelector('.message-text').textContent;
+            window.ChatModule.openReplyModal(messageId, sender, text);
+        }
+    }
+};
 
 // DOM Elements
 const connectionModal = document.getElementById('connectionModal');
@@ -172,6 +208,25 @@ const replyToName = document.getElementById('replyToName');
 const replyToContent = document.getElementById('replyToContent');
 const replyInput = document.getElementById('replyInput');
 const sendReplyBtn = document.getElementById('sendReplyBtn');
+
+if (closeReplyModal) {
+    closeReplyModal.addEventListener('click', () => {
+        replyModal.style.display = 'none';
+        appState.replyingTo = null;
+    });
+}
+
+if (sendReplyBtn) {
+    sendReplyBtn.addEventListener('click', sendReply);
+}
+
+// Click outside to close reply modal
+window.addEventListener('click', (e) => {
+    if (e.target === replyModal) {
+        replyModal.style.display = 'none';
+        appState.replyingTo = null;
+    }
+});
 
 // Initialize ChatModule with appState and supabaseClient
 document.addEventListener('DOMContentLoaded', () => {
@@ -579,9 +634,49 @@ document.addEventListener('click', (e) => {
         });
     }
     
-    if (sendReplyBtn) {
-        sendReplyBtn.addEventListener('click', sendReply);
-    }
+// In setupEventListeners function, find the sendReplyBtn listener and update it:
+
+if (sendReplyBtn) {
+    // Remove any existing listeners to avoid duplicates
+    sendReplyBtn.replaceWith(sendReplyBtn.cloneNode(true));
+    const newSendReplyBtn = document.getElementById('sendReplyBtn');
+    
+    newSendReplyBtn.addEventListener('click', async () => {
+        console.log('Send reply button clicked');
+        
+        const replyInput = document.getElementById('replyInput');
+        const replyText = replyInput?.value.trim();
+        
+        if (!replyText) {
+            alert('Please enter a reply message.');
+            return;
+        }
+        
+        const replyModal = document.getElementById('replyModal');
+        const replyingToId = replyModal?.dataset.replyingTo || appState?.replyingTo;
+        
+        console.log('Sending reply to:', replyingToId);
+        
+        if (messageInput) {
+            messageInput.value = replyText;
+        }
+        
+        if (replyingToId) {
+            appState.replyingTo = replyingToId;
+        }
+        
+        if (replyModal) {
+            replyModal.style.display = 'none';
+            delete replyModal.dataset.replyingTo;
+        }
+        
+        if (replyInput) {
+            replyInput.value = '';
+        }
+        
+        await sendMessage();
+    });
+}
     
     window.addEventListener('click', (e) => {
         if (e.target === replyModal) {
@@ -1763,7 +1858,7 @@ function setupRealtimeSubscriptions() {
                             type: 'received',
                             is_historical: false,
                             reactions: reactions,
-                            reply_to: payload.new.reply_to
+                            reply_to_id: payload.new.reply_to_id || payload.new.reply_to
                         });
                     });
                     
@@ -1954,6 +2049,7 @@ async function sendMessage() {
 async function sendMessageToDB(text, imageUrl) {
     try {
         console.log('💾 Saving message to DB');
+        console.log('Current replyingTo:', appState.replyingTo);
         
         const messageData = {
             session_id: appState.currentSessionId,
@@ -1961,9 +2057,10 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            // REMOVED: reactions: [],
-            reply_to: appState.replyingTo || null
+            reply_to_id: appState.replyingTo || null  // Change to reply_to_id
         };
+        
+        console.log('Message data with reply_to_id:', messageData);
         
         if (imageUrl) {
             messageData.image_url = imageUrl;
@@ -1981,20 +2078,31 @@ async function sendMessageToDB(text, imageUrl) {
         }
         
         console.log('✅ Message saved to DB:', data.id);
+        console.log('Saved reply_to_id value:', data.reply_to_id);
         
-        displayMessage({
-            id: data.id,
-            sender: appState.userName,
-            text: text,
-            image: imageUrl,
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-            type: 'sent',
-            is_historical: false,
-            reactions: [], // Keep this for display
-            reply_to: appState.replyingTo
-        });
+        // Get reactions for this message (empty initially)
+        const reactions = [];
+        
+        // Use ChatModule to display message if available
+        if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
+            window.ChatModule.displayMessage({
+                id: data.id,
+                sender: appState.userName,
+                text: text,
+                image: imageUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false,
+                reactions: reactions,
+                reply_to_id: appState.replyingTo
+            });
+        }
+        
+        // Clear the replyingTo after successful send
+        appState.replyingTo = null;
         
         return { success: true, data };
+        
     } catch (error) {
         console.error("❌ Error in sendMessageToDB:", error);
         alert("Failed to send message: " + error.message);
@@ -2010,9 +2118,6 @@ function displayMessage(message) {
     }
 }
 
-// ============================================
-// LOAD CHAT HISTORY
-// ============================================
 // ============================================
 // LOAD CHAT HISTORY
 // ============================================
@@ -2106,7 +2211,18 @@ async function loadChatHistory(sessionId = null) {
                     type: messageType,
                     is_historical: !!sessionId,
                     reactions: allReactions[index] || [],
-                    reply_to: msg.reply_to
+                    reply_to_id: msg.reply_to_id || msg.reply_to  // Try both fields
+                });
+            } else {
+                // Fallback to old display method
+                displayMessage({
+                    id: msg.id,
+                    sender: msg.sender_name,
+                    text: msg.message,
+                    image: msg.image_url,
+                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    type: messageType,
+                    is_historical: !!sessionId
                 });
             }
         });
