@@ -93,13 +93,10 @@ const ChatModule = (function() {
         try {
             console.log('Fetching message by ID:', messageId);
             
-            // Convert to number if it's a string number
-            const id = typeof messageId === 'string' && !isNaN(messageId) ? parseInt(messageId) : messageId;
-            
             const { data, error } = await supabaseClient
                 .from('messages')
                 .select('*')
-                .eq('id', id)
+                .eq('id', messageId)
                 .single();
             
             if (error) {
@@ -115,7 +112,7 @@ const ChatModule = (function() {
         }
     }
 
-    // Load all quoted messages after chat history is loaded
+    // Load all quoted messages after page load
     function loadAllQuotedMessages() {
         console.log('Loading all quoted messages...');
         const containers = document.querySelectorAll('.quoted-message-container');
@@ -205,7 +202,7 @@ const ChatModule = (function() {
         
         let messageContent = '';
         
-        // Check for reply_to_id (prioritize this) or reply_to as fallback
+        // Check for reply_to_id (prioritize this)
         const replyToId = message.reply_to_id || message.reply_to;
         console.log('Displaying message with reply_to_id:', replyToId, 'Full message:', message);
         
@@ -266,11 +263,10 @@ const ChatModule = (function() {
         
         chatMessages.appendChild(messageDiv);
         
-        // If this is a reply, load the quoted message
+        // If this is a reply, fetch and update the quoted message after a short delay
         if (replyToId) {
-            // Use setTimeout to ensure the DOM is ready
-            setTimeout(() => {
-                loadQuotedMessage(message.id, replyToId);
+            setTimeout(async () => {
+                await loadQuotedMessage(message.id, replyToId);
             }, 100);
         }
         
@@ -486,9 +482,13 @@ const ChatModule = (function() {
         replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
         replyInput.value = '';
         
-        // Store in both dataset and appState
+        // Store the message ID in the modal's dataset
         replyModal.dataset.replyingTo = messageId;
-        if (appState) appState.replyingTo = messageId;
+        
+        if (appState) {
+            appState.replyingTo = messageId;
+            console.log('Set appState.replyingTo to:', messageId);
+        }
         
         replyModal.style.display = 'flex';
         replyInput.focus();
@@ -497,12 +497,16 @@ const ChatModule = (function() {
     // Send reply
     async function sendReply() {
         const replyText = replyInput.value.trim();
-        if (!replyText) return;
+        if (!replyText) {
+            alert('Please enter a reply message.');
+            return;
+        }
         
         // Get the message ID we're replying to
         const replyingToId = replyModal.dataset.replyingTo || (appState ? appState.replyingTo : null);
         
         console.log('Sending reply to message ID:', replyingToId);
+        console.log('Reply text:', replyText);
         
         if (messageInput) {
             messageInput.value = replyText;
@@ -515,8 +519,11 @@ const ChatModule = (function() {
         
         replyModal.style.display = 'none';
         
-        // Clear the dataset
+        // Clear the data attribute
         delete replyModal.dataset.replyingTo;
+        
+        // Clear the reply input
+        replyInput.value = '';
         
         // Trigger send message
         if (typeof window.sendMessage === 'function') {
