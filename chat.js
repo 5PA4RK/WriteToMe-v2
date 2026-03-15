@@ -442,14 +442,14 @@ function openReplyModal(messageId, senderName, messageText) {
     elements.replyInput.focus();
 }
 
-// Send reply - FIXED VERSION
+// Send reply - with debug logs
 async function sendReply() {
-    console.log('sendReply called from chat.js');
+    console.log('🟢 sendReply called from chat.js at:', new Date().toISOString());
     
     const replyText = elements.replyInput.value.trim();
     if (!replyText) return;
     
-    // Store the replyTo ID before doing anything
+    // Store the replyTo ID
     const replyToId = appState ? appState.replyingTo : null;
     console.log('Replying to message ID:', replyToId);
     
@@ -459,12 +459,14 @@ async function sendReply() {
     // Set the message input
     if (elements.messageInput) {
         elements.messageInput.value = replyText;
+        console.log('Message input set to:', replyText);
     }
     
-    // IMPORTANT: Don't clear replyingTo here - let sendMessage handle it
-    // Just call sendMessage normally
+    // Call sendMessage
     if (typeof window.sendMessage === 'function') {
+        console.log('Calling window.sendMessage...');
         await window.sendMessage();
+        console.log('window.sendMessage completed');
     }
 }
 
