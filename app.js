@@ -1943,12 +1943,14 @@ async function sendMessage() {
         const reader = new FileReader();
         reader.onload = async function(e) {
             imageUrl = e.target.result;
-            await sendMessageToDB(messageText, imageUrl);
+            // Pass the current replyingTo value
+            await sendMessageToDB(messageText, imageUrl, appState.replyingTo);
         };
         reader.readAsDataURL(imageFile);
         imageUpload.value = '';
     } else {
-        await sendMessageToDB(messageText, null);
+        // Pass the current replyingTo value
+        await sendMessageToDB(messageText, null, appState.replyingTo);
     }
     
     messageInput.value = '';
@@ -1956,13 +1958,13 @@ async function sendMessage() {
     // Don't clear replyingTo here - let sendMessageToDB handle it
 }
 
-async function sendMessageToDB(text, imageUrl) {
+async function sendMessageToDB(text, imageUrl, replyToId = null) {
     try {
         console.log('💾 Saving message to DB');
         
-        // IMPORTANT: Capture the reply_to value BEFORE any async operations
-        const replyToId = appState.replyingTo;
-        console.log('sendMessageToDB - reply_to:', replyToId);
+        // Use the passed replyToId, or fall back to appState.replyingTo
+        const finalReplyToId = replyToId || appState.replyingTo;
+        console.log('sendMessageToDB - reply_to:', finalReplyToId);
         
         // Clear it immediately so it can't be used again
         appState.replyingTo = null;
@@ -1973,7 +1975,7 @@ async function sendMessageToDB(text, imageUrl) {
             sender_name: appState.userName,
             message: text || '',
             created_at: new Date().toISOString(),
-            reply_to: replyToId  // Use the captured value
+            reply_to: finalReplyToId  // Use the captured value
         };
         
         if (imageUrl) {
@@ -2004,7 +2006,7 @@ async function sendMessageToDB(text, imageUrl) {
             type: 'sent',
             is_historical: false,
             reactions: [],
-            reply_to: replyToId  // Use the captured value
+            reply_to: finalReplyToId  // Use the captured value
         });
         
         return { success: true, data };
@@ -2386,7 +2388,8 @@ async function handleImageUpload(e) {
     
     reader.onload = async function(e) {
         try {
-            const result = await sendMessageToDB('', e.target.result);
+            // Pass the current replyingTo value
+            const result = await sendMessageToDB('', e.target.result, appState.replyingTo);
             
             if (result && result.success) {
                 console.log('✅ Image sent successfully');
