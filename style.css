@@ -448,16 +448,7 @@ header {
 }
 
 /* ========== CHAT SECTION ========== */
-.chat-section {
-    background-color: var(--bg-primary);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-light);
-    display: flex;
-    flex-direction: column;
-    height: calc(100vh - 180px);
-    box-shadow: var(--shadow-md);
-    transition: background-color var(--transition-base), border-color var(--transition-base);
-}
+
 
 .section-header {
     padding: var(--spacing-md) var(--spacing-lg);
@@ -479,16 +470,7 @@ header {
     color: var(--primary);
 }
 
-.chat-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: var(--spacing-lg);
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-md);
-    background-color: var(--bg-secondary);
-    scroll-behavior: smooth;
-}
+
 
 /* Messages */
 .message {
@@ -1154,40 +1136,40 @@ header {
 }
 
 
-/* ========== Mobile RESPONSIVE ========== */
-/* ========== Mobile RESPONSIVE ========== */
+/* ========== MOBILE RESPONSIVE ========== */
 @media (max-width: 768px) {
     .container {
-        padding: var(--spacing-xs);
+        padding: 8px;
     }
     
     .header-content {
         flex-direction: column;
         text-align: center;
-        gap: var(--spacing-xs);
-        padding: var(--spacing-xs) 0;
+        gap: 8px;
+        padding: 8px 0;
     }
     
     .header-controls {
         flex-wrap: wrap;
         justify-content: center;
         width: 100%;
-        gap: 4px;
+        gap: 6px;
     }
     
     .logo h1 {
-        font-size: 1.1rem;
+        font-size: 1.2rem;
     }
     
     .logo i {
-        font-size: 20px;
+        font-size: 22px;
     }
     
-    /* Make chat section take more space */
+    /* Fix chat section height */
     .chat-section {
-        height: calc(100vh - 160px);
+        height: calc(100vh - 180px);
         margin: 0;
-        border-radius: var(--radius-md);
+        border-radius: 12px;
+        width: 100%;
     }
     
     .message {
@@ -1208,114 +1190,133 @@ header {
     }
     
     .form-input {
-        font-size: 16px; /* Prevents zoom on iOS */
+        font-size: 16px;
     }
     
     .reaction-quick-picker {
         grid-template-columns: repeat(3, 1fr);
     }
     
-    /* ===== MAJOR IMPROVEMENTS FOR TEXT INPUT ===== */
-    
-    /* Make the entire input area larger */
+    /* FIXED TEXT INPUT AREA */
     .chat-input-area {
-        padding: 12px 8px;
+        padding: 8px;
         gap: 8px;
         background-color: var(--bg-primary);
-        border-top: 2px solid var(--border-light);
+        border-top: 1px solid var(--border-light);
+        display: flex;
+        align-items: center;
     }
     
-    /* Make the input wrapper much bigger */
     .chat-input-wrapper {
-        min-height: 60px;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
         background-color: var(--bg-secondary);
-        border-radius: 30px;
-        padding: 4px 4px 4px 16px;
-        border: 2px solid var(--border-medium);
+        border: 1px solid var(--border-light);
+        border-radius: 24px;
+        padding: 4px 4px 4px 12px;
+        min-height: 48px;
     }
     
     .chat-input-wrapper:focus-within {
         border-color: var(--primary);
-        border-width: 2px;
+        box-shadow: 0 0 0 2px rgba(95, 176, 247, 0.2);
     }
     
-    /* Make the textarea much larger */
     .message-input {
-        font-size: 18px; /* Larger text */
-        padding: 14px 8px;
-        min-height: 60px;
-        max-height: 150px;
+        flex: 1;
+        border: none;
+        background: transparent;
+        padding: 12px 0;
+        color: var(--text-primary);
+        font-size: 16px;
+        resize: none;
+        max-height: 100px;
+        font-family: inherit;
+        min-height: 48px;
         line-height: 1.4;
     }
     
-    /* Make placeholder text larger */
     .message-input::placeholder {
-        font-size: 16px;
-        opacity: 0.7;
+        font-size: 15px;
+        color: var(--text-muted);
     }
     
-    /* Make action buttons bigger */
     .input-actions {
-        gap: 8px;
-        padding-right: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-right: 4px;
     }
     
     .file-input-label {
-        padding: 12px;
-        font-size: 1.4rem;
-        background-color: var(--bg-tertiary);
+        cursor: pointer;
+        padding: 10px;
         border-radius: 50%;
-        width: 44px;
-        height: 44px;
+        color: var(--text-muted);
+        background-color: var(--bg-tertiary);
+        width: 42px;
+        height: 42px;
         display: flex;
         align-items: center;
         justify-content: center;
+        font-size: 1.2rem;
     }
     
     .file-input-label i {
-        font-size: 1.4rem;
+        font-size: 1.2rem;
     }
     
-    /* Make send button much bigger */
+    .file-input-label:hover {
+        background-color: var(--bg-hover);
+        color: var(--primary);
+        transform: none;
+    }
+    
     #sendMessageBtn {
-        min-width: 70px;
-        padding: 0 16px;
-        font-size: 0; /* Hide text */
-        border-radius: 30px;
+        min-width: 60px;
+        height: 48px;
+        padding: 0 12px;
+        border-radius: 24px;
         background: var(--gradient-primary);
         color: white;
-        height: 60px;
         display: flex;
         align-items: center;
         justify-content: center;
+        font-size: 0; /* Hide text */
     }
     
     #sendMessageBtn i {
-        font-size: 2rem; /* Much larger send icon */
+        font-size: 1.5rem;
         margin: 0;
     }
     
-    /* Make emoji picker bigger and easier to use */
+    #sendMessageBtn:disabled {
+        opacity: 0.5;
+    }
+    
+    /* Emoji picker */
     .emoji-picker {
         position: fixed;
         bottom: 80px;
         right: 10px;
-        width: 280px;
+        width: 260px;
         max-width: 90vw;
         grid-template-columns: repeat(5, 1fr);
-        gap: 10px;
-        padding: 15px;
+        gap: 8px;
+        padding: 12px;
         background-color: var(--bg-primary);
-        border: 2px solid var(--border-light);
-        border-radius: 20px;
+        border: 1px solid var(--border-light);
+        border-radius: 16px;
         box-shadow: var(--shadow-xl);
         z-index: 10001;
     }
     
     .emoji-picker span {
-        font-size: 2.2rem;
-        padding: 10px;
-        border-radius: 12px;
+        font-size: 1.8rem;
+        padding: 8px;
+        border-radius: 8px;
         background-color: var(--bg-secondary);
         text-align: center;
         cursor: pointer;
@@ -1323,67 +1324,69 @@ header {
     
     .emoji-picker span:active {
         background-color: var(--primary);
-        transform: scale(1.1);
+        color: white;
     }
     
-    /* Improve typing indicator */
+    /* Typing indicator */
     .typing-indicator {
-        padding: 8px 16px;
-        font-size: 14px;
+        padding: 6px 12px;
+        font-size: 13px;
         background-color: var(--bg-tertiary);
         margin: 4px 8px;
-        border-radius: 20px;
+        border-radius: 16px;
     }
     
-    /* Better header controls */
+    /* Header controls */
     .user-status {
         padding: 6px 12px;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
+        white-space: nowrap;
     }
     
     .theme-toggle {
-        margin-right: 0;
+        gap: 2px;
     }
     
     .theme-toggle-btn {
-        padding: 6px 10px;
-        font-size: 0.85rem;
+        padding: 6px 8px;
+        font-size: 0.8rem;
     }
     
-    /* Make buttons more touch-friendly */
+    /* Buttons */
     .btn-small {
-        padding: 10px 16px;
-        font-size: 1rem;
-        min-height: 44px;
+        padding: 8px 12px;
+        font-size: 0.9rem;
+        min-height: 40px;
     }
     
     #logoutBtn, #pendingGuestsBtn, #notesBtn {
-        padding: 10px 16px;
-        font-size: 1rem;
-        min-height: 44px;
+        padding: 8px 12px;
+        font-size: 0.9rem;
+        min-height: 40px;
+        white-space: nowrap;
     }
     
-    /* Improve modal scrolling */
+    /* Modal */
     .modal-body {
         max-height: 70vh;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
     }
     
-    /* Better touch targets for message actions */
+    /* Message actions */
     .message-action-dots {
         opacity: 0.7;
-        padding: 10px;
-        font-size: 1.2rem;
+        padding: 8px;
+        font-size: 1.1rem;
     }
     
     .reaction-badge {
-        padding: 8px 12px;
-        font-size: 1.1rem;
-        border-radius: 30px;
+        padding: 6px 10px;
+        font-size: 1rem;
+        border-radius: 20px;
     }
     
-    /* Message actions menu mobile */
+    /* Message actions menu */
     .message-actions-menu {
         position: fixed !important;
         top: auto !important;
@@ -1396,9 +1399,9 @@ header {
         transform: translateY(100%);
         transition: transform 0.3s ease;
         z-index: 10000;
-        padding: 20px;
+        padding: 16px;
         background-color: var(--bg-primary);
-        border-top: 2px solid var(--border-light);
+        border-top: 1px solid var(--border-light);
     }
     
     .message-actions-menu.show {
@@ -1406,22 +1409,22 @@ header {
     }
     
     .message-actions-menu button {
-        padding: 16px 20px;
-        font-size: 1.1rem;
-        border-radius: 12px;
-        margin: 4px 0;
+        padding: 14px 16px;
+        font-size: 1rem;
+        border-radius: 10px;
+        margin: 2px 0;
     }
     
     .reaction-quick-picker {
         grid-template-columns: repeat(6, 1fr);
-        gap: 12px;
-        padding: 15px 5px;
+        gap: 8px;
+        padding: 10px 0;
     }
     
     .reaction-emoji-btn {
-        font-size: 28px !important;
-        padding: 15px !important;
-        border-radius: 15px !important;
+        font-size: 24px !important;
+        padding: 12px !important;
+        border-radius: 12px !important;
         background-color: var(--bg-secondary) !important;
     }
 }
@@ -1437,9 +1440,9 @@ header {
     
     .admin-tab {
         flex: 1;
-        padding: 12px 5px;
-        font-size: 0.9rem;
-        min-height: 50px;
+        padding: 10px 5px;
+        font-size: 0.85rem;
+        min-height: 44px;
     }
     
     .guest-actions {
@@ -1448,15 +1451,14 @@ header {
     
     .guest-actions .btn {
         width: 100%;
-        margin: 3px 0;
-        min-height: 48px;
+        margin: 2px 0;
+        min-height: 44px;
     }
     
-    /* Even more space for very small screens */
+    /* Further adjustments for very small screens */
     .header-controls {
         flex-direction: column;
         align-items: stretch;
-        gap: 6px;
     }
     
     .user-status {
@@ -1465,63 +1467,60 @@ header {
     }
     
     .chat-input-area {
-        padding: 15px 8px;
+        padding: 6px;
     }
     
     .message-input {
-        font-size: 18px;
-        padding: 16px 8px;
-        min-height: 65px;
+        font-size: 16px;
+        padding: 10px 0;
+        min-height: 44px;
+    }
+    
+    .chat-input-wrapper {
+        min-height: 44px;
     }
     
     #sendMessageBtn {
-        min-width: 75px;
-        height: 65px;
+        min-width: 55px;
+        height: 44px;
     }
     
     #sendMessageBtn i {
-        font-size: 2.2rem;
+        font-size: 1.3rem;
     }
     
     .file-input-label {
-        width: 50px;
-        height: 50px;
-        font-size: 1.6rem;
+        width: 38px;
+        height: 38px;
+        padding: 8px;
+        font-size: 1.1rem;
     }
     
-    /* Make message bubbles bigger */
+    .file-input-label i {
+        font-size: 1.1rem;
+    }
+    
     .message {
-        padding: 15px;
-        font-size: 1rem;
+        padding: 12px;
+        font-size: 0.95rem;
     }
     
     .message-sender {
-        font-size: 0.9rem;
+        font-size: 0.85rem;
     }
     
     .message-text {
-        font-size: 1.1rem;
-        line-height: 1.5;
+        font-size: 1rem;
     }
     
-    /* Make modals full screen on very small devices */
-    .modal-content {
-        max-width: 100%;
-        height: 100%;
-        max-height: 100%;
-        border-radius: 0;
-        margin: 0;
-    }
-    
+    /* Fix connection modal on small screens */
     .connection-modal .modal-content {
         max-width: 100%;
-        height: auto;
+        margin: 16px;
         max-height: 90%;
-        border-radius: 20px;
-        margin: 20px;
+        border-radius: 16px;
     }
 }
-
 /* Chat section custom colors - reflecting the requested changes */
 :root {
     /* Light mode chat section color */
@@ -1535,16 +1534,6 @@ header {
     --chat-messages-bg: #4e5f82;
 }
 
-.chat-section {
-    background-color: var(--chat-bg);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-lg);
-    display: flex;
-    flex-direction: column;
-    height: calc(100vh - 180px);
-    box-shadow: var(--shadow-md);
-    transition: background-color var(--transition-base), border-color var(--transition-base);
-}
 
 .chat-messages {
     background-color: var(--chat-messages-bg);
