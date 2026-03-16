@@ -402,14 +402,22 @@ function getStableRoomNumber(sessionId) {
 
 function setupEventListeners() {
 
-    // Test sound button
-const testSoundBtn = document.getElementById('testSoundBtn');
-if (testSoundBtn) {
-    testSoundBtn.addEventListener('click', () => {
-        playNotificationSound();
+// Improve emoji picker for mobile
+if (emojiBtn) {
+    emojiBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        toggleEmojiPicker();
     });
 }
 
+// Close emoji picker when scrolling on mobile
+if (emojiPicker) {
+    document.addEventListener('touchmove', () => {
+        if (emojiPicker.classList.contains('show')) {
+            emojiPicker.classList.remove('show');
+        }
+    }, { passive: true });
+}
     // Connection modal
     if (usernameInput) {
         usernameInput.addEventListener('input', function() {
