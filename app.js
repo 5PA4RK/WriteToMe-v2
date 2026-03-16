@@ -1899,36 +1899,49 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
     
-    appState.typingSubscription = supabaseClient
-        .channel('typing_' + appState.currentSessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'sessions',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            (payload) => {
-                if (payload.new && payload.new.typing_user && payload.new.typing_user !== appState.userName) {
+appState.typingSubscription = supabaseClient
+    .channel('typing_' + appState.currentSessionId)
+    .on(
+        'postgres_changes',
+        {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'sessions',
+            filter: `session_id=eq.${appState.currentSessionId}`
+        },
+        (payload) => {
+            console.log('📨 Typing update received:', payload.new?.typing_user);
+            
+            if (payload.new && payload.new.typing_user) {
+                // Don't show if it's our own typing
+                if (payload.new.typing_user !== appState.userName) {
+                    console.log('👀 Showing typing indicator for:', payload.new.typing_user);
                     typingUser.textContent = payload.new.typing_user;
                     typingIndicator.classList.add('show');
                     
-                    setTimeout(() => {
+                    // Clear any existing timeout
+                    if (window.typingHideTimeout) {
+                        clearTimeout(window.typingHideTimeout);
+                    }
+                    
+                    // Hide after 3 seconds of no updates
+                    window.typingHideTimeout = setTimeout(() => {
                         if (typingUser.textContent === payload.new.typing_user) {
+                            console.log('⏹️ Hiding typing indicator');
                             typingIndicator.classList.remove('show');
                         }
                     }, 3000);
                 }
+            } else {
+                // No one is typing
+                console.log('⏹️ No one typing');
+                typingIndicator.classList.remove('show');
             }
-        )
-        .subscribe();
-    
-    if (appState.isHost) {
-        console.log("👑 Setting up pending guests subscription for host");
-        setupPendingGuestsSubscription();
-        loadBackupNotifications();
-    }
+        }
+    )
+    .subscribe((status) => {
+        console.log('📡 Typing subscription status:', status);
+    });
 }
 
 function checkAndReconnectSubscriptions() {
@@ -1952,31 +1965,44 @@ function checkAndReconnectSubscriptions() {
 // ============================================
 
 async function handleTyping() {
-    if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) return;
+    if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) {
+        console.log('Typing ignored - not in active session');
+        return;
+    }
+    
+    console.log('👆 User typing detected:', appState.userName);
     
     try {
-        await supabaseClient
+        const { error } = await supabaseClient
             .from('sessions')
             .update({ 
                 typing_user: appState.userName,
-                created_at: new Date().toISOString()
+                updated_at: new Date().toISOString()
             })
             .eq('session_id', appState.currentSessionId);
+        
+        if (error) {
+            console.error('Error updating typing status:', error);
+            return;
+        }
+        
+        console.log('✅ Typing status updated');
         
         if (appState.typingTimeout) {
             clearTimeout(appState.typingTimeout);
         }
         
         appState.typingTimeout = setTimeout(() => {
+            console.log('⏱️ Clearing typing status');
             supabaseClient
                 .from('sessions')
                 .update({ 
                     typing_user: null,
-                    created_at: new Date().toISOString()
+                    updated_at: new Date().toISOString()
                 })
                 .eq('session_id', appState.currentSessionId)
                 .catch(e => console.log("Error clearing typing:", e));
-        }, 1000);
+        }, 2000); // Increased to 2 seconds for better UX
     } catch (error) {
         console.log("Typing indicator error:", error);
     }
@@ -3497,31 +3523,42 @@ window.playNotificationSound = function() {
     if (!appState.soundEnabled) return;
     
     try {
+        // Create audio context if needed
         if (!window.audioContext) {
             window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
         
         const audioContext = window.audioContext;
         
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
+        // First beep
+        const osc1 = audioContext.createOscillator();
+        const gain1 = audioContext.createGain();
+        osc1.connect(gain1);
+        gain1.connect(audioContext.destination);
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(660, audioContext.currentTime);
+        gain1.gain.setValueAtTime(0, audioContext.currentTime);
+        gain1.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.01);
+        gain1.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.1);
+        osc1.start(audioContext.currentTime);
+        osc1.stop(audioContext.currentTime + 0.1);
         
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+        // Second beep (slightly higher)
+        const osc2 = audioContext.createOscillator();
+        const gain2 = audioContext.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioContext.destination);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(880, audioContext.currentTime + 0.15);
+        gain2.gain.setValueAtTime(0, audioContext.currentTime + 0.15);
+        gain2.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.16);
+        gain2.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.25);
+        osc2.start(audioContext.currentTime + 0.15);
+        osc2.stop(audioContext.currentTime + 0.25);
         
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 880; // A5 note
-        
-        gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.02);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-        
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.5);
-        
-        console.log('🔔 Bell sound played');
+        console.log('🔔 Notification sound played');
     } catch (error) {
-        console.log('Could not play sound:', error);
+        console.log('Could not play notification sound:', error);
     }
 };
 
