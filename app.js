@@ -3497,42 +3497,31 @@ window.playNotificationSound = function() {
     if (!appState.soundEnabled) return;
     
     try {
-        // Create audio context if needed
         if (!window.audioContext) {
             window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
         
         const audioContext = window.audioContext;
         
-        // First beep
-        const osc1 = audioContext.createOscillator();
-        const gain1 = audioContext.createGain();
-        osc1.connect(gain1);
-        gain1.connect(audioContext.destination);
-        osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(660, audioContext.currentTime);
-        gain1.gain.setValueAtTime(0, audioContext.currentTime);
-        gain1.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.01);
-        gain1.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.1);
-        osc1.start(audioContext.currentTime);
-        osc1.stop(audioContext.currentTime + 0.1);
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
         
-        // Second beep (slightly higher)
-        const osc2 = audioContext.createOscillator();
-        const gain2 = audioContext.createGain();
-        osc2.connect(gain2);
-        gain2.connect(audioContext.destination);
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(880, audioContext.currentTime + 0.15);
-        gain2.gain.setValueAtTime(0, audioContext.currentTime + 0.15);
-        gain2.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.16);
-        gain2.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.25);
-        osc2.start(audioContext.currentTime + 0.15);
-        osc2.stop(audioContext.currentTime + 0.25);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
         
-        console.log('🔔 Notification sound played');
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 880; // A5 note
+        
+        gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.5);
+        
+        console.log('🔔 Bell sound played');
     } catch (error) {
-        console.log('Could not play notification sound:', error);
+        console.log('Could not play sound:', error);
     }
 };
 
