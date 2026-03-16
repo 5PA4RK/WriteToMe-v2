@@ -200,6 +200,22 @@ async function initApp() {
     if (mainContainer) {
         mainContainer.style.display = 'none';
     }
+
+    // Initialize audio on first user interaction
+function initAudio() {
+    if (!window.audioContext) {
+        window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        console.log('✅ Audio context initialized');
+    }
+    if (window.audioContext.state === 'suspended') {
+        window.audioContext.resume();
+    }
+}
+
+// Set up audio initialization listeners
+document.addEventListener('click', initAudio, { once: true });
+document.addEventListener('keydown', initAudio, { once: true });
+document.addEventListener('touchstart', initAudio, { once: true });
     
     document.body.classList.remove('host-mode');
     
@@ -385,6 +401,15 @@ function getStableRoomNumber(sessionId) {
 // ============================================
 
 function setupEventListeners() {
+
+    // Test sound button
+const testSoundBtn = document.getElementById('testSoundBtn');
+if (testSoundBtn) {
+    testSoundBtn.addEventListener('click', () => {
+        playNotificationSound();
+    });
+}
+
     // Connection modal
     if (usernameInput) {
         usernameInput.addEventListener('input', function() {
@@ -498,6 +523,37 @@ if (messageInput) {
             }
         });
     }
+    // Add this function to handle playing sounds reliably
+// Alternative: Simple "pop" sound
+function playPopSound() {
+    if (!appState.soundEnabled) return;
+    
+    try {
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.type = 'triangle';
+        oscillator.frequency.setValueAtTime(150, audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+        
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
+        
+        console.log('🔔 Pop sound played');
+    } catch (error) {
+        console.log('Could not play pop sound:', error);
+    }
+}
     
     // Click outside emoji picker to close
 // Click outside emoji picker to close
@@ -676,7 +732,7 @@ async function clearChat() {
                 }
             });
             
-            addSystemMessage(`You cleared your view of the chat`, true);
+            addSystemMessage(`You cleared the chat`, true);
         }
     } catch (error) {
         console.error("Error clearing chat:", error);
@@ -1124,13 +1180,8 @@ function setupPendingGuestsSubscription() {
                     updatePendingButtonUI();
                     showGuestNotification(payload.new);
                     
-                    if (appState.soundEnabled) {
-                        try {
-                            messageSound.currentTime = 0;
-                            messageSound.play().catch(e => console.log("Sound play failed:", e));
-                        } catch (e) {
-                            console.log("Sound error:", e);
-                        }
+                    if (appState.soundEnabled && window.playNotificationSound) {
+                        window.playNotificationSound();
                     }
                     
                     addSystemMessage(`🔔 New guest request from ${payload.new.guest_name}${payload.new.guest_note ? ': ' + payload.new.guest_note : ''}`);
@@ -1777,14 +1828,13 @@ function setupRealtimeSubscriptions() {
                         });
                     });
                     
-                    if (appState.soundEnabled && !payload.new.is_notification) {
-                        try {
-                            messageSound.currentTime = 0;
-                            messageSound.play().catch(e => console.log("Audio play failed:", e));
-                        } catch (e) {
-                            console.log("Audio error:", e);
-                        }
-                    }
+// Play notification sound for new messages
+// PLAY SOUND HERE - for messages from others
+if (appState.soundEnabled && !payload.new.is_notification) {
+    if (window.playNotificationSound) {
+        window.playNotificationSound();
+    }
+}
                 }
             }
         }
@@ -2281,6 +2331,14 @@ function updateUIAfterConnection() {
     }
     
     if (appState.isViewingHistory) returnToActiveChat();
+    // Enable audio after user interaction
+document.addEventListener('click', function enableAudio() {
+    // Create and play a silent sound to unlock audio
+    const silentSound = new Audio();
+    silentSound.play().catch(() => {});
+    document.removeEventListener('click', enableAudio);
+}, { once: true });
+
 }
 
 // ============================================
@@ -2476,6 +2534,11 @@ function populateEmojis() {
 function toggleSound() {
     appState.soundEnabled = !appState.soundEnabled;
     updateSoundControl();
+    
+    // Resume audio context if it was suspended
+    if (appState.soundEnabled && audioContext && audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
     
     const savedSession = localStorage.getItem('writeToMe_session');
     if (savedSession) {
@@ -3427,6 +3490,57 @@ async function markAllNotesAsRead() {
 // ============================================
 // GLOBAL FUNCTIONS
 // ============================================
+
+
+// Make playNotificationSound globally available for testing
+window.playNotificationSound = function() {
+    if (!appState.soundEnabled) return;
+    
+    try {
+        // Create audio context if needed
+        if (!window.audioContext) {
+            window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        const audioContext = window.audioContext;
+        
+        // First beep
+        const osc1 = audioContext.createOscillator();
+        const gain1 = audioContext.createGain();
+        osc1.connect(gain1);
+        gain1.connect(audioContext.destination);
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(660, audioContext.currentTime);
+        gain1.gain.setValueAtTime(0, audioContext.currentTime);
+        gain1.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.01);
+        gain1.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.1);
+        osc1.start(audioContext.currentTime);
+        osc1.stop(audioContext.currentTime + 0.1);
+        
+        // Second beep (slightly higher)
+        const osc2 = audioContext.createOscillator();
+        const gain2 = audioContext.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioContext.destination);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(880, audioContext.currentTime + 0.15);
+        gain2.gain.setValueAtTime(0, audioContext.currentTime + 0.15);
+        gain2.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.16);
+        gain2.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.25);
+        osc2.start(audioContext.currentTime + 0.15);
+        osc2.stop(audioContext.currentTime + 0.25);
+        
+        console.log('🔔 Notification sound played');
+    } catch (error) {
+        console.log('Could not play notification sound:', error);
+    }
+};
+
+// Also add a simpler test function
+window.testSound = function() {
+    window.playNotificationSound();
+    console.log('Test sound triggered');
+};
 
 window.showFullImage = function(src) {
     fullSizeImage.src = src;
