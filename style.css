@@ -1153,7 +1153,8 @@ header {
     background: var(--primary);
 }
 
-/* ========== RESPONSIVE ========== */
+
+/* ========== Mobile RESPONSIVE ========== */
 @media (max-width: 768px) {
     .container {
         padding: var(--spacing-sm);
@@ -1162,12 +1163,14 @@ header {
     .header-content {
         flex-direction: column;
         text-align: center;
+        gap: var(--spacing-sm);
     }
     
     .header-controls {
         flex-wrap: wrap;
         justify-content: center;
         width: 100%;
+        gap: var(--spacing-xs);
     }
     
     .logo h1 {
@@ -1178,6 +1181,7 @@ header {
         height: calc(100vh - 200px);
         margin: 0 -8px;
         border-radius: 0;
+        width: 100vw;
     }
     
     .message {
@@ -1204,6 +1208,149 @@ header {
     .reaction-quick-picker {
         grid-template-columns: repeat(3, 1fr);
     }
+    
+    /* Mobile chat input improvements */
+    .chat-input-area {
+        padding: var(--spacing-xs);
+        gap: var(--spacing-xs);
+    }
+    
+    .chat-input-wrapper {
+        min-height: 44px; /* Better touch target */
+    }
+    
+    .message-input {
+        font-size: 16px; /* Prevents zoom on iOS */
+        padding: var(--spacing-sm) var(--spacing-xs);
+        min-height: 44px;
+        max-height: 120px;
+    }
+    
+    .input-actions {
+        padding-right: var(--spacing-xs);
+    }
+    
+    .file-input-label {
+        padding: var(--spacing-sm);
+        font-size: 1.2rem; /* Larger icons for touch */
+    }
+    
+    #sendMessageBtn {
+        min-width: 60px;
+        padding: var(--spacing-sm);
+        font-size: 0; /* Hide text on mobile, show only icon */
+    }
+    
+    #sendMessageBtn i {
+        font-size: 1.5rem; /* Larger send icon */
+        margin: 0;
+    }
+    
+    /* Make emoji picker mobile-friendly */
+    .emoji-picker {
+        position: fixed;
+        bottom: 70px;
+        right: 10px;
+        width: 250px;
+        max-width: 90vw;
+        grid-template-columns: repeat(5, 1fr);
+        padding: var(--spacing-sm);
+        background-color: var(--bg-primary);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-xl);
+    }
+    
+    .emoji-picker span {
+        font-size: 1.8rem;
+        padding: var(--spacing-sm);
+    }
+    
+    /* Improve typing indicator visibility */
+    .typing-indicator {
+        padding: var(--spacing-xs) var(--spacing-md);
+        font-size: 0.8rem;
+    }
+    
+    /* Better header controls spacing */
+    .user-status {
+        padding: var(--spacing-xs) var(--spacing-md);
+        font-size: 0.8rem;
+    }
+    
+    .theme-toggle {
+        margin-right: 0;
+    }
+    
+    .theme-toggle-btn {
+        padding: var(--spacing-xs) var(--spacing-sm);
+        font-size: 0.8rem;
+    }
+    
+    /* Make buttons more touch-friendly */
+    .btn-small {
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 0.9rem;
+        min-height: 40px;
+    }
+    
+    #logoutBtn, #pendingGuestsBtn, #notesBtn {
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 0.9rem;
+    }
+    
+    /* Improve modal scrolling */
+    .modal-body {
+        max-height: 60vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Better touch targets for message actions */
+    .message-action-dots {
+        opacity: 0.7; /* Always visible on mobile */
+        padding: var(--spacing-sm);
+    }
+    
+    .reaction-badge {
+        padding: var(--spacing-xs) var(--spacing-sm);
+        font-size: 1rem;
+    }
+    
+    /* Message actions menu mobile positioning */
+    .message-actions-menu {
+        position: fixed !important;
+        top: auto !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        transform: translateY(100%);
+        transition: transform 0.3s ease;
+        z-index: 10000;
+    }
+    
+    .message-actions-menu.show {
+        transform: translateY(0);
+    }
+    
+    .message-actions-menu button {
+        padding: 15px 20px;
+        font-size: 16px;
+    }
+    
+    .reaction-quick-picker {
+        grid-template-columns: repeat(6, 1fr);
+        gap: 8px;
+        padding: 10px;
+    }
+    
+    .reaction-emoji-btn {
+        font-size: 24px !important;
+        padding: 10px !important;
+    }
 }
 
 @media (max-width: 480px) {
@@ -1219,6 +1366,7 @@ header {
         flex: 1;
         padding: 8px;
         font-size: 0.8rem;
+        min-height: 44px; /* Touch-friendly height */
     }
     
     .guest-actions {
@@ -1227,6 +1375,29 @@ header {
     
     .guest-actions .btn {
         width: 100%;
+        margin: 2px 0;
+    }
+    
+    /* Further optimize for very small screens */
+    .header-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .user-status {
+        justify-content: center;
+    }
+    
+    .chat-input-area {
+        padding: 5px;
+    }
+    
+    .message-input {
+        font-size: 16px;
+    }
+    
+    #sendMessageBtn {
+        min-width: 50px;
     }
 }
 /* Chat section custom colors - reflecting the requested changes */
