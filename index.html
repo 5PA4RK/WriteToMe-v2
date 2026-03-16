@@ -14,23 +14,23 @@
 <div id="connectionModal" class="connection-modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h2><i class="fas fa-door-open"></i> WriteToMira - Connect to Chat</h2>
+            <h2><i class="fas fa-door-open"></i> WriteToMira Or Connect to Chat</h2>
         </div>
         <div class="modal-body">
-            <!-- Guest Notification Section - NEW: No login required -->
+            <!-- Guest Notification Section - No Login Required -->
             <div class="guest-notification-section" style="margin-bottom: 25px; padding: 15px; background: rgba(255, 193, 7, 0.1); border-radius: 12px; border: 1px solid #ffc107;">
                 <h3 style="color: #ffc107; margin-bottom: 10px;">
-                    <i class="fas fa-bell"></i> Contact Admin (No Login Required)
+                    <i class="fas fa-bell"></i> Write to Mira
                 </h3>
                 <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 14px;">
-                    Don't have an account? You can still send a message to the administrator.
+                    You can leave a message to Mira (No Login Required)
                 </p>
                 <button id="guestNotifyBtn" class="btn btn-warning" style="width: 100%;">
-                    <i class="fas fa-paper-plane"></i> Send Message to Admin
+                    <i class="fas fa-paper-plane"></i> Leave a Message to Mira
                 </button>
             </div>
 
-            <hr style="border-color: var(--border-color); margin: 20px 0;">
+            <hr style="border-color: var(--border-light); margin: 20px 0;">
 
             <!-- Connection Form -->
             <div class="connection-form">
@@ -54,7 +54,7 @@
                            placeholder="Enter your password">
                     <div class="password-hint" id="passwordHint"></div>
                 </div>
-            
+        
                 
                 <!-- Error Message Area -->
                 <div id="passwordError" class="error-message" style="display: none;">
@@ -63,17 +63,13 @@
                 </div>
                 
                 <!-- CONNECT BUTTON -->
-                <button id="connectBtn" class="btn btn-primary btn-large connect-button">
+                <button id="connectBtn" class="btn btn-primary btn-large connect-button" style="width: 100%;">
                     <i class="fas fa-plug"></i>
                     <span>Connect & Join Chat</span>
                 </button>
                 
                 <!-- Connection Help Text -->
                 <div class="connection-help">
-                    <small>
-                        <i class="fas fa-shield-alt"></i>
-                        Your connection is secure. Hosts will see your request immediately.
-                    </small>
                 </div>
             </div>
         </div>
@@ -84,15 +80,12 @@
 <div id="guestNotificationModal" class="modal-overlay" style="display: none;">
     <div class="modal-content" style="max-width: 500px;">
         <div class="modal-header">
-            <h2><i class="fas fa-bell"></i> Send Message to Admin</h2>
+            <h2><i class="fas fa-bell"></i> Leave Message to Mira</h2>
             <button id="closeGuestNotifyModal" class="btn btn-secondary btn-small">
                 <i class="fas fa-times"></i> Close
             </button>
         </div>
         <div class="modal-body">
-            <p style="color: var(--text-secondary); margin-bottom: 20px;">
-                Fill out the form below to send a message to the administrator. No login required.
-            </p>
             
             <div class="form-group">
                 <label for="guestNotifyName"><i class="fas fa-user"></i> Your Name:</label>
@@ -104,14 +97,11 @@
                     <i class="fas fa-envelope"></i> Your Email <span style="color: var(--text-secondary); font-weight: normal;">(optional)</span>:
                 </label>
                 <input type="email" id="guestNotifyEmail" class="form-input" placeholder="Enter your email (optional)">
-                <small style="color: var(--text-secondary); display: block; margin-top: 5px;">
-                    <i class="fas fa-info-circle"></i> Email is optional - you can leave it blank if you prefer
-                </small>
             </div>
             
             <div class="form-group">
                 <label for="guestNotifyMessage"><i class="fas fa-comment"></i> Message:</label>
-                <textarea id="guestNotifyMessage" class="form-input" rows="5" placeholder="Type your message here..."></textarea>
+                <textarea id="guestNotifyMessage" class="form-input" rows="5" placeholder="Write your message to Mira here..."></textarea>
             </div>
             
             <div id="guestNotifyError" class="error-message" style="display: none;"></div>
@@ -190,10 +180,27 @@
                 <h1>WriteToMira</h1>
             </div>
             <div class="header-controls">
+                <!-- Theme Toggle -->
+                <div class="theme-toggle">
+                    <button class="theme-toggle-btn active" id="lightModeBtn" onclick="setTheme('light')">
+                        <i class="fas fa-sun"></i> Light
+                    </button>
+                    <button class="theme-toggle-btn" id="darkModeBtn" onclick="setTheme('dark')">
+                        <i class="fas fa-moon"></i> Dark
+                    </button>
+                </div>
+                
                 <div class="sound-control" id="soundControl">
                     <i class="fas fa-volume-up"></i>
                     <span>Sound On</span>
                 </div>
+
+
+                <button id="testSoundBtn" class="btn btn-small btn-secondary" title="Test notification sound">
+                    <i class="fas fa-volume-up"></i> Test
+                </button>
+
+
                 <div class="user-status">
                     <div id="statusIndicator" class="status-indicator offline"></div>
                     <span id="userRoleDisplay">Disconnected</span>
@@ -404,9 +411,7 @@
     </div>
 </div>
 
-
-<!-- Reply Modal - UPDATED VERSION -->
-<!-- Reply Modal - CLEAN VERSION -->
+<!-- Reply Modal -->
 <div id="replyModal" class="modal-overlay" style="display: none;">
     <div class="modal-content" style="max-width: 500px;">
         <div class="modal-header">
@@ -428,7 +433,7 @@
                 <button id="sendReplyBtn" class="btn btn-primary" style="flex: 2;">
                     <i class="fas fa-paper-plane"></i> Send Reply
                 </button>
-                <button id="closeReplyModalBtn" class="btn btn-secondary" style="flex: 1;">
+                <button id="closeReplyModalBtn" class="btn btn-secondary" style="flex: 1;" onclick="document.getElementById('replyModal').style.display='none'">
                     <i class="fas fa-times"></i> Cancel
                 </button>
             </div>
@@ -441,10 +446,6 @@
         <p>WriteToMira &copy; 2025 - Room-based Secure Communication Platform | End-to-End Encrypted</p>
     </div>
 </footer>
-
-<audio id="messageSound" preload="auto">
-    <source src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3" type="audio/mpeg">
-</audio>
 
 <style>
 /* Additional styles for guest notification */
@@ -460,15 +461,84 @@
 }
 
 .success-message {
-    color: var(--success-green) !important;
+    color: var(--success) !important;
 }
 
 .guest-notification-section {
     animation: fadeIn 0.5s ease;
 }
+
+/* Theme toggle styles */
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background-color: var(--bg-tertiary);
+    border-radius: var(--radius-full);
+    padding: 2px;
+}
+
+.theme-toggle-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.15s ease;
+}
+
+.theme-toggle-btn:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-hover);
+}
+
+.theme-toggle-btn.active {
+    background-color: var(--primary);
+    color: white;
+}
+
+.theme-toggle-btn i {
+    margin-right: 4px;
+}
+
 </style>
 
 <script src="app.js"></script>
 <script src="chat.js"></script>
+
+<script>
+// Theme switching - added directly to HTML to ensure it loads
+(function() {
+    function setTheme(theme) {
+        const body = document.body;
+        const lightBtn = document.getElementById('lightModeBtn');
+        const darkBtn = document.getElementById('darkModeBtn');
+        
+        if (theme === 'dark') {
+            body.classList.add('dark-mode');
+            if (lightBtn) lightBtn.classList.remove('active');
+            if (darkBtn) darkBtn.classList.add('active');
+            localStorage.setItem('writeToMe_theme', 'dark');
+        } else {
+            body.classList.remove('dark-mode');
+            if (lightBtn) lightBtn.classList.add('active');
+            if (darkBtn) darkBtn.classList.remove('active');
+            localStorage.setItem('writeToMe_theme', 'light');
+        }
+    }
+    
+    // Load saved theme
+    const savedTheme = localStorage.getItem('writeToMe_theme');
+    if (savedTheme === 'dark') {
+        setTheme('dark');
+    }
+    
+    // Make setTheme globally available
+    window.setTheme = setTheme;
+})();
+</script>
+
 </body>
 </html>
