@@ -1155,33 +1155,39 @@ header {
 
 
 /* ========== Mobile RESPONSIVE ========== */
+/* ========== Mobile RESPONSIVE ========== */
 @media (max-width: 768px) {
     .container {
-        padding: var(--spacing-sm);
+        padding: var(--spacing-xs);
     }
     
     .header-content {
         flex-direction: column;
         text-align: center;
-        gap: var(--spacing-sm);
+        gap: var(--spacing-xs);
+        padding: var(--spacing-xs) 0;
     }
     
     .header-controls {
         flex-wrap: wrap;
         justify-content: center;
         width: 100%;
-        gap: var(--spacing-xs);
+        gap: 4px;
     }
     
     .logo h1 {
-        font-size: 1.2rem;
+        font-size: 1.1rem;
     }
     
+    .logo i {
+        font-size: 20px;
+    }
+    
+    /* Make chat section take more space */
     .chat-section {
-        height: calc(100vh - 200px);
-        margin: 0 -8px;
-        border-radius: 0;
-        width: 100vw;
+        height: calc(100vh - 160px);
+        margin: 0;
+        border-radius: var(--radius-md);
     }
     
     .message {
@@ -1209,73 +1215,130 @@ header {
         grid-template-columns: repeat(3, 1fr);
     }
     
-    /* Mobile chat input improvements */
+    /* ===== MAJOR IMPROVEMENTS FOR TEXT INPUT ===== */
+    
+    /* Make the entire input area larger */
     .chat-input-area {
-        padding: var(--spacing-xs);
-        gap: var(--spacing-xs);
+        padding: 12px 8px;
+        gap: 8px;
+        background-color: var(--bg-primary);
+        border-top: 2px solid var(--border-light);
     }
     
+    /* Make the input wrapper much bigger */
     .chat-input-wrapper {
-        min-height: 44px; /* Better touch target */
+        min-height: 60px;
+        background-color: var(--bg-secondary);
+        border-radius: 30px;
+        padding: 4px 4px 4px 16px;
+        border: 2px solid var(--border-medium);
     }
     
+    .chat-input-wrapper:focus-within {
+        border-color: var(--primary);
+        border-width: 2px;
+    }
+    
+    /* Make the textarea much larger */
     .message-input {
-        font-size: 16px; /* Prevents zoom on iOS */
-        padding: var(--spacing-sm) var(--spacing-xs);
-        min-height: 44px;
-        max-height: 120px;
+        font-size: 18px; /* Larger text */
+        padding: 14px 8px;
+        min-height: 60px;
+        max-height: 150px;
+        line-height: 1.4;
     }
     
+    /* Make placeholder text larger */
+    .message-input::placeholder {
+        font-size: 16px;
+        opacity: 0.7;
+    }
+    
+    /* Make action buttons bigger */
     .input-actions {
-        padding-right: var(--spacing-xs);
+        gap: 8px;
+        padding-right: 8px;
     }
     
     .file-input-label {
-        padding: var(--spacing-sm);
-        font-size: 1.2rem; /* Larger icons for touch */
+        padding: 12px;
+        font-size: 1.4rem;
+        background-color: var(--bg-tertiary);
+        border-radius: 50%;
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     
+    .file-input-label i {
+        font-size: 1.4rem;
+    }
+    
+    /* Make send button much bigger */
     #sendMessageBtn {
-        min-width: 60px;
-        padding: var(--spacing-sm);
-        font-size: 0; /* Hide text on mobile, show only icon */
+        min-width: 70px;
+        padding: 0 16px;
+        font-size: 0; /* Hide text */
+        border-radius: 30px;
+        background: var(--gradient-primary);
+        color: white;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     
     #sendMessageBtn i {
-        font-size: 1.5rem; /* Larger send icon */
+        font-size: 2rem; /* Much larger send icon */
         margin: 0;
     }
     
-    /* Make emoji picker mobile-friendly */
+    /* Make emoji picker bigger and easier to use */
     .emoji-picker {
         position: fixed;
-        bottom: 70px;
+        bottom: 80px;
         right: 10px;
-        width: 250px;
+        width: 280px;
         max-width: 90vw;
         grid-template-columns: repeat(5, 1fr);
-        padding: var(--spacing-sm);
+        gap: 10px;
+        padding: 15px;
         background-color: var(--bg-primary);
-        border: 1px solid var(--border-light);
-        border-radius: var(--radius-lg);
+        border: 2px solid var(--border-light);
+        border-radius: 20px;
         box-shadow: var(--shadow-xl);
+        z-index: 10001;
     }
     
     .emoji-picker span {
-        font-size: 1.8rem;
-        padding: var(--spacing-sm);
+        font-size: 2.2rem;
+        padding: 10px;
+        border-radius: 12px;
+        background-color: var(--bg-secondary);
+        text-align: center;
+        cursor: pointer;
     }
     
-    /* Improve typing indicator visibility */
+    .emoji-picker span:active {
+        background-color: var(--primary);
+        transform: scale(1.1);
+    }
+    
+    /* Improve typing indicator */
     .typing-indicator {
-        padding: var(--spacing-xs) var(--spacing-md);
-        font-size: 0.8rem;
+        padding: 8px 16px;
+        font-size: 14px;
+        background-color: var(--bg-tertiary);
+        margin: 4px 8px;
+        border-radius: 20px;
     }
     
-    /* Better header controls spacing */
+    /* Better header controls */
     .user-status {
-        padding: var(--spacing-xs) var(--spacing-md);
-        font-size: 0.8rem;
+        padding: 6px 12px;
+        font-size: 0.9rem;
     }
     
     .theme-toggle {
@@ -1283,41 +1346,44 @@ header {
     }
     
     .theme-toggle-btn {
-        padding: var(--spacing-xs) var(--spacing-sm);
-        font-size: 0.8rem;
+        padding: 6px 10px;
+        font-size: 0.85rem;
     }
     
     /* Make buttons more touch-friendly */
     .btn-small {
-        padding: var(--spacing-sm) var(--spacing-md);
-        font-size: 0.9rem;
-        min-height: 40px;
+        padding: 10px 16px;
+        font-size: 1rem;
+        min-height: 44px;
     }
     
     #logoutBtn, #pendingGuestsBtn, #notesBtn {
-        padding: var(--spacing-sm) var(--spacing-md);
-        font-size: 0.9rem;
+        padding: 10px 16px;
+        font-size: 1rem;
+        min-height: 44px;
     }
     
     /* Improve modal scrolling */
     .modal-body {
-        max-height: 60vh;
+        max-height: 70vh;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
     }
     
     /* Better touch targets for message actions */
     .message-action-dots {
-        opacity: 0.7; /* Always visible on mobile */
-        padding: var(--spacing-sm);
+        opacity: 0.7;
+        padding: 10px;
+        font-size: 1.2rem;
     }
     
     .reaction-badge {
-        padding: var(--spacing-xs) var(--spacing-sm);
-        font-size: 1rem;
+        padding: 8px 12px;
+        font-size: 1.1rem;
+        border-radius: 30px;
     }
     
-    /* Message actions menu mobile positioning */
+    /* Message actions menu mobile */
     .message-actions-menu {
         position: fixed !important;
         top: auto !important;
@@ -1326,10 +1392,13 @@ header {
         right: 0 !important;
         width: 100% !important;
         max-width: 100% !important;
-        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        border-radius: 20px 20px 0 0;
         transform: translateY(100%);
         transition: transform 0.3s ease;
         z-index: 10000;
+        padding: 20px;
+        background-color: var(--bg-primary);
+        border-top: 2px solid var(--border-light);
     }
     
     .message-actions-menu.show {
@@ -1337,19 +1406,23 @@ header {
     }
     
     .message-actions-menu button {
-        padding: 15px 20px;
-        font-size: 16px;
+        padding: 16px 20px;
+        font-size: 1.1rem;
+        border-radius: 12px;
+        margin: 4px 0;
     }
     
     .reaction-quick-picker {
         grid-template-columns: repeat(6, 1fr);
-        gap: 8px;
-        padding: 10px;
+        gap: 12px;
+        padding: 15px 5px;
     }
     
     .reaction-emoji-btn {
-        font-size: 24px !important;
-        padding: 10px !important;
+        font-size: 28px !important;
+        padding: 15px !important;
+        border-radius: 15px !important;
+        background-color: var(--bg-secondary) !important;
     }
 }
 
@@ -1364,9 +1437,9 @@ header {
     
     .admin-tab {
         flex: 1;
-        padding: 8px;
-        font-size: 0.8rem;
-        min-height: 44px; /* Touch-friendly height */
+        padding: 12px 5px;
+        font-size: 0.9rem;
+        min-height: 50px;
     }
     
     .guest-actions {
@@ -1375,31 +1448,80 @@ header {
     
     .guest-actions .btn {
         width: 100%;
-        margin: 2px 0;
+        margin: 3px 0;
+        min-height: 48px;
     }
     
-    /* Further optimize for very small screens */
+    /* Even more space for very small screens */
     .header-controls {
         flex-direction: column;
         align-items: stretch;
+        gap: 6px;
     }
     
     .user-status {
         justify-content: center;
+        width: 100%;
     }
     
     .chat-input-area {
-        padding: 5px;
+        padding: 15px 8px;
     }
     
     .message-input {
-        font-size: 16px;
+        font-size: 18px;
+        padding: 16px 8px;
+        min-height: 65px;
     }
     
     #sendMessageBtn {
-        min-width: 50px;
+        min-width: 75px;
+        height: 65px;
+    }
+    
+    #sendMessageBtn i {
+        font-size: 2.2rem;
+    }
+    
+    .file-input-label {
+        width: 50px;
+        height: 50px;
+        font-size: 1.6rem;
+    }
+    
+    /* Make message bubbles bigger */
+    .message {
+        padding: 15px;
+        font-size: 1rem;
+    }
+    
+    .message-sender {
+        font-size: 0.9rem;
+    }
+    
+    .message-text {
+        font-size: 1.1rem;
+        line-height: 1.5;
+    }
+    
+    /* Make modals full screen on very small devices */
+    .modal-content {
+        max-width: 100%;
+        height: 100%;
+        max-height: 100%;
+        border-radius: 0;
+        margin: 0;
+    }
+    
+    .connection-modal .modal-content {
+        max-width: 100%;
+        height: auto;
+        max-height: 90%;
+        border-radius: 20px;
+        margin: 20px;
     }
 }
+
 /* Chat section custom colors - reflecting the requested changes */
 :root {
     /* Light mode chat section color */
