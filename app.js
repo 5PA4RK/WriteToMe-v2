@@ -632,12 +632,19 @@ if (appState.activeMessageActions) {
     });
     
     // Reply modal
-// In the setupEventListeners function, update the reply modal section:
+// Add this to your setupEventListeners in app.js for the reply modal close button
 if (closeReplyModal) {
-    closeReplyModal.addEventListener('click', () => {
+    const handleCloseModal = () => {
         replyModal.style.display = 'none';
-        appState.replyingTo = null;
-    });
+        if (appState) appState.replyingTo = null;
+        document.body.classList.remove('modal-open');
+    };
+    
+    closeReplyModal.addEventListener('click', handleCloseModal);
+    closeReplyModal.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        handleCloseModal();
+    }, { passive: false });
 }
 
 if (sendReplyBtn) {
