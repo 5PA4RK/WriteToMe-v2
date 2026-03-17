@@ -404,19 +404,48 @@ function setupEventListeners() {
 
 // Improve emoji picker for mobile
 if (emojiBtn) {
-    emojiBtn.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        toggleEmojiPicker();
-    });
+    // Remove any existing listeners first
+    emojiBtn.replaceWith(emojiBtn.cloneNode(true));
+    const newEmojiBtn = document.getElementById('emojiBtn');
+    
+    if (newEmojiBtn) {
+        newEmojiBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleEmojiPicker();
+        });
+        
+        // Add touch event for mobile
+        newEmojiBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleEmojiPicker();
+        }, { passive: false });
+    }
 }
 
 // Close emoji picker when scrolling on mobile
 if (emojiPicker) {
+    document.addEventListener('scroll', () => {
+        if (emojiPicker.classList.contains('show')) {
+            emojiPicker.classList.remove('show');
+        }
+    }, { passive: true });
+    
+    // Close on touch move (swipe)
     document.addEventListener('touchmove', () => {
         if (emojiPicker.classList.contains('show')) {
             emojiPicker.classList.remove('show');
         }
     }, { passive: true });
+}
+// Close emoji picker when keyboard appears (mobile)
+if (messageInput) {
+    messageInput.addEventListener('focus', () => {
+        if (emojiPicker && emojiPicker.classList.contains('show')) {
+            emojiPicker.classList.remove('show');
+        }
+    });
 }
     // Connection modal
     if (usernameInput) {
@@ -563,8 +592,7 @@ function playPopSound() {
     }
 }
     
-    // Click outside emoji picker to close
-// Click outside emoji picker to close
+// Improved click outside handler
 document.addEventListener('click', (e) => {
     // Close emoji picker when clicking outside
     if (emojiPicker && emojiPicker.classList.contains('show')) {
@@ -573,17 +601,16 @@ document.addEventListener('click', (e) => {
         }
     }
     
-// Close message actions when clicking outside
-if (appState.activeMessageActions) {
-    const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-    if (actionsMenu && !actionsMenu.contains(e.target) && 
-        !e.target.closest('.message-action-dots')) {
-        // Call the ChatModule version
-        if (window.ChatModule) {
-            window.ChatModule.closeMessageActions();
+    // Close message actions when clicking outside
+    if (appState.activeMessageActions) {
+        const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
+        if (actionsMenu && !actionsMenu.contains(e.target) && 
+            !e.target.closest('.message-action-dots')) {
+            if (window.ChatModule) {
+                window.ChatModule.closeMessageActions();
+            }
         }
     }
-}
 });
     
     // Tab switching
@@ -2545,7 +2572,33 @@ async function handleImageUpload(e) {
 }
 
 function toggleEmojiPicker() {
-    emojiPicker.classList.toggle('show');
+    if (!emojiPicker) return;
+    
+    // Toggle the picker
+    if (emojiPicker.classList.contains('show')) {
+        emojiPicker.classList.remove('show');
+    } else {
+        // Close any other open menus first
+        if (appState.activeMessageActions) {
+            if (window.ChatModule) {
+                window.ChatModule.closeMessageActions();
+            }
+        }
+        
+        // Position emoji picker better on mobile
+        if (window.innerWidth <= 768) {
+            // On mobile, position above the input
+            const inputRect = messageInput?.getBoundingClientRect();
+            if (inputRect) {
+                emojiPicker.style.bottom = (window.innerHeight - inputRect.top + 10) + 'px';
+                emojiPicker.style.left = '50%';
+                emojiPicker.style.transform = 'translateX(-50%)';
+                emojiPicker.style.right = 'auto';
+            }
+        }
+        
+        emojiPicker.classList.add('show');
+    }
 }
 
 function populateEmojis() {
