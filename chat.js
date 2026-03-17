@@ -197,9 +197,8 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
 function getActionsMenuHtml(message) {
     const isOwnMessage = message.sender === (appState ? appState.userName : '');
     
-    // Properly escape the message text for the onclick handler
-    const escapedSender = escapeHtml(message.sender || '');
-    const escapedText = escapeHtml(message.text || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    // Create a safe ID for data storage
+    const safeId = message.id.replace(/[^a-zA-Z0-9]/g, '_');
     
     return `
         <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
@@ -208,7 +207,7 @@ function getActionsMenuHtml(message) {
                 <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
                 <div class="menu-divider"></div>
             ` : ''}
-            <button onclick="window.openReplyModal('${message.id}', '${escapedSender}', '${escapedText}')">
+            <button class="reply-btn" data-message-id="${message.id}" data-sender="${escapeHtml(message.sender)}" data-message-text="${escapeHtml(message.text || '')}">
                 <i class="fas fa-reply"></i> Reply
             </button>
             <div class="menu-divider"></div>
@@ -514,6 +513,28 @@ async function sendReply() {
 
 // In the setupEventListeners function in chat.js, update the sendReplyBtn handler:
 function setupEventListeners() {
+    // Handle reply button clicks with long messages
+    document.addEventListener('click', function(e) {
+        const replyBtn = e.target.closest('.reply-btn');
+        if (replyBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const messageId = replyBtn.dataset.messageId;
+            const sender = replyBtn.dataset.sender;
+            const messageText = replyBtn.dataset.messageText;
+            
+            console.log('Reply button clicked via delegation:', { messageId, sender, messageTextLength: messageText?.length });
+            
+            // Call the openReplyModal function
+            if (window.ChatModule && typeof window.ChatModule.openReplyModal === 'function') {
+                window.ChatModule.openReplyModal(messageId, sender, messageText);
+            } else {
+                console.error('ChatModule or openReplyModal not available');
+            }
+        }
+    });
+
     if (elements.sendReplyBtn) {
         // Remove any existing listeners
         const oldBtn = elements.sendReplyBtn;
@@ -547,6 +568,20 @@ function setupEventListeners() {
             if (appState) appState.replyingTo = null;
         });
     }
+}
+// Escape HTML and quotes for data attributes
+function escapeHtml(text) {
+    if (!text) return '';
+    
+    // First, escape HTML entities
+    const div = document.createElement('div');
+    div.textContent = text;
+    let escaped = div.innerHTML;
+    
+    // Then escape quotes for HTML attributes
+    escaped = escaped.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    
+    return escaped;
 }
 async function sendMessageToDB(text, imageUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
