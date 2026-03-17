@@ -192,32 +192,37 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
     `;
 }
 
-    // Helper function to get actions menu HTML
-    function getActionsMenuHtml(message) {
-        const isOwnMessage = message.sender === (appState ? appState.userName : '');
-        
-        return `
-            <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
-                ${isOwnMessage ? `
-                    <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
-                    <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
-                    <div class="menu-divider"></div>
-                ` : ''}
-                <button onclick="window.openReplyModal('${message.id}', '${escapeHtml(message.sender)}', '${escapeHtml(message.text || '')}')">
-                    <i class="fas fa-reply"></i> Reply
-                </button>
+
+// Helper function to get actions menu HTML
+function getActionsMenuHtml(message) {
+    const isOwnMessage = message.sender === (appState ? appState.userName : '');
+    
+    // Properly escape the message text for the onclick handler
+    const escapedSender = escapeHtml(message.sender || '');
+    const escapedText = escapeHtml(message.text || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    
+    return `
+        <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
+            ${isOwnMessage ? `
+                <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
+                <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
                 <div class="menu-divider"></div>
-                <div class="reaction-section">
-                    <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
-                    <div class="reaction-quick-picker">
-                        ${reactionEmojis.map(emoji => 
-                            `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
-                        ).join('')}
-                    </div>
+            ` : ''}
+            <button onclick="window.openReplyModal('${message.id}', '${escapedSender}', '${escapedText}')">
+                <i class="fas fa-reply"></i> Reply
+            </button>
+            <div class="menu-divider"></div>
+            <div class="reaction-section">
+                <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+                <div class="reaction-quick-picker">
+                    ${reactionEmojis.map(emoji => 
+                        `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                    ).join('')}
                 </div>
             </div>
-        `;
-    }
+        </div>
+    `;
+}
 
     // Render reactions for a message
     function renderReactions(container, reactions) {
@@ -404,9 +409,8 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
         }
     }
 
-// In chat.js, replace the openReplyModal and sendReply functions:
 
-// Open reply modal
+// Open reply modal - FIXED for long messages
 function openReplyModal(messageId, senderName, messageText) {
     console.log('Opening reply modal for message:', messageId);
     
@@ -421,12 +425,31 @@ function openReplyModal(messageId, senderName, messageText) {
         console.log('Set replyingTo to:', messageId);
     }
     
+    // Set the sender name
     elements.replyToName.textContent = senderName || 'Unknown';
-    elements.replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
+    
+    // Handle long messages - truncate for display but keep full for reference
+    let displayText = messageText || '';
+    if (displayText.length > 150) {
+        displayText = displayText.substring(0, 150) + '...';
+    }
+    elements.replyToContent.textContent = displayText;
+    
+    // Store the full message text as a data attribute for reference
+    elements.replyToContent.setAttribute('data-full-text', messageText || '');
+    
+    // Clear any previous input
     elements.replyInput.value = '';
     
+    // Show the modal
     elements.replyModal.style.display = 'flex';
-    elements.replyInput.focus();
+    
+    // Focus on the input
+    setTimeout(() => {
+        if (elements.replyInput) {
+            elements.replyInput.focus();
+        }
+    }, 100);
 }
 
 // Send reply - FIXED VERSION
