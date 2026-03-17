@@ -192,7 +192,7 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
     `;
 }
 
-    // Helper function to get actions menu HTML
+
 // Helper function to get actions menu HTML
 function getActionsMenuHtml(message) {
     const isOwnMessage = message.sender === (appState ? appState.userName : '');
@@ -422,9 +422,8 @@ function getActionsMenuHtml(message) {
         }
     }
 
-// In chat.js, replace the openReplyModal and sendReply functions:
 
-// Open reply modal
+// Open reply modal - FIXED for long messages
 function openReplyModal(messageId, senderName, messageText) {
     console.log('Opening reply modal for message:', messageId);
     
@@ -439,12 +438,31 @@ function openReplyModal(messageId, senderName, messageText) {
         console.log('Set replyingTo to:', messageId);
     }
     
+    // Set the sender name
     elements.replyToName.textContent = senderName || 'Unknown';
-    elements.replyToContent.textContent = messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText;
+    
+    // Handle long messages - truncate for display but keep full for reference
+    let displayText = messageText || '';
+    if (displayText.length > 150) {
+        displayText = displayText.substring(0, 150) + '...';
+    }
+    elements.replyToContent.textContent = displayText;
+    
+    // Store the full message text as a data attribute for reference
+    elements.replyToContent.setAttribute('data-full-text', messageText || '');
+    
+    // Clear any previous input
     elements.replyInput.value = '';
     
+    // Show the modal
     elements.replyModal.style.display = 'flex';
-    elements.replyInput.focus();
+    
+    // Focus on the input
+    setTimeout(() => {
+        if (elements.replyInput) {
+            elements.replyInput.focus();
+        }
+    }, 100);
 }
 
 // Send reply - FIXED VERSION
@@ -509,6 +527,28 @@ async function sendReply() {
 
 // In the setupEventListeners function in chat.js, update the sendReplyBtn handler:
 function setupEventListeners() {
+    // Handle reply button clicks with long messages
+    document.addEventListener('click', function(e) {
+        const replyBtn = e.target.closest('.reply-btn');
+        if (replyBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const messageId = replyBtn.dataset.messageId;
+            const sender = replyBtn.dataset.sender;
+            const messageText = replyBtn.dataset.messageText;
+            
+            console.log('Reply button clicked via delegation:', { messageId, sender, messageTextLength: messageText?.length });
+            
+            // Call the openReplyModal function
+            if (window.ChatModule && typeof window.ChatModule.openReplyModal === 'function') {
+                window.ChatModule.openReplyModal(messageId, sender, messageText);
+            } else {
+                console.error('ChatModule or openReplyModal not available');
+            }
+        }
+    });
+
     if (elements.sendReplyBtn) {
         // Remove any existing listeners
         const oldBtn = elements.sendReplyBtn;
@@ -542,6 +582,26 @@ function setupEventListeners() {
             if (appState) appState.replyingTo = null;
         });
     }
+}
+
+// Escape HTML and quotes for data attributes - handle any input type
+function escapeHtml(text) {
+    if (text === undefined || text === null) {
+        return '';
+    }
+    
+    // Convert to string if it's not already
+    const str = String(text);
+    
+    // First, escape HTML entities
+    const div = document.createElement('div');
+    div.textContent = str;
+    let escaped = div.innerHTML;
+    
+    // Then escape quotes for HTML attributes
+    escaped = escaped.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    
+    return escaped;
 }
 async function sendMessageToDB(text, imageUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
@@ -760,25 +820,12 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
     }
 
     // Escape HTML to prevent XSS
-// Escape HTML and quotes for data attributes - handle any input type
-function escapeHtml(text) {
-    if (text === undefined || text === null) {
-        return '';
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
-    
-    // Convert to string if it's not already
-    const str = String(text);
-    
-    // First, escape HTML entities
-    const div = document.createElement('div');
-    div.textContent = str;
-    let escaped = div.innerHTML;
-    
-    // Then escape quotes for HTML attributes
-    escaped = escaped.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    
-    return escaped;
-}
 
     // Public API
     return {
