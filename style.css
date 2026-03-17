@@ -59,7 +59,7 @@
     
     /* Chat section colors */
     --chat-bg: #ddf3fb;
-    --chat-messages-bg: #fbf6e5;
+    --chat-messages-bg: #faf6eb;
 }
 
 /* Dark Mode - Professional Dark Grays */
@@ -460,13 +460,13 @@ header {
 .message.sent {
     align-self: flex-end;
     background: var(--gradient-primary);
-    color: white;
+    color: var(--text-primary);
     border-bottom-right-radius: var(--radius-sm);
 }
 
 .message.received {
     align-self: flex-start;
-    background-color: var(--bg-tertiary);
+    background: linear-gradient(135deg, #4f98ff8b, #db9cffa0);
     color: var(--text-primary);
     border-bottom-left-radius: var(--radius-sm);
 }
@@ -1296,5 +1296,62 @@ header {
         max-width: 90%;
         height: auto;
         border-radius: 20px;
+    }
+}
+/* Emoji picker mobile improvements */
+.emoji-picker {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 280px;
+    max-width: 90vw;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    padding: 15px;
+    background-color: var(--bg-primary);
+    border: 2px solid var(--border-light);
+    border-radius: 20px;
+    box-shadow: var(--shadow-xl);
+    z-index: 10001;
+    display: none;
+}
+
+.emoji-picker.show {
+    display: grid;
+}
+
+.emoji-picker span {
+    font-size: 2rem;
+    padding: 12px;
+    border-radius: 12px;
+    background-color: var(--bg-secondary);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.emoji-picker span:active {
+    background-color: var(--primary);
+    transform: scale(1.15);
+}
+
+/* Add overlay behind emoji picker on mobile */
+@media (max-width: 768px) {
+    .emoji-picker.show {
+        animation: slideUp 0.2s ease;
+    }
+    
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translate(-50%, 20px);
+        }
+        to {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
     }
 }
