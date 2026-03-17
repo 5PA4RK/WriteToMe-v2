@@ -401,6 +401,23 @@ function getStableRoomNumber(sessionId) {
 // ============================================
 
 function setupEventListeners() {
+
+// Improve emoji picker for mobile
+if (emojiBtn) {
+    emojiBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        toggleEmojiPicker();
+    });
+}
+
+// Close emoji picker when scrolling on mobile
+if (emojiPicker) {
+    document.addEventListener('touchmove', () => {
+        if (emojiPicker.classList.contains('show')) {
+            emojiPicker.classList.remove('show');
+        }
+    }, { passive: true });
+}
     // Connection modal
     if (usernameInput) {
         usernameInput.addEventListener('input', function() {
@@ -449,26 +466,23 @@ function setupEventListeners() {
         });
     }
     
-    // Chat functionality - CLEAN VERSION
-    if (messageInput) {
-        // Remove any existing listeners
-        messageInput.replaceWith(messageInput.cloneNode(true));
-        const newMessageInput = document.getElementById('messageInput');
-        
-        newMessageInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !isSendingMessage) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-        
-        newMessageInput.addEventListener('input', handleTyping);
-    }
+    // Chat functionality
+// In the setupEventListeners function, update the messageInput keydown handler:
+if (messageInput) {
+    messageInput.addEventListener('keydown', (e) => {
+        // Check if it's Enter without Shift AND not during a send operation
+        if (e.key === 'Enter' && !e.shiftKey && !isSendingMessage) {
+            e.preventDefault();
+            e.stopPropagation(); // Stop event from bubbling
+            sendMessage();
+        }
+    });
+    
+    messageInput.addEventListener('input', handleTyping);
+}
     
     if (sendMessageBtn) {
-        sendMessageBtn.replaceWith(sendMessageBtn.cloneNode(true));
-        const newSendMessageBtn = document.getElementById('sendMessageBtn');
-        newSendMessageBtn.addEventListener('click', sendMessage);
+        sendMessageBtn.addEventListener('click', sendMessage);
     }
     
     if (clearChatBtn) {
@@ -480,23 +494,9 @@ function setupEventListeners() {
         imageUpload.addEventListener('change', handleImageUpload);
     }
     
-    // Emoji picker - CLEAN VERSION
+    // Emoji picker
     if (emojiBtn) {
-        emojiBtn.replaceWith(emojiBtn.cloneNode(true));
-        const newEmojiBtn = document.getElementById('emojiBtn');
-        
-        newEmojiBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleEmojiPicker();
-        });
-        
-        // Touch event for mobile
-        newEmojiBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleEmojiPicker();
-        }, { passive: false });
+        emojiBtn.addEventListener('click', toggleEmojiPicker);
     }
     
     // Return to active chat
@@ -531,125 +531,6 @@ function setupEventListeners() {
             }
         });
     }
-    
-    // Global click handler for closing menus
-    document.addEventListener('click', (e) => {
-        // Close emoji picker
-        if (emojiPicker && emojiPicker.classList.contains('show')) {
-            if (!emojiPicker.contains(e.target) && emojiBtn && !emojiBtn.contains(e.target)) {
-                emojiPicker.classList.remove('show');
-            }
-        }
-        
-        // Close message actions
-        if (appState.activeMessageActions) {
-            const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-            if (actionsMenu && !actionsMenu.contains(e.target) && 
-                !e.target.closest('.message-action-dots')) {
-                if (window.ChatModule) {
-                    window.ChatModule.closeMessageActions();
-                }
-            }
-        }
-        
-        // Close notes panel
-        if (notesPanel && notesPanel.classList.contains('show') && 
-            !notesPanel.contains(e.target) && 
-            notesBtn && !notesBtn.contains(e.target)) {
-            notesPanel.classList.remove('show');
-            appState.showNotesPanel = false;
-        }
-    });
-    
-    // Close emoji picker on scroll/touchmove
-    if (emojiPicker) {
-        document.addEventListener('scroll', () => {
-            if (emojiPicker.classList.contains('show')) {
-                emojiPicker.classList.remove('show');
-            }
-        }, { passive: true });
-        
-        document.addEventListener('touchmove', () => {
-            if (emojiPicker.classList.contains('show')) {
-                emojiPicker.classList.remove('show');
-            }
-        }, { passive: true });
-    }
-    
-    // Close emoji picker when keyboard appears
-    if (messageInput) {
-        messageInput.addEventListener('focus', () => {
-            if (emojiPicker && emojiPicker.classList.contains('show')) {
-                emojiPicker.classList.remove('show');
-            }
-        });
-    }
-    
-    // Tab switching
-    if (historyTabBtn) {
-        historyTabBtn.addEventListener('click', () => switchAdminTab('history'));
-    }
-    
-    if (usersTabBtn) {
-        usersTabBtn.addEventListener('click', () => switchAdminTab('users'));
-    }
-    
-    // Notes panel
-    if (notesBtn) {
-        notesBtn.addEventListener('click', toggleNotesPanel);
-    }
-    
-    if (closeNotesPanel) {
-        closeNotesPanel.addEventListener('click', () => {
-            notesPanel.classList.remove('show');
-            appState.showNotesPanel = false;
-        });
-    }
-    
-    if (refreshNotesBtn) {
-        refreshNotesBtn.addEventListener('click', loadVisitorNotes);
-    }
-    
-    if (markAllReadBtn) {
-        markAllReadBtn.addEventListener('click', markAllNotesAsRead);
-    }
-    
-    if (notesSearchInput) {
-        notesSearchInput.addEventListener('input', function() {
-            searchNotes(this.value.toLowerCase());
-        });
-    }
-    
-    // Reply modal - CLEAN VERSION
-    if (closeReplyModal) {
-        closeReplyModal.replaceWith(closeReplyModal.cloneNode(true));
-        const newCloseReplyModal = document.getElementById('closeReplyModal');
-        newCloseReplyModal.addEventListener('click', () => {
-            replyModal.style.display = 'none';
-            appState.replyingTo = null;
-        });
-    }
-    
-    // Window click for modals
-    window.addEventListener('click', (e) => {
-        if (e.target === replyModal) {
-            replyModal.style.display = 'none';
-            appState.replyingTo = null;
-        }
-        if (e.target === guestNotificationModal) {
-            guestNotificationModal.style.display = 'none';
-        }
-    });
-}
-
-// Helper function to close reply modal
-window.closeReplyModal = function() {
-    const replyModal = document.getElementById('replyModal');
-    if (replyModal) {
-        replyModal.style.display = 'none';
-    }
-    appState.replyingTo = null;
-};
     // Add this function to handle playing sounds reliably
 // Alternative: Simple "pop" sound
 function playPopSound() {
@@ -682,7 +563,8 @@ function playPopSound() {
     }
 }
     
-// Improved click outside handler
+    // Click outside emoji picker to close
+// Click outside emoji picker to close
 document.addEventListener('click', (e) => {
     // Close emoji picker when clicking outside
     if (emojiPicker && emojiPicker.classList.contains('show')) {
@@ -691,16 +573,17 @@ document.addEventListener('click', (e) => {
         }
     }
     
-    // Close message actions when clicking outside
-    if (appState.activeMessageActions) {
-        const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-        if (actionsMenu && !actionsMenu.contains(e.target) && 
-            !e.target.closest('.message-action-dots')) {
-            if (window.ChatModule) {
-                window.ChatModule.closeMessageActions();
-            }
+// Close message actions when clicking outside
+if (appState.activeMessageActions) {
+    const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
+    if (actionsMenu && !actionsMenu.contains(e.target) && 
+        !e.target.closest('.message-action-dots')) {
+        // Call the ChatModule version
+        if (window.ChatModule) {
+            window.ChatModule.closeMessageActions();
         }
     }
+}
 });
     
     // Tab switching
@@ -2662,28 +2545,7 @@ async function handleImageUpload(e) {
 }
 
 function toggleEmojiPicker() {
-    if (!emojiPicker) return;
-    
-    if (emojiPicker.classList.contains('show')) {
-        emojiPicker.classList.remove('show');
-    } else {
-        // Close any other open menus
-        if (appState.activeMessageActions && window.ChatModule) {
-            window.ChatModule.closeMessageActions();
-        }
-        
-        // Position on mobile
-        if (window.innerWidth <= 768) {
-            const inputRect = messageInput?.getBoundingClientRect();
-            if (inputRect) {
-                emojiPicker.style.bottom = (window.innerHeight - inputRect.top + 10) + 'px';
-                emojiPicker.style.left = '50%';
-                emojiPicker.style.transform = 'translateX(-50%)';
-            }
-        }
-        
-        emojiPicker.classList.add('show');
-    }
+    emojiPicker.classList.toggle('show');
 }
 
 function populateEmojis() {
