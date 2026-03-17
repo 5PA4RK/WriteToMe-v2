@@ -197,17 +197,31 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
 function getActionsMenuHtml(message) {
     const isOwnMessage = message.sender === (appState ? appState.userName : '');
     
-    // Create a safe ID for data storage
-    const safeId = message.id.replace(/[^a-zA-Z0-9]/g, '_');
+    // Ensure message.id is a string
+    let messageId = message.id;
+    if (messageId === undefined || messageId === null) {
+        console.error('Message ID is undefined or null', message);
+        messageId = 'unknown-' + Date.now();
+    }
+    
+    // Convert to string if it's not already
+    const messageIdStr = String(messageId);
+    
+    // Create a safe ID for data storage (remove any non-alphanumeric chars)
+    const safeId = messageIdStr.replace(/[^a-zA-Z0-9]/g, '_');
+    
+    // Safely escape the message text
+    const escapedSender = escapeHtml(message.sender || '');
+    const messageText = message.text || '';
     
     return `
-        <div class="message-actions-menu" id="actions-${message.id}" style="display: none;">
+        <div class="message-actions-menu" id="actions-${messageIdStr}" style="display: none;">
             ${isOwnMessage ? `
-                <button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button>
-                <button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button>
+                <button onclick="window.editMessage('${messageIdStr}')"><i class="fas fa-edit"></i> Edit</button>
+                <button onclick="window.deleteMessage('${messageIdStr}')"><i class="fas fa-trash"></i> Delete</button>
                 <div class="menu-divider"></div>
             ` : ''}
-            <button class="reply-btn" data-message-id="${message.id}" data-sender="${escapeHtml(message.sender)}" data-message-text="${escapeHtml(message.text || '')}">
+            <button class="reply-btn" data-message-id="${messageIdStr}" data-sender="${escapedSender}" data-message-text="${escapeHtml(messageText)}">
                 <i class="fas fa-reply"></i> Reply
             </button>
             <div class="menu-divider"></div>
@@ -215,7 +229,7 @@ function getActionsMenuHtml(message) {
                 <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
                 <div class="reaction-quick-picker">
                     ${reactionEmojis.map(emoji => 
-                        `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                        `<button class="reaction-emoji-btn" onclick="window.addReaction('${messageIdStr}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
                     ).join('')}
                 </div>
             </div>
@@ -569,13 +583,19 @@ function setupEventListeners() {
         });
     }
 }
-// Escape HTML and quotes for data attributes
+
+// Escape HTML and quotes for data attributes - handle any input type
 function escapeHtml(text) {
-    if (!text) return '';
+    if (text === undefined || text === null) {
+        return '';
+    }
+    
+    // Convert to string if it's not already
+    const str = String(text);
     
     // First, escape HTML entities
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = str;
     let escaped = div.innerHTML;
     
     // Then escape quotes for HTML attributes
