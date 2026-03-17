@@ -423,7 +423,7 @@ function getActionsMenuHtml(message) {
     }
 
 
-// Open reply modal - FIXED for long messages
+// Open reply modal - FIXED for long messages and mobile
 function openReplyModal(messageId, senderName, messageText) {
     console.log('Opening reply modal for message:', messageId);
     
@@ -457,14 +457,20 @@ function openReplyModal(messageId, senderName, messageText) {
     // Show the modal
     elements.replyModal.style.display = 'flex';
     
-    // Focus on the input
+    // On mobile, add a class to body to prevent background scrolling
+    document.body.classList.add('modal-open');
+    
+    // Focus on the input with a delay for mobile
     setTimeout(() => {
         if (elements.replyInput) {
             elements.replyInput.focus();
+            // On mobile, try to open the keyboard
+            if (window.innerWidth <= 768) {
+                elements.replyInput.click();
+            }
         }
-    }, 100);
+    }, 300);
 }
-
 // Send reply - FIXED VERSION
 // Send reply - FIXED VERSION with better desktop handling
 async function sendReply() {
@@ -527,8 +533,8 @@ async function sendReply() {
 
 // In the setupEventListeners function in chat.js, update the sendReplyBtn handler:
 function setupEventListeners() {
-    // Handle reply button clicks with long messages
-    document.addEventListener('click', function(e) {
+    // Handle reply button clicks with long messages - for both mouse and touch
+    const handleReplyClick = function(e) {
         const replyBtn = e.target.closest('.reply-btn');
         if (replyBtn) {
             e.preventDefault();
@@ -540,6 +546,11 @@ function setupEventListeners() {
             
             console.log('Reply button clicked via delegation:', { messageId, sender, messageTextLength: messageText?.length });
             
+            // Close any open message actions menu
+            if (window.ChatModule && typeof window.ChatModule.closeMessageActions === 'function') {
+                window.ChatModule.closeMessageActions();
+            }
+            
             // Call the openReplyModal function
             if (window.ChatModule && typeof window.ChatModule.openReplyModal === 'function') {
                 window.ChatModule.openReplyModal(messageId, sender, messageText);
@@ -547,7 +558,11 @@ function setupEventListeners() {
                 console.error('ChatModule or openReplyModal not available');
             }
         }
-    });
+    };
+
+    // Add both click and touch events
+    document.addEventListener('click', handleReplyClick);
+    document.addEventListener('touchstart', handleReplyClick, { passive: false });
 
     if (elements.sendReplyBtn) {
         // Remove any existing listeners
@@ -556,9 +571,10 @@ function setupEventListeners() {
         oldBtn.parentNode.replaceChild(newBtn, oldBtn);
         elements.sendReplyBtn = newBtn;
         
-        // Add fresh listener with debounce
+        // Add fresh listener with debounce for both mouse and touch
         let isProcessing = false;
-        elements.sendReplyBtn.addEventListener('click', function(e) {
+        
+        const handleSendReply = function(e) {
             e.preventDefault();
             e.stopPropagation();
             
@@ -573,7 +589,10 @@ function setupEventListeners() {
                     isProcessing = false;
                 }, 1000);
             });
-        });
+        };
+        
+        elements.sendReplyBtn.addEventListener('click', handleSendReply);
+        elements.sendReplyBtn.addEventListener('touchstart', handleSendReply, { passive: false });
     }
 
     if (elements.closeReplyModal) {
@@ -581,6 +600,12 @@ function setupEventListeners() {
             elements.replyModal.style.display = 'none';
             if (appState) appState.replyingTo = null;
         });
+        
+        elements.closeReplyModal.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            elements.replyModal.style.display = 'none';
+            if (appState) appState.replyingTo = null;
+        }, { passive: false });
     }
 }
 
