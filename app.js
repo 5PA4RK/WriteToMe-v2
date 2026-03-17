@@ -470,12 +470,14 @@ if (emojiPicker) {
 // In the setupEventListeners function, update the messageInput keydown handler:
 if (messageInput) {
     messageInput.addEventListener('keydown', (e) => {
-        // Check if it's Enter without Shift AND not during a send operation
-        if (e.key === 'Enter' && !e.shiftKey && !isSendingMessage) {
+        // Check if it's Enter AND (Ctrl or Cmd) is pressed - this sends the message
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !isSendingMessage) {
             e.preventDefault();
-            e.stopPropagation(); // Stop event from bubbling
+            e.stopPropagation();
             sendMessage();
         }
+        // Plain Enter just adds a new line (default behavior)
+        // No need to prevent default for plain Enter
     });
     
     messageInput.addEventListener('input', handleTyping);
@@ -2304,7 +2306,7 @@ function updateUIAfterConnection() {
     
     if (messageInput) {
         messageInput.disabled = false;
-        messageInput.placeholder = "Type your message here... (Press Enter to send, Shift+Enter for new line)";
+        messageInput.placeholder = "Type your message...";
         messageInput.focus();
     }
     
@@ -2838,7 +2840,7 @@ function returnToActiveChat() {
     if (chatTitle) chatTitle.innerHTML = '<i class="fas fa-comments"></i> Active Chat';
     if (messageInput) {
         messageInput.disabled = false;
-        messageInput.placeholder = "Type your message here... (Press Enter to send, Shift+Enter for new line)";
+        messageInput.placeholder = "Type your message here...";
         messageInput.focus();
     }
     if (sendMessageBtn) sendMessageBtn.disabled = false;
