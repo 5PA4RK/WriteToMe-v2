@@ -22,7 +22,7 @@
     
     /* Text colors - High contrast */
     --text-primary: #0f172a;
-    --text-secondary: #f05005;
+    --text-secondary: #b65c02;
     --text-muted: #8b7764;
     --text-inverse: #302c2c;
     
@@ -33,7 +33,7 @@
     --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
     
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, #5fb0f7, #1d4ed8);
+    --gradient-primary: linear-gradient(135deg, #ffcc00, #ff4800b1);
     --gradient-success: linear-gradient(135deg, #10b981, #059669);
     --gradient-danger: linear-gradient(135deg, #ef4444, #dc2626);
     --gradient-warning: linear-gradient(135deg, #f59e0b, #d97706);
@@ -59,7 +59,7 @@
     
     /* Chat section colors */
     --chat-bg: #ddf3fb;
-    --chat-messages-bg: #ffffff;
+    --chat-messages-bg: #fbf6e5;
 }
 
 /* Dark Mode - Professional Dark Grays */
@@ -80,7 +80,7 @@
     --border-light: #3a3a4a;
     --border-medium: #4a4a5a;
     --text-primary: #f1f5f9;
-    --text-secondary: #cbd5e1;
+    --text-secondary: #69d6f7;
     --text-muted: #94a3b8;
     --text-inverse: #0f172a;
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
@@ -1002,7 +1002,7 @@ header {
 .message.sent .message-reply-ref {
     background-color: rgba(255, 255, 255, 0.1);
     border-left-color: rgba(255, 255, 255, 0.5);
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-secondary);
 }
 
 .message.sent .message-reply-ref:hover { background-color: rgba(255, 255, 255, 0.15); }
