@@ -2382,34 +2382,25 @@ body.modal-open {
     width: 100%;
     height: 100%;
 }
-/* Add to your style.css */
-body.keyboard-open {
-    /* Prevent body scrolling when keyboard is open */
-    overflow: hidden;
-    position: fixed;
-    width: 100%;
-}
-
-body.keyboard-open .chat-section {
-    /* Adjust height when keyboard is open */
-    height: calc(100dvh - 130px - var(--keyboard-height, 0px));
-}
-
-/* Improve touch targets */
+/* Fix for mobile keyboard scrolling */
 @media (max-width: 768px) {
-    .file-input-label,
-    #sendMessageBtn,
-    .message-action-dots,
-    .reaction-badge {
-        min-height: 44px;
-        min-width: 44px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+    body.keyboard-open {
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
     }
     
-    /* Add pull-to-refresh like behavior for messages */
-    .chat-messages {
-        overscroll-behavior: contain;
+    body.keyboard-open .chat-section {
+        height: calc(100vh - 250px); /* Adjust based on keyboard height */
+        margin-bottom: 10px;
+    }
+    
+    body.keyboard-open .chat-input-area {
+        position: sticky;
+        bottom: 0;
+        background-color: var(--bg-primary);
+        z-index: 100;
+        padding-bottom: env(safe-area-inset-bottom, 10px);
     }
 }
