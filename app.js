@@ -332,7 +332,7 @@ async function reconnectToSession() {
                 appState.currentSessionId = session.session_id;
                 setupRealtimeSubscriptions();
                 setupPendingGuestsSubscription();
-                loadChatHistory();
+                // loadChatHistory();
                 loadPendingGuests();
                 return true;
             }
