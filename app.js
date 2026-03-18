@@ -756,10 +756,10 @@ async function clearChat() {
             messages.forEach(msg => msg.remove());
             
             // Add local system message for this guest only
-            addSystemMessage(`Chat messages deleted`, true);
+            addSystemMessage(`You deleted chat messages`, true);
             
-            // Send a HOST-ONLY notification (special message type)
-            await saveHostOnlyNotification(`[${appState.userName}] cleared their local chat`);
+            // Send notification to host that guest cleared their chat
+            await saveHostNotification(`[${appState.userName}] cleared their local chat`);
         }
     } catch (error) {
         console.error("Error clearing chat:", error);
@@ -767,48 +767,126 @@ async function clearChat() {
     }
 }
 
-// New function to save host-only notifications
-async function saveHostOnlyNotification(messageText) {
+// Function to save host notification (visible ONLY to host)
+async function saveHostNotification(messageText) {
     try {
-        // Store in a separate table or with a special flag for host-only messages
-        // Option 1: Use a separate table for host notifications
+        // Use visitor_notes table which is already host-only
         const { error } = await supabaseClient
-            .from('host_notifications')
+            .from('visitor_notes')
             .insert([{
+                guest_id: appState.userId,
+                guest_name: appState.userName,
                 session_id: appState.currentSessionId,
-                message: messageText,
+                note_text: `🔔 CHAT CLEAR: ${messageText}`,
                 created_at: new Date().toISOString(),
-                is_read: false
+                read_by_host: false,
+                is_host_notification: true
             }]);
         
         if (error) {
             console.error("Error saving host notification:", error);
             
-            // Fallback: Save as regular message but with a special prefix that only host will see
-            // This works because the host sees all messages, but guests won't see it if we filter
+            // Fallback: Try to use a special system message that only host will see
+            // This requires filtering in the subscription
+            await supabaseClient
+                .from('messages')
+                .insert([{
+                    session_id: appState.currentSessionId,
+                    sender_id: 'system',
+                    sender_name: 'System',
+                    message: `🔒 HOST ONLY: ${messageText}`,
+                    created_at: new Date().toISOString(),
+                    is_host_only: true
+                }]);
+        } else {
+            console.log("✅ Host notification saved to visitor notes");
+            
+            // If host is currently online, show a notification
             if (appState.isHost) {
-                // If current user is host, show immediately
+                // If the current user is host, show immediately in chat
                 addSystemMessage(messageText);
             } else {
-                // Save to messages table but we'll need to filter it on the client side
-                // This requires modifying the message display logic
-                await supabaseClient
-                    .from('messages')
-                    .insert([{
-                        session_id: appState.currentSessionId,
-                        sender_id: 'system',
-                        sender_name: 'System',
-                        message: `🔒 HOST ONLY: ${messageText}`,
-                        created_at: new Date().toISOString(),
-                        is_host_only: true  // Add this column to your messages table
-                    }]);
+                // For guest, we've already saved to DB, host will see it in their notes panel
+                // Also try to update notes panel in real-time if host is viewing
+                setTimeout(() => {
+                    if (appState.isHost && appState.showNotesPanel) {
+                        loadVisitorNotes();
+                    }
+                }, 500);
             }
         }
     } catch (error) {
-        console.error("Error in saveHostOnlyNotification:", error);
+        console.error("Error in saveHostNotification:", error);
     }
 }
-
+// Update the visitor notes subscription to show real-time notifications
+function setupVisitorNotesSubscription() {
+    if (!appState.isHost) return;
+    
+    const notesChannel = supabaseClient
+        .channel('visitor_notes_changes')
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'visitor_notes',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                console.log('📝 New visitor note received:', payload.new);
+                
+                // Add to appState
+                if (!appState.visitorNotes) appState.visitorNotes = [];
+                appState.visitorNotes.unshift(payload.new);
+                
+                // Update unread count
+                appState.unreadNotesCount = (appState.unreadNotesCount || 0) + 1;
+                updateNotesButtonUI();
+                
+                // If it's a host notification about chat clear, show in chat
+                if (payload.new.is_host_notification && payload.new.note_text.includes('CHAT CLEAR')) {
+                    addSystemMessage(payload.new.note_text.replace('🔔 CHAT CLEAR: ', ''));
+                }
+                
+                // If notes panel is open, refresh
+                if (appState.showNotesPanel) {
+                    renderVisitorNotes(appState.visitorNotes);
+                }
+                
+                // Show a small toast notification
+                showToastNotification('New notification from ' + (payload.new.guest_name || 'guest'));
+            }
+        )
+        .subscribe();
+    
+    return notesChannel;
+}
+// Simple toast notification function
+function showToastNotification(message) {
+    // Remove existing toast
+    const existingToast = document.querySelector('.toast-notification');
+    if (existingToast) existingToast.remove();
+    
+    // Create toast
+    const toast = document.createElement('div');
+    toast.className = 'toast-notification';
+    toast.innerHTML = `
+        <i class="fas fa-bell"></i>
+        <span>${message}</span>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Show toast
+    setTimeout(() => toast.classList.add('show'), 10);
+    
+    // Hide after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
 // ============================================
 // SYSTEM MESSAGE HELPER
 // ============================================
@@ -1007,6 +1085,8 @@ async function connectAsHost(userIP) {
         
         setupRealtimeSubscriptions();
         setupPendingGuestsSubscription();
+        setupVisitorNotesSubscription(); // Add this line
+
         
         await loadPendingGuests();
         await loadChatHistory();
