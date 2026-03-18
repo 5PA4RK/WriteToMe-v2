@@ -748,42 +748,55 @@ async function clearChat() {
             await saveMessageToDB('System', `[${appState.userName}] deleted chat messages`);
             
         } else {
-            // GUEST: Only hide messages locally for this guest
-            const messageCount = document.querySelectorAll('.message').length;
+            // GUEST: Mark all current messages as cleared for this user
+            // Get all message IDs from the current session that are not already cleared
+            const { data: messages, error: fetchError } = await supabaseClient
+                .from('messages')
+                .select('id')
+                .eq('session_id', appState.currentSessionId)
+                .eq('is_deleted', false);
             
-            if (messageCount === 0) return;
+            if (fetchError) throw fetchError;
             
-            // Get all messages and remove them
-            const messages = document.querySelectorAll('.message');
-            messages.forEach(msg => msg.remove());
+            let clearedCount = 0;
+            
+            if (messages && messages.length > 0) {
+                // Insert cleared messages records
+                const clearedRecords = messages.map(msg => ({
+                    user_id: appState.userId,
+                    message_id: msg.id,
+                    session_id: appState.currentSessionId,
+                    cleared_at: new Date().toISOString()
+                }));
+                
+                // Insert in batches to avoid payload size issues
+                const batchSize = 100;
+                for (let i = 0; i < clearedRecords.length; i += batchSize) {
+                    const batch = clearedRecords.slice(i, i + batchSize);
+                    const { error } = await supabaseClient
+                        .from('cleared_messages')
+                        .insert(batch);
+                    
+                    if (error) {
+                        console.error("Error inserting cleared messages batch:", error);
+                        throw error;
+                    }
+                }
+                
+                clearedCount = messages.length;
+            }
+            
+            // Clear local messages from UI
+            const messageElements = document.querySelectorAll('.message');
+            messageElements.forEach(msg => msg.remove());
             
             // Add local system message for this guest only
-            addSystemMessage(`Chat messages deleted`, true);
+            addSystemMessage(`Chat messages cleared`, true);
             
-            // Save clear state to localStorage so it persists after refresh
-            const clearedSessions = JSON.parse(localStorage.getItem('clearedChats') || '{}');
-            clearedSessions[appState.currentSessionId] = {
-                timestamp: new Date().toISOString(),
-                userName: appState.userName
-            };
-            localStorage.setItem('clearedChats', JSON.stringify(clearedSessions));
+            // Notify host that guest cleared their chat
+            await saveMessageToDB('System', `🔔 [${appState.userName}] cleared chat`);
             
-            // FIX: Send system message to host via messages table
-            const { error } = await supabaseClient
-                .from('messages')
-                .insert([{
-                    session_id: appState.currentSessionId,
-                    sender_id: 'system',
-                    sender_name: 'System',
-                    message: `🔔 [${appState.userName}] cleared chat`,
-                    created_at: new Date().toISOString()
-                }]);
-            
-            if (error) {
-                console.error("Error sending clear notification:", error);
-            } else {
-                console.log("✅ Clear notification sent to host");
-            }
+            console.log(`✅ Cleared ${clearedCount} messages for user ${appState.userName}`);
         }
     } catch (error) {
         console.error("Error clearing chat:", error);
@@ -1873,7 +1886,8 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-    appState.realtimeSubscription = supabaseClient
+// In setupRealtimeSubscriptions function, update the INSERT handler:
+appState.realtimeSubscription = supabaseClient
     .channel('messages_' + appState.currentSessionId)
     .on(
         'postgres_changes',
@@ -1882,13 +1896,28 @@ function setupRealtimeSubscriptions() {
             schema: 'public',
             table: 'messages'
         },
-        (payload) => {
+        async (payload) => {
             console.log('📦 Realtime message received:', payload.new);
-            console.log('Session check:', payload.new.session_id, 'vs', appState.currentSessionId);
-            console.log('Sender check:', payload.new.sender_id, 'vs', appState.userId);
             
             if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                // Check if this message is from someone else and we're not viewing history
                 if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                    
+                    // For guests, check if this message is cleared
+                    if (!appState.isHost) {
+                        const { data: cleared } = await supabaseClient
+                            .from('cleared_messages')
+                            .select('id')
+                            .eq('user_id', appState.userId)
+                            .eq('message_id', payload.new.id)
+                            .maybeSingle();
+                        
+                        if (cleared) {
+                            console.log('Message is cleared for this user, not displaying');
+                            return; // Don't show cleared messages
+                        }
+                    }
+                    
                     // Get reactions for this message
                     getMessageReactions(payload.new.id).then(reactions => {
                         displayMessage({
@@ -1910,8 +1939,21 @@ function setupRealtimeSubscriptions() {
                             window.playNotificationSound();
                         }
                     }
-                } else {
-                    console.log('Message from self or viewing history, not displaying');
+                } else if (payload.new.sender_id === appState.userId) {
+                    // Always show user's own messages, even if they cleared before
+                    getMessageReactions(payload.new.id).then(reactions => {
+                        displayMessage({
+                            id: payload.new.id,
+                            sender: payload.new.sender_name,
+                            text: payload.new.message,
+                            image: payload.new.image_url,
+                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                            type: 'sent',
+                            is_historical: false,
+                            reactions: reactions,
+                            reply_to: payload.new.reply_to
+                        });
+                    });
                 }
             }
         }
@@ -2216,43 +2258,28 @@ async function loadChatHistory(sessionId = null) {
     console.log('Loading chat history for session:', targetSessionId);
     
     try {
-        // Check if this guest has cleared this session before
-        const clearedSessions = JSON.parse(localStorage.getItem('clearedChats') || '{}');
-        const hasCleared = clearedSessions[targetSessionId] !== undefined;
-        
-        // If guest has cleared this session and we're not viewing history, don't load messages
-        if (!appState.isHost && hasCleared && !sessionId && targetSessionId === appState.currentSessionId) {
-            console.log('Guest has cleared this session, showing empty chat');
-            if (chatMessages) {
-                chatMessages.innerHTML = '';
-                
-                // Add the "Chat messages deleted" message
-                addSystemMessage(`Chat messages deleted`, true);
-                
-                // Also add the timestamp of when it was cleared
-                const clearedInfo = clearedSessions[targetSessionId];
-                if (clearedInfo) {
-                    const clearedDate = new Date(clearedInfo.timestamp).toLocaleString();
-                    const infoMsg = document.createElement('div');
-                    infoMsg.className = 'message received local-system';
-                    infoMsg.innerHTML = `
-                        <div class="message-sender">System</div>
-                        <div class="message-content">
-                            <div class="message-text"><small>Cleared on ${clearedDate}</small></div>
-                        </div>
-                    `;
-                    chatMessages.appendChild(infoMsg);
-                }
-            }
-            return;
-        }
-        
-        // Normal message loading for host or guests who haven't cleared
+        // Base query for messages
         let query = supabaseClient
             .from('messages')
             .select('*')
             .eq('session_id', targetSessionId)
             .eq('is_deleted', false);
+        
+        // If not host and not viewing history, filter out cleared messages
+        if (!appState.isHost && !sessionId) {
+            // First, get all messages the user has cleared
+            const { data: clearedMessages } = await supabaseClient
+                .from('cleared_messages')
+                .select('message_id')
+                .eq('user_id', appState.userId)
+                .eq('session_id', targetSessionId);
+            
+            if (clearedMessages && clearedMessages.length > 0) {
+                const clearedIds = clearedMessages.map(cm => cm.message_id);
+                // Filter out cleared messages
+                query = query.not('id', 'in', `(${clearedIds.join(',')})`);
+            }
+        }
         
         const { data: messages, error } = await query.order('created_at', { ascending: true });
         
@@ -2297,18 +2324,15 @@ async function loadChatHistory(sessionId = null) {
         
         // If no messages, show a system message
         if (!messages || messages.length === 0) {
-            // Only show "No messages" if they haven't cleared
-            if (!hasCleared) {
-                const emptyMessage = document.createElement('div');
-                emptyMessage.className = 'message received';
-                emptyMessage.innerHTML = `
-                    <div class="message-sender">System</div>
-                    <div class="message-content">
-                        <div class="message-text">No messages in this room yet.</div>
-                    </div>
-                `;
-                chatMessages.appendChild(emptyMessage);
-            }
+            const emptyMessage = document.createElement('div');
+            emptyMessage.className = 'message received';
+            emptyMessage.innerHTML = `
+                <div class="message-sender">System</div>
+                <div class="message-content">
+                    <div class="message-text">No messages in this room yet.</div>
+                </div>
+            `;
+            chatMessages.appendChild(emptyMessage);
             return;
         }
         
@@ -2318,7 +2342,7 @@ async function loadChatHistory(sessionId = null) {
         );
         const allReactions = await Promise.all(reactionPromises);
         
-        // Display all messages at once
+        // Display all messages
         messages.forEach((msg, index) => {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
             
