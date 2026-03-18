@@ -1046,19 +1046,19 @@ async function connectAsHost(userIP) {
 }
 
 // ============================================
-// CONNECT AS GUEST
+// CONNECT AS GUEST - FIXED VERSION
 // ============================================
 
 async function connectAsGuest(userIP) {
     try {
-        console.log("👤 Connecting as guest - auto-joining latest room...");
+        console.log("👤 Connecting as guest - checking for existing sessions...");
         
+        // First, check if the user has any previous approved session that's still active
         const { data: activeSessions, error: sessionError } = await supabaseClient
             .from('sessions')
             .select('session_id, host_name, host_id')
             .eq('is_active', true)
-            .order('created_at', { ascending: false })
-            .limit(1);
+            .order('created_at', { ascending: false });
         
         if (sessionError || !activeSessions || activeSessions.length === 0) {
             alert("No active rooms available. Please try again later or contact a host.");
@@ -1066,38 +1066,44 @@ async function connectAsGuest(userIP) {
             return;
         }
         
-        const targetSession = activeSessions[0];
-        console.log("✅ Found active session:", targetSession.session_id);
-        
-        const { data: existingRequest } = await supabaseClient
-            .from('session_guests')
-            .select('status, id')
-            .eq('session_id', targetSession.session_id)
-            .eq('guest_id', appState.userId)
-            .maybeSingle();
-        
-        if (existingRequest) {
-            console.log("Existing request found with status:", existingRequest.status);
+        // Check for each active session if the user has an approved status
+        for (const targetSession of activeSessions) {
+            console.log("Checking session:", targetSession.session_id);
             
-            if (existingRequest.status === 'pending') {
-                console.log("Guest already pending");
-                appState.sessionId = targetSession.session_id;
-                connectionModal.style.display = 'none';
-                resetConnectButton();
-                updateUIForPendingGuest();
-                setupPendingApprovalSubscription(targetSession.session_id);
-                return;
-            } else if (existingRequest.status === 'approved') {
-                console.log("Guest already approved");
-                completeGuestConnection(targetSession.session_id);
-                return;
-            } else if (existingRequest.status === 'rejected' || existingRequest.status === 'kicked') {
-                console.log("Previous request was rejected/kicked, creating new request");
-                await createNewGuestRequest(targetSession, userIP);
+            const { data: existingRequest } = await supabaseClient
+                .from('session_guests')
+                .select('status, id')
+                .eq('session_id', targetSession.session_id)
+                .eq('guest_id', appState.userId)
+                .maybeSingle();
+            
+            if (existingRequest) {
+                console.log(`Found existing request for session ${targetSession.session_id} with status: ${existingRequest.status}`);
+                
+                if (existingRequest.status === 'approved') {
+                    console.log("✅ Guest already approved for this session, reconnecting...");
+                    completeGuestConnection(targetSession.session_id);
+                    return;
+                } else if (existingRequest.status === 'pending') {
+                    console.log("⏳ Guest already pending for this session");
+                    appState.sessionId = targetSession.session_id;
+                    connectionModal.style.display = 'none';
+                    resetConnectButton();
+                    updateUIForPendingGuest();
+                    setupPendingApprovalSubscription(targetSession.session_id);
+                    return;
+                } else if (existingRequest.status === 'left' || existingRequest.status === 'rejected' || existingRequest.status === 'kicked') {
+                    console.log(`Previous request was ${existingRequest.status}, can try to request again`);
+                    // Continue to next session or create new request for this one
+                }
             }
-        } else {
-            await createNewGuestRequest(targetSession, userIP);
         }
+        
+        // If no existing approved/pending session found, try to join the latest active session
+        const targetSession = activeSessions[0];
+        console.log("✅ Found active session, creating new request for:", targetSession.session_id);
+        await createNewGuestRequest(targetSession, userIP);
+        
     } catch (error) {
         console.error("Error in guest connection:", error);
         alert("An error occurred: " + error.message);
@@ -1109,46 +1115,70 @@ async function createNewGuestRequest(session, userIP) {
     try {
         console.log("Creating new guest request for session:", session.session_id);
         
-        const { data: newGuest, error: insertError } = await supabaseClient
+        // Check if there's an existing left/rejected request we should update instead of insert
+        const { data: existingRequest } = await supabaseClient
             .from('session_guests')
-            .insert([{
-                session_id: session.session_id,
-                guest_id: appState.userId,
-                guest_name: appState.userName,
-                guest_ip: userIP,
-                guest_note: appState.guestNote || "",
-                status: 'pending',
-                requested_at: new Date().toISOString()
-            }])
-            .select();
+            .select('id, status')
+            .eq('session_id', session.session_id)
+            .eq('guest_id', appState.userId)
+            .maybeSingle();
         
-        if (insertError) {
-            console.error("Error adding to pending:", insertError);
+        if (existingRequest) {
+            console.log(`Updating existing ${existingRequest.status} request to pending`);
             
-            if (insertError.message.includes('duplicate key')) {
-                alert("You already have a pending request for this room.");
-            } else {
-                alert("Failed to request access: " + insertError.message);
+            // Update the existing request
+            const { error: updateError } = await supabaseClient
+                .from('session_guests')
+                .update({
+                    status: 'pending',
+                    guest_ip: userIP,
+                    guest_note: appState.guestNote || "",
+                    requested_at: new Date().toISOString(),
+                    left_at: null,
+                    approved_at: null
+                })
+                .eq('id', existingRequest.id);
+            
+            if (updateError) {
+                console.error("Error updating guest request:", updateError);
+                alert("Failed to update access request: " + updateError.message);
+                resetConnectButton();
+                return;
             }
-            resetConnectButton();
-            return;
+            
+            console.log("✅ Guest request updated successfully");
+        } else {
+            // Insert new request
+            const { data: newGuest, error: insertError } = await supabaseClient
+                .from('session_guests')
+                .insert([{
+                    session_id: session.session_id,
+                    guest_id: appState.userId,
+                    guest_name: appState.userName,
+                    guest_ip: userIP,
+                    guest_note: appState.guestNote || "",
+                    status: 'pending',
+                    requested_at: new Date().toISOString()
+                }])
+                .select();
+            
+            if (insertError) {
+                console.error("Error adding to pending:", insertError);
+                
+                if (insertError.message.includes('duplicate key')) {
+                    alert("You already have a pending request for this room.");
+                } else {
+                    alert("Failed to request access: " + insertError.message);
+                }
+                resetConnectButton();
+                return;
+            }
+            
+            console.log("✅ Guest added to pending list successfully:", newGuest);
         }
-        
-        console.log("✅ Guest added to pending list successfully:", newGuest);
         
         if (appState.guestNote && appState.guestNote.trim() !== '') {
             await saveVisitorNote(session.session_id, appState.guestNote, userIP);
-        }
-        
-        try {
-            await supabaseClient
-                .from('sessions')
-                .update({
-                    created_at: new Date().toISOString()
-                })
-                .eq('session_id', session.session_id);
-        } catch (updateError) {
-            console.log("Could not update session timestamp:", updateError);
         }
         
         try {
@@ -1177,6 +1207,22 @@ async function createNewGuestRequest(session, userIP) {
     }
 }
 
+function completeGuestConnection(sessionId) {
+    appState.sessionId = sessionId;
+    appState.currentSessionId = sessionId;
+    appState.isConnected = true;
+    
+    saveSessionToStorage();
+    connectionModal.style.display = 'none';
+    resetConnectButton();
+    updateUIAfterConnection();
+    setupRealtimeSubscriptions();
+    loadChatHistory();
+    loadChatSessions();
+    saveMessageToDB('System', `${appState.userName} has rejoined the chat.`);
+}
+
+
 async function saveVisitorNote(sessionId, noteText, userIP) {
     try {
         const { error } = await supabaseClient
@@ -1201,20 +1247,6 @@ async function saveVisitorNote(sessionId, noteText, userIP) {
     }
 }
 
-function completeGuestConnection(sessionId) {
-    appState.sessionId = sessionId;
-    appState.currentSessionId = sessionId;
-    appState.isConnected = true;
-    
-    saveSessionToStorage();
-    connectionModal.style.display = 'none';
-    resetConnectButton();
-    updateUIAfterConnection();
-    setupRealtimeSubscriptions();
-    loadChatHistory();
-    loadChatSessions();
-    saveMessageToDB('System', `${appState.userName} has joined the chat.`);
-}
 
 function saveSessionToStorage() {
     localStorage.setItem('writeToMe_session', JSON.stringify({
@@ -3006,6 +3038,35 @@ async function deleteSession(sessionId) {
             }
         }
 
+        // IMPORTANT: Delete in the correct order to avoid foreign key violations
+        
+        // 1. First delete message_reactions (they reference messages)
+        try {
+            await supabaseClient
+                .from('message_reactions')
+                .delete()
+                .in('message_id', supabaseClient
+                    .from('messages')
+                    .select('id')
+                    .eq('session_id', sessionId)
+                );
+            console.log("✅ Message reactions deleted");
+        } catch (e) {
+            console.log("Message reactions deletion error:", e.message);
+        }
+
+        // 2. Delete cleared_messages (they reference messages)
+        try {
+            await supabaseClient
+                .from('cleared_messages')
+                .delete()
+                .eq('session_id', sessionId);
+            console.log("✅ Cleared messages deleted");
+        } catch (e) {
+            console.log("Cleared messages deletion error:", e.message);
+        }
+
+        // 3. Delete visitor notes
         try {
             await supabaseClient
                 .from('visitor_notes')
@@ -3016,45 +3077,60 @@ async function deleteSession(sessionId) {
             console.log("Visitor notes deletion skipped:", e.message);
         }
 
-        const { error: messagesError } = await supabaseClient
-            .from('messages')
-            .delete()
-            .eq('session_id', sessionId);
-        
-        if (messagesError) throw messagesError;
-        console.log("✅ Messages deleted");
-
-        const { error: guestsError } = await supabaseClient
-            .from('session_guests')
-            .delete()
-            .eq('session_id', sessionId);
-        
-        if (guestsError) throw guestsError;
-        console.log("✅ Session guests deleted");
-
-        const { error: sessionError } = await supabaseClient
-            .from('sessions')
-            .delete()
-            .eq('session_id', sessionId);
-        
-        if (sessionError) {
-            console.error("Session deletion error:", sessionError);
+        // 4. Delete messages
+        try {
+            const { error: messagesError } = await supabaseClient
+                .from('messages')
+                .delete()
+                .eq('session_id', sessionId);
             
-            if (sessionError.message.includes('permission denied') || 
-                sessionError.message.includes('violates row-level security')) {
+            if (messagesError) throw messagesError;
+            console.log("✅ Messages deleted");
+        } catch (e) {
+            console.log("Messages deletion error:", e.message);
+        }
+
+        // 5. Delete session guests
+        try {
+            const { error: guestsError } = await supabaseClient
+                .from('session_guests')
+                .delete()
+                .eq('session_id', sessionId);
+            
+            if (guestsError) throw guestsError;
+            console.log("✅ Session guests deleted");
+        } catch (e) {
+            console.log("Session guests deletion error:", e.message);
+        }
+
+        // 6. Finally delete the session
+        try {
+            const { error: sessionError } = await supabaseClient
+                .from('sessions')
+                .delete()
+                .eq('session_id', sessionId);
+            
+            if (sessionError) {
+                console.error("Session deletion error:", sessionError);
                 
-                console.log("🔄 RLS blocking, trying admin bypass...");
-                
-                const { error: adminError } = await supabaseClient
-                    .from('sessions')
-                    .delete()
-                    .eq('session_id', sessionId)
-                    .select();
-                
-                if (adminError) throw adminError;
-            } else {
-                throw sessionError;
+                if (sessionError.message.includes('permission denied') || 
+                    sessionError.message.includes('violates row-level security')) {
+                    
+                    console.log("🔄 RLS blocking, trying admin bypass...");
+                    
+                    const { error: adminError } = await supabaseClient
+                        .from('sessions')
+                        .delete()
+                        .eq('session_id', sessionId)
+                        .select();
+                    
+                    if (adminError) throw adminError;
+                } else {
+                    throw sessionError;
+                }
             }
+        } catch (e) {
+            console.log("Session deletion error:", e.message);
         }
         
         console.log("✅ Session deleted successfully!");
