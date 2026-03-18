@@ -726,6 +726,7 @@ async function clearChat() {
     
     try {
         if (appState.isHost) {
+            // HOST: Permanently delete all messages for everyone
             const { error } = await supabaseClient
                 .from('messages')
                 .update({
@@ -737,19 +738,41 @@ async function clearChat() {
             
             if (error) throw error;
             
+            // Clear local messages
             chatMessages.innerHTML = '';
             appState.messages = [];
             
-            addSystemMessage(`Chat cleared by host ${appState.userName}`);
+            // Add system message for host
+            addSystemMessage(`[${appState.userName}] deleted chat messages`);
+            
+            // Also save system message to DB so guests see it
+            await saveMessageToDB('System', `[${appState.userName}] deleted chat messages`);
+            
         } else {
+            // GUEST: Only hide messages locally for this guest
+            const messageCount = document.querySelectorAll('.message').length;
+            
+            if (messageCount === 0) return;
+            
+            // Get all messages and check if they're not system messages we want to keep
             const messages = document.querySelectorAll('.message');
+            
+            // Hide all messages except system messages that might be important
             messages.forEach(msg => {
-                if (msg.querySelector('.message-sender')?.textContent === appState.userName) {
+                const isSystem = msg.querySelector('.message-sender')?.textContent === 'System';
+                const isSystemMessage = msg.querySelector('.message-text')?.textContent.includes('deleted chat messages');
+                
+                // Remove all regular messages
+                if (!isSystem && !isSystemMessage) {
                     msg.remove();
                 }
             });
             
-            addSystemMessage(`You cleared the chat`, true);
+            // Add local system message for this guest only
+            addSystemMessage(`Chat messages deleted`, true);
+            
+            // Notify host that guest cleared their chat (optional)
+            await saveMessageToDB('System', `[${appState.userName}] cleared their local chat`, true);
         }
     } catch (error) {
         console.error("Error clearing chat:", error);
@@ -760,7 +783,6 @@ async function clearChat() {
 // ============================================
 // SYSTEM MESSAGE HELPER
 // ============================================
-
 function addSystemMessage(text, isLocal = false) {
     const systemMsg = document.createElement('div');
     systemMsg.className = 'message received';
@@ -2603,7 +2625,8 @@ function updateSoundControl() {
     }
 }
 
-async function saveMessageToDB(senderName, messageText) {
+// Update the saveMessageToDB function to handle silent notifications
+async function saveMessageToDB(senderName, messageText, isSilent = false) {
     try {
         const messageData = {
             session_id: appState.currentSessionId,
@@ -2613,6 +2636,8 @@ async function saveMessageToDB(senderName, messageText) {
             created_at: new Date().toISOString()
         };
         
+        // If isSilent, we might want to mark it differently but still save
+        // This ensures the host sees guest's clear action
         const { error } = await supabaseClient
             .from('messages')
             .insert([messageData]);
