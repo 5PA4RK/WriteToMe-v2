@@ -768,17 +768,22 @@ async function clearChat() {
             };
             localStorage.setItem('clearedChats', JSON.stringify(clearedSessions));
             
-            // FIX: Send system message to host via messages table instead of visitor_notes
-            await supabaseClient
+            // FIX: Send system message to host via messages table
+            const { error } = await supabaseClient
                 .from('messages')
                 .insert([{
                     session_id: appState.currentSessionId,
                     sender_id: 'system',
                     sender_name: 'System',
                     message: `🔔 [${appState.userName}] cleared chat`,
-                    created_at: new Date().toISOString(),
-                    is_notification: true  // Optional flag if you want to handle notifications differently
+                    created_at: new Date().toISOString()
                 }]);
+            
+            if (error) {
+                console.error("Error sending clear notification:", error);
+            } else {
+                console.log("✅ Clear notification sent to host");
+            }
         }
     } catch (error) {
         console.error("Error clearing chat:", error);
@@ -1878,7 +1883,9 @@ function setupRealtimeSubscriptions() {
             table: 'messages'
         },
         (payload) => {
-            console.log('📦 Realtime message received:', payload.new?.sender_name);
+            console.log('📦 Realtime message received:', payload.new);
+            console.log('Session check:', payload.new.session_id, 'vs', appState.currentSessionId);
+            console.log('Sender check:', payload.new.sender_id, 'vs', appState.userId);
             
             if (payload.new && payload.new.session_id === appState.currentSessionId) {
                 if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
@@ -1897,13 +1904,14 @@ function setupRealtimeSubscriptions() {
                         });
                     });
                     
-// Play notification sound for new messages
-// PLAY SOUND HERE - for messages from others
-if (appState.soundEnabled && !payload.new.is_notification) {
-    if (window.playNotificationSound) {
-        window.playNotificationSound();
-    }
-}
+                    // Play notification sound for new messages
+                    if (appState.soundEnabled && !payload.new.is_notification) {
+                        if (window.playNotificationSound) {
+                            window.playNotificationSound();
+                        }
+                    }
+                } else {
+                    console.log('Message from self or viewing history, not displaying');
                 }
             }
         }
