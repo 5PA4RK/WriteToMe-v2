@@ -623,6 +623,37 @@ if (appState.activeMessageActions) {
         });
     }
     
+// Fix for mobile keyboard scrolling
+if (messageInput) {
+    messageInput.addEventListener('focus', function() {
+        if (window.innerWidth <= 768) {
+            document.body.classList.add('keyboard-open');
+            // Small delay to ensure keyboard is open
+            setTimeout(() => {
+                this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 300);
+        }
+    });
+    
+    messageInput.addEventListener('blur', function() {
+        if (window.innerWidth <= 768) {
+            document.body.classList.remove('keyboard-open');
+        }
+    });
+}
+
+// Also handle when user taps on any input field
+const allInputs = document.querySelectorAll('input, textarea');
+allInputs.forEach(input => {
+    input.addEventListener('focus', function() {
+        if (window.innerWidth <= 768) {
+            setTimeout(() => {
+                this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 300);
+        }
+    });
+});
+
     // Click outside to close notes panel
     document.addEventListener('click', (e) => {
         if (notesPanel && notesPanel.classList.contains('show') && 
