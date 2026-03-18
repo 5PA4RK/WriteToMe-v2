@@ -754,29 +754,51 @@ async function clearChat() {
             
             if (messageCount === 0) return;
             
-            // Get all messages and check if they're not system messages we want to keep
+            // Get all messages and remove them
             const messages = document.querySelectorAll('.message');
-            
-            // Hide all messages except system messages that might be important
-            messages.forEach(msg => {
-                const isSystem = msg.querySelector('.message-sender')?.textContent === 'System';
-                const isSystemMessage = msg.querySelector('.message-text')?.textContent.includes('deleted chat messages');
-                
-                // Remove all regular messages
-                if (!isSystem && !isSystemMessage) {
-                    msg.remove();
-                }
-            });
+            messages.forEach(msg => msg.remove());
             
             // Add local system message for this guest only
             addSystemMessage(`Chat messages deleted`, true);
             
-            // Notify host that guest cleared their chat (optional)
-            await saveMessageToDB('System', `[${appState.userName}] cleared their local chat`, true);
+            // Save clear state to localStorage so it persists after refresh
+            const clearedSessions = JSON.parse(localStorage.getItem('clearedChats') || '{}');
+            clearedSessions[appState.currentSessionId] = {
+                timestamp: new Date().toISOString(),
+                userName: appState.userName
+            };
+            localStorage.setItem('clearedChats', JSON.stringify(clearedSessions));
+            
+            // Notify host that guest cleared their chat
+            await saveHostNotification(`[${appState.userName}] cleared their local chat`);
         }
     } catch (error) {
         console.error("Error clearing chat:", error);
         alert("Failed to clear chat: " + error.message);
+    }
+}
+
+// New function to save host notification
+async function saveHostNotification(messageText) {
+    try {
+        // Save to visitor_notes table (host-only)
+        const { error } = await supabaseClient
+            .from('visitor_notes')
+            .insert([{
+                guest_id: appState.userId,
+                guest_name: appState.userName,
+                session_id: appState.currentSessionId,
+                note_text: `🔔 CHAT CLEAR: ${messageText}`,
+                created_at: new Date().toISOString(),
+                read_by_host: false,
+                is_host_notification: true
+            }]);
+        
+        if (error) {
+            console.error("Error saving host notification:", error);
+        }
+    } catch (error) {
+        console.error("Error in saveHostNotification:", error);
     }
 }
 
@@ -2168,9 +2190,6 @@ function displayMessage(message) {
 // ============================================
 // LOAD CHAT HISTORY
 // ============================================
-// ============================================
-// LOAD CHAT HISTORY
-// ============================================
 async function loadChatHistory(sessionId = null) {
     const targetSessionId = sessionId || appState.currentSessionId;
     if (!targetSessionId) {
@@ -2181,12 +2200,45 @@ async function loadChatHistory(sessionId = null) {
     console.log('Loading chat history for session:', targetSessionId);
     
     try {
-        const { data: messages, error } = await supabaseClient
+        // Check if this guest has cleared this session before
+        const clearedSessions = JSON.parse(localStorage.getItem('clearedChats') || '{}');
+        const hasCleared = clearedSessions[targetSessionId] !== undefined;
+        
+        // If guest has cleared this session and we're not viewing history, don't load messages
+        if (!appState.isHost && hasCleared && !sessionId && targetSessionId === appState.currentSessionId) {
+            console.log('Guest has cleared this session, showing empty chat');
+            if (chatMessages) {
+                chatMessages.innerHTML = '';
+                
+                // Add the "Chat messages deleted" message
+                addSystemMessage(`Chat messages deleted`, true);
+                
+                // Also add the timestamp of when it was cleared
+                const clearedInfo = clearedSessions[targetSessionId];
+                if (clearedInfo) {
+                    const clearedDate = new Date(clearedInfo.timestamp).toLocaleString();
+                    const infoMsg = document.createElement('div');
+                    infoMsg.className = 'message received local-system';
+                    infoMsg.innerHTML = `
+                        <div class="message-sender">System</div>
+                        <div class="message-content">
+                            <div class="message-text"><small>Cleared on ${clearedDate}</small></div>
+                        </div>
+                    `;
+                    chatMessages.appendChild(infoMsg);
+                }
+            }
+            return;
+        }
+        
+        // Normal message loading for host or guests who haven't cleared
+        let query = supabaseClient
             .from('messages')
             .select('*')
             .eq('session_id', targetSessionId)
-            .eq('is_deleted', false)
-            .order('created_at', { ascending: true });
+            .eq('is_deleted', false);
+        
+        const { data: messages, error } = await query.order('created_at', { ascending: true });
         
         if (error) {
             console.error('Error loading messages:', error);
@@ -2229,15 +2281,18 @@ async function loadChatHistory(sessionId = null) {
         
         // If no messages, show a system message
         if (!messages || messages.length === 0) {
-            const emptyMessage = document.createElement('div');
-            emptyMessage.className = 'message received';
-            emptyMessage.innerHTML = `
-                <div class="message-sender">System</div>
-                <div class="message-content">
-                    <div class="message-text">No messages in this room yet.</div>
-                </div>
-            `;
-            chatMessages.appendChild(emptyMessage);
+            // Only show "No messages" if they haven't cleared
+            if (!hasCleared) {
+                const emptyMessage = document.createElement('div');
+                emptyMessage.className = 'message received';
+                emptyMessage.innerHTML = `
+                    <div class="message-sender">System</div>
+                    <div class="message-content">
+                        <div class="message-text">No messages in this room yet.</div>
+                    </div>
+                `;
+                chatMessages.appendChild(emptyMessage);
+            }
             return;
         }
         
