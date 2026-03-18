@@ -22,7 +22,6 @@ const ChatModule = (function() {
     }
 
 
-    // Display a message in the chat
 // Display a message in the chat
 function displayMessage(message) {
     if (!elements.chatMessages) {
@@ -55,9 +54,21 @@ function displayMessage(message) {
         messageContent += getReplyQuoteHtml(message.reply_to, message);
     }
     
-    // Add message text
+    // FIX 1: Add message text with proper line breaks and RTL/LTR support
     if (message.text) {
-        messageContent += `<div class="message-text">${escapeHtml(message.text)}</div>`;
+        // Escape HTML first
+        const escapedText = escapeHtml(message.text);
+        
+        // Check if text contains Arabic/RTL characters
+        const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
+        
+        // Replace newlines with <br> tags to preserve line breaks
+        const textWithBreaks = escapedText.replace(/\n/g, '<br>');
+        
+        // Add direction attribute if Arabic detected
+        const dirAttr = hasArabic ? ' dir="auto"' : '';
+        
+        messageContent += `<div class="message-text"${dirAttr}>${textWithBreaks}</div>`;
     }
     
     // Add image if present
@@ -112,7 +123,6 @@ function displayMessage(message) {
     elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
 }
 
-// Helper function to get reply quote HTML
 // Helper function to get reply quote HTML
 function getReplyQuoteHtml(replyToId, currentMessage) {
     let quotedSender = 'someone';
@@ -630,9 +640,9 @@ function escapeHtml(text) {
 }
 async function sendMessageToDB(text, imageUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
-    
-    // Generate a temporary ID to check for duplicates
-    const tempId = 'temp_' + Date.now();
+    console.log('replyToId parameter:', replyToId);
+    console.log('appState.replyingTo:', appState.replyingTo);
+    console.log('window.__tempReplyTo:', window.__tempReplyTo);
     
     try {
         // Use the passed replyToId, or check temp variable, or fall back to appState.replyingTo
@@ -643,11 +653,12 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
         appState.replyingTo = null;
         window.__tempReplyTo = null;
         
+        // FIX: Preserve line breaks - don't modify the text
         const messageData = {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
             sender_name: appState.userName,
-            message: text || '',
+            message: text || '',  // Keep original text with line breaks
             created_at: new Date().toISOString(),
             reply_to: finalReplyToId
         };
@@ -670,33 +681,24 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
         console.log('✅ Message saved to DB. ID:', data.id);
         console.log('Reply_to in DB:', data.reply_to);
         
-        // Double-check if this message ID already exists in DOM before displaying
-        if (!document.getElementById(`msg-${data.id}`)) {
-            displayMessage({
-                id: data.id,
-                sender: appState.userName,
-                text: text,
-                image: imageUrl,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_historical: false,
-                reactions: [],
-                reply_to: finalReplyToId
-            });
-        } else {
-            console.log('Message already exists in DOM, skipping display:', data.id);
-        }
+        // FIX: Use the original text when displaying
+        displayMessage({
+            id: data.id,
+            sender: appState.userName,
+            text: text,  // Use original text, not data.message (they're the same)
+            image: imageUrl,
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            type: 'sent',
+            is_historical: false,
+            reactions: [],
+            reply_to: finalReplyToId
+        });
         
         return { success: true, data };
     } catch (error) {
         console.error("❌ Error in sendMessageToDB:", error);
         alert("Failed to send message: " + error.message);
         return null;
-    } finally {
-        // Ensure sending flag is reset
-        setTimeout(() => {
-            isSendingMessage = false;
-        }, 100);
     }
 }
 
