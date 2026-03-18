@@ -21,7 +21,7 @@ const ChatModule = (function() {
         console.log("ChatModule initialized successfully");
     }
 
-
+// Display a message in the chat
 // Display a message in the chat
 function displayMessage(message) {
     if (!elements.chatMessages) {
@@ -54,24 +54,44 @@ function displayMessage(message) {
         messageContent += getReplyQuoteHtml(message.reply_to, message);
     }
     
-    // FIX 1: Add message text with proper line breaks and RTL/LTR support
+    // Process message text for media embeds
     if (message.text) {
         // Escape HTML first
         const escapedText = escapeHtml(message.text);
         
-        // Check if text contains Arabic/RTL characters
-        const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
+        // Check for media embeds
+        const mediaEmbed = createMediaEmbed(message.text);
         
-        // Replace newlines with <br> tags to preserve line breaks
-        const textWithBreaks = escapedText.replace(/\n/g, '<br>');
-        
-        // Add direction attribute if Arabic detected
-        const dirAttr = hasArabic ? ' dir="auto"' : '';
-        
-        messageContent += `<div class="message-text"${dirAttr}>${textWithBreaks}</div>`;
+        if (mediaEmbed) {
+            // If media embed found, show it with the text
+            const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
+            const dirAttr = hasArabic ? ' dir="auto"' : '';
+            
+            // Split text to show the link and embed separately
+            const textWithoutUrl = message.text.replace(mediaEmbed.url, '').trim();
+            
+            if (textWithoutUrl) {
+                // If there's text before/after the link
+                const textWithBreaks = escapeHtml(textWithoutUrl).replace(/\n/g, '<br>');
+                messageContent += `<div class="message-text"${dirAttr}>${textWithBreaks}</div>`;
+            }
+            
+            // Add the media embed
+            messageContent += mediaEmbed.embedHtml;
+            
+            // Add the original link as a small reference
+            messageContent += `<div class="media-link-reference"><i class="fas fa-link"></i> <a href="${mediaEmbed.url}" target="_blank">${mediaEmbed.url.substring(0, 50)}${mediaEmbed.url.length > 50 ? '...' : ''}</a></div>`;
+        } else {
+            // No media embed, just show text with line breaks
+            const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
+            const dirAttr = hasArabic ? ' dir="auto"' : '';
+            
+            const textWithBreaks = escapedText.replace(/\n/g, '<br>');
+            messageContent += `<div class="message-text"${dirAttr}>${textWithBreaks}</div>`;
+        }
     }
     
-    // Add image if present
+    // Add image if present (uploaded file)
     if (message.image) {
         messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
     }
@@ -108,12 +128,11 @@ function displayMessage(message) {
     
     // Store in appState.messages for future reference
     if (appState && appState.messages && Array.isArray(appState.messages)) {
-        // Check if message already exists in state
         const exists = appState.messages.some(m => m.id === message.id);
         if (!exists) {
             appState.messages.push(message);
             
-            // Keep only last 100 messages in state to prevent memory issues
+            // Keep only last 100 messages in state
             if (appState.messages.length > 100) {
                 appState.messages = appState.messages.slice(-100);
             }
@@ -122,7 +141,6 @@ function displayMessage(message) {
     
     elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
 }
-
 // Helper function to get reply quote HTML
 function getReplyQuoteHtml(replyToId, currentMessage) {
     let quotedSender = 'someone';
@@ -638,6 +656,308 @@ function escapeHtml(text) {
     
     return escaped;
 }
+
+// Detect and create embed HTML for media links
+// Detect and create embed HTML for media links
+function createMediaEmbed(text) {
+    if (!text) return null;
+    
+    // Regular expressions for different media types
+    const patterns = {
+        // Image URLs (common image extensions)
+        image: /(https?:\/\/[^\s]+?\.(?:jpg|jpeg|png|gif|webp|bmp|svg|avif)(?:\?[^\s]*)?)/gi,
+        
+        // YouTube URLs (multiple formats)
+        youtube: /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/gi,
+        
+        // Vimeo URLs
+        vimeo: /(?:https?:\/\/)?(?:www\.)?(?:vimeo\.com\/|player\.vimeo\.com\/video\/)(\d+)/gi,
+        
+        // Facebook URLs
+        facebook: /(?:https?:\/\/)?(?:www\.)?facebook\.com\/(?:\d+|[^\/]+\/posts\/\d+|[^\/]+\/videos\/\d+|[^\/]+\/photos\/[^\/]+)/gi,
+        
+        // Instagram URLs
+        instagram: /(?:https?:\/\/)?(?:www\.)?instagram\.com\/p\/([a-zA-Z0-9_-]+)/gi,
+        
+        // Twitter/X URLs
+        twitter: /(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/gi,
+        
+        // TikTok URLs
+        tiktok: /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[\w.]+\/video\/(\d+)/gi,
+        
+        // Direct video URLs (common video extensions)
+        video: /(https?:\/\/[^\s]+?\.(?:mp4|webm|ogg|mov|avi|mkv|m4v)(?:\?[^\s]*)?)/gi,
+        
+        // Audio URLs
+        audio: /(https?:\/\/[^\s]+?\.(?:mp3|wav|ogg|m4a|aac|flac)(?:\?[^\s]*)?)/gi,
+        
+        // Generic URL (for fallback)
+        url: /(https?:\/\/[^\s]+)/gi
+    };
+    
+    // Check for images first
+    let match = patterns.image.exec(text);
+    if (match) {
+        return createImageEmbed(match[0], text);
+    }
+    
+    // Check for YouTube
+    patterns.youtube.lastIndex = 0;
+    match = patterns.youtube.exec(text);
+    if (match) {
+        return createYouTubeEmbed(match[1], match[0], text);
+    }
+    
+    // Check for Vimeo
+    patterns.vimeo.lastIndex = 0;
+    match = patterns.vimeo.exec(text);
+    if (match) {
+        return createVimeoEmbed(match[1], match[0], text);
+    }
+    
+    // Check for Instagram
+    patterns.instagram.lastIndex = 0;
+    match = patterns.instagram.exec(text);
+    if (match) {
+        return createInstagramEmbed(match[1], match[0], text);
+    }
+    
+    // Check for Facebook
+    patterns.facebook.lastIndex = 0;
+    match = patterns.facebook.exec(text);
+    if (match) {
+        return createFacebookEmbed(match[0], text);
+    }
+    
+    // Check for Twitter/X
+    patterns.twitter.lastIndex = 0;
+    match = patterns.twitter.exec(text);
+    if (match) {
+        return createTwitterEmbed(match[1], match[0], text);
+    }
+    
+    // Check for TikTok
+    patterns.tiktok.lastIndex = 0;
+    match = patterns.tiktok.exec(text);
+    if (match) {
+        return createTikTokEmbed(match[1], match[0], text);
+    }
+    
+    // Check for direct video files
+    patterns.video.lastIndex = 0;
+    match = patterns.video.exec(text);
+    if (match) {
+        return createVideoEmbed(match[0], text);
+    }
+    
+    // Check for audio files
+    patterns.audio.lastIndex = 0;
+    match = patterns.audio.exec(text);
+    if (match) {
+        return createAudioEmbed(match[0], text);
+    }
+    
+    return null;
+}
+
+// Helper functions for different embed types
+function createImageEmbed(url, fullText) {
+    return {
+        type: 'image',
+        url: url,
+        embedHtml: `<div class="media-embed image-embed">
+            <img src="${url}" class="embedded-image" onclick="window.showFullImage('${url}')" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'embed-error\'><i class=\'fas fa-exclamation-triangle\'></i> Failed to load image. <a href=\'${url}\' target=\'_blank\'>Click here</a> to view.</div>';">
+            <div class="media-source"><i class="fas fa-image"></i> <a href="${url}" target="_blank" rel="noopener noreferrer">View Image</a></div>
+        </div>`
+    };
+}
+
+// Replace your existing createYouTubeEmbed function with this:
+function createYouTubeEmbed(videoId, url, fullText) {
+    return {
+        type: 'youtube',
+        url: url,
+        embedHtml: `<div class="media-embed youtube-embed">
+            <div class="youtube-placeholder" data-video-id="${videoId}" data-url="${url}">
+                <img src="https://img.youtube.com/vi/${videoId}/maxresdefault.jpg" 
+                     alt="YouTube video thumbnail" 
+                     class="youtube-thumbnail" 
+                     loading="lazy"
+                     onerror="this.onerror=null; this.src='https://img.youtube.com/vi/${videoId}/hqdefault.jpg';">
+                <div class="youtube-play-button">
+                    <i class="fas fa-play"></i>
+                </div>
+                <div class="youtube-privacy-notice">
+                    <i class="fas fa-external-link-alt"></i> Click to watch on YouTube
+                </div>
+            </div>
+            <div class="media-source">
+                <i class="fab fa-youtube"></i> 
+                <a href="${url}" target="_blank" rel="noopener noreferrer">Watch on YouTube</a>
+            </div>
+        </div>`
+    };
+}
+
+// Add this click handler for YouTube placeholders
+document.addEventListener('click', function(e) {
+    // Find if the clicked element is inside a youtube-placeholder
+    const placeholder = e.target.closest('.youtube-placeholder');
+    if (placeholder) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const videoId = placeholder.dataset.videoId;
+        const url = placeholder.dataset.url;
+        
+        if (videoId) {
+            // Instead of trying to embed, open in new tab (most reliable)
+            window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank', 'noopener,noreferrer');
+            
+            // Show a brief message
+            const originalContent = placeholder.innerHTML;
+            placeholder.innerHTML = `
+                <div class="youtube-message" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); color: white; padding: 20px; text-align: center;">
+                    <div>
+                        <i class="fab fa-youtube" style="font-size: 48px; color: #ff0000; margin-bottom: 10px; display: block;"></i>
+                        <p>Opening YouTube...</p>
+                        <p><small>If it doesn't open, <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank" rel="noopener noreferrer" style="color: #ff0000;">click here</a></small></p>
+                    </div>
+                </div>
+            `;
+            
+            // Restore original after 3 seconds
+            setTimeout(() => {
+                if (placeholder && placeholder.querySelector('.youtube-message')) {
+                    placeholder.innerHTML = originalContent;
+                }
+            }, 3000);
+        }
+    }
+});
+
+// Remove these functions as they're no longer needed:
+// window.loadYouTubeVideo
+// window.handleYouTubeVideo
+
+function createVimeoEmbed(videoId, url, fullText) {
+    return {
+        type: 'vimeo',
+        url: url,
+        embedHtml: `<div class="media-embed vimeo-embed">
+            <div class="vimeo-placeholder" onclick="loadVimeoVideo(this, '${videoId}')">
+                <div class="vimeo-thumbnail-placeholder">
+                    <i class="fab fa-vimeo"></i>
+                    <span>Click to load Vimeo video</span>
+                </div>
+            </div>
+            <div class="media-source"><i class="fab fa-vimeo"></i> <a href="${url}" target="_blank" rel="noopener noreferrer">Watch on Vimeo</a></div>
+        </div>`
+    };
+}
+
+function createInstagramEmbed(postId, url, fullText) {
+    return {
+        type: 'instagram',
+        url: url,
+        embedHtml: `<div class="media-embed instagram-embed">
+            <div class="instagram-placeholder" onclick="handleInstagramPost(this, '${url}')">
+                <i class="fab fa-instagram"></i>
+                <span>Instagram Post</span>
+                <small>Click to open in new tab</small>
+            </div>
+            <div class="media-source">
+                <i class="fab fa-instagram"></i> 
+                <a href="${url}" target="_blank" rel="noopener noreferrer">View on Instagram</a>
+            </div>
+        </div>`
+    };
+}
+
+// Replace your existing createFacebookEmbed function with this:
+function createFacebookEmbed(url, fullText) {
+    // Extract Facebook video/post ID
+    const videoMatch = url.match(/\/videos\/(\d+)/);
+    const postMatch = url.match(/\/posts\/(\d+)/);
+    const id = videoMatch ? videoMatch[1] : (postMatch ? postMatch[1] : '');
+    
+    return {
+        type: 'facebook',
+        url: url,
+        embedHtml: `<div class="media-embed facebook-embed">
+            <div class="facebook-placeholder" onclick="handleFacebookPost(this, '${url}')">
+                <i class="fab fa-facebook"></i>
+                <span>Facebook Content</span>
+                <small>Click to open in new tab</small>
+            </div>
+            <div class="media-source">
+                <i class="fab fa-facebook"></i> 
+                <a href="${url}" target="_blank" rel="noopener noreferrer">View on Facebook</a>
+            </div>
+        </div>`
+    };
+}
+
+function createTwitterEmbed(tweetId, url, fullText) {
+    return {
+        type: 'twitter',
+        url: url,
+        embedHtml: `<div class="media-embed twitter-embed">
+            <div class="twitter-placeholder" onclick="loadTwitterPost(this, '${tweetId}', '${url}')">
+                <i class="fab fa-twitter"></i>
+                <span>Click to load tweet</span>
+                <small>(External content)</small>
+            </div>
+            <div class="media-source"><i class="fab fa-twitter"></i> <a href="${url}" target="_blank" rel="noopener noreferrer">View on Twitter</a></div>
+        </div>`
+    };
+}
+
+function createTikTokEmbed(videoId, url, fullText) {
+    return {
+        type: 'tiktok',
+        url: url,
+        embedHtml: `<div class="media-embed tiktok-embed">
+            <div class="tiktok-placeholder" onclick="loadTikTokVideo(this, '${videoId}', '${url}')">
+                <i class="fab fa-tiktok"></i>
+                <span>Click to load TikTok video</span>
+                <small>(External content)</small>
+            </div>
+            <div class="media-source"><i class="fab fa-tiktok"></i> <a href="${url}" target="_blank" rel="noopener noreferrer">View on TikTok</a></div>
+        </div>`
+    };
+}
+
+function createVideoEmbed(url, fullText) {
+    const extension = url.split('.').pop().split('?')[0].toLowerCase();
+    return {
+        type: 'video',
+        url: url,
+        embedHtml: `<div class="media-embed video-embed">
+            <video controls preload="metadata" playsinline>
+                <source src="${url}" type="video/${extension}">
+                Your browser does not support the video tag. <a href="${url}" target="_blank" rel="noopener noreferrer">Download video</a>
+            </video>
+            <div class="media-source"><i class="fas fa-video"></i> <a href="${url}" target="_blank" rel="noopener noreferrer">Download Video</a></div>
+        </div>`
+    };
+}
+
+function createAudioEmbed(url, fullText) {
+    const extension = url.split('.').pop().split('?')[0].toLowerCase();
+    return {
+        type: 'audio',
+        url: url,
+        embedHtml: `<div class="media-embed audio-embed">
+            <audio controls preload="metadata">
+                <source src="${url}" type="audio/${extension}">
+                Your browser does not support the audio tag. <a href="${url}" target="_blank" rel="noopener noreferrer">Download audio</a>
+            </audio>
+            <div class="media-source"><i class="fas fa-music"></i> <a href="${url}" target="_blank" rel="noopener noreferrer">Download Audio</a></div>
+        </div>`
+    };
+}
+
 async function sendMessageToDB(text, imageUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
     console.log('replyToId parameter:', replyToId);
@@ -905,5 +1225,155 @@ window.deleteMessage = function(messageId) {
 window.showFullImage = function(src) {
     ChatModule.showFullImage(src);
 };
+// Global functions for loading social media embeds
+
+window.loadVimeoVideo = function(container, videoId) {
+    const embedUrl = `https://player.vimeo.com/video/${videoId}?autoplay=1`;
+    container.innerHTML = `<iframe src="${embedUrl}" frameborder="0" allowfullscreen allow="autoplay" loading="lazy"></iframe>`;
+};
+
+window.loadInstagramPost = function(container, url) {
+    // For Instagram, we'll open in a new tab due to embedding restrictions
+    window.open(url, '_blank', 'noopener,noreferrer');
+    // Show a message
+    container.innerHTML = `<div class="embed-message">
+        <i class="fab fa-instagram"></i> 
+        <p>Instagram posts cannot be embedded directly. <a href="${url}" target="_blank" rel="noopener noreferrer">Click here</a> to open in a new tab.</p>
+    </div>`;
+};
+
+window.loadFacebookPost = function(container, url) {
+    // For Facebook, we'll open in a new tab due to embedding restrictions
+    window.open(url, '_blank', 'noopener,noreferrer');
+    // Show a message
+    container.innerHTML = `<div class="embed-message">
+        <i class="fab fa-facebook"></i> 
+        <p>Facebook posts cannot be embedded directly. <a href="${url}" target="_blank" rel="noopener noreferrer">Click here</a> to open in a new tab.</p>
+    </div>`;
+};
+
+window.loadTwitterPost = function(container, tweetId, url) {
+    // For Twitter, we'll open in a new tab due to embedding restrictions
+    window.open(url, '_blank', 'noopener,noreferrer');
+    // Show a message
+    container.innerHTML = `<div class="embed-message">
+        <i class="fab fa-twitter"></i> 
+        <p>Tweets cannot be embedded directly. <a href="${url}" target="_blank" rel="noopener noreferrer">Click here</a> to open in a new tab.</p>
+    </div>`;
+};
+
+window.loadTikTokVideo = function(container, videoId, url) {
+    // For TikTok, we'll open in a new tab due to embedding restrictions
+    window.open(url, '_blank', 'noopener,noreferrer');
+    // Show a message
+    container.innerHTML = `<div class="embed-message">
+        <i class="fab fa-tiktok"></i> 
+        <p>TikTok videos cannot be embedded directly. <a href="${url}" target="_blank" rel="noopener noreferrer">Click here</a> to open in a new tab.</p>
+    </div>`;
+};
+
+
+// Facebook handler - always open in new tab (most reliable)
+window.handleFacebookPost = function(container, url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    container.innerHTML = `
+        <div class="embed-message facebook-message">
+            <i class="fab fa-facebook"></i>
+            <p>Opening Facebook in new tab...</p>
+            <p><small>If it doesn't open automatically, <a href="${url}" target="_blank" rel="noopener noreferrer">click here</a></small></p>
+        </div>
+    `;
+};
+
+// Instagram handler - always open in new tab (most reliable)
+window.handleInstagramPost = function(container, url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    container.innerHTML = `
+        <div class="embed-message instagram-message">
+            <i class="fab fa-instagram"></i>
+            <p>Opening Instagram in new tab...</p>
+            <p><small>If it doesn't open automatically, <a href="${url}" target="_blank" rel="noopener noreferrer">click here</a></small></p>
+        </div>
+    `;
+};
+
+// Vimeo handler with fallback
+window.handleVimeoVideo = function(container, videoId, url) {
+    const embedUrl = `https://player.vimeo.com/video/${videoId}`;
+    
+    const iframe = document.createElement('iframe');
+    iframe.src = embedUrl;
+    iframe.setAttribute('frameborder', '0');
+    iframe.setAttribute('allowfullscreen', 'true');
+    iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
+    iframe.setAttribute('loading', 'lazy');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.position = 'absolute';
+    iframe.style.top = '0';
+    iframe.style.left = '0';
+    
+    container.innerHTML = '';
+    container.style.padding = '0';
+    container.style.backgroundColor = '#000';
+    container.appendChild(iframe);
+    
+    iframe.onerror = function() {
+        container.innerHTML = `
+            <div class="embed-message vimeo-message">
+                <i class="fab fa-vimeo"></i>
+                <p>This video cannot be embedded.</p>
+                <p><a href="${url}" target="_blank" rel="noopener noreferrer">Click here to watch on Vimeo</a></p>
+            </div>
+        `;
+    };
+};
+
+// Update Vimeo embed function
+function createVimeoEmbed(videoId, url, fullText) {
+    return {
+        type: 'vimeo',
+        url: url,
+        embedHtml: `<div class="media-embed vimeo-embed">
+            <div class="vimeo-placeholder" onclick="handleVimeoVideo(this, '${videoId}', '${url}')">
+                <div class="vimeo-thumbnail-placeholder">
+                    <i class="fab fa-vimeo"></i>
+                    <span>Click to load Vimeo video</span>
+                </div>
+            </div>
+            <div class="media-source">
+                <i class="fab fa-vimeo"></i> 
+                <a href="${url}" target="_blank" rel="noopener noreferrer">Watch on Vimeo</a>
+            </div>
+        </div>`
+    };
+}
+
+// Update the load functions in the global section
+window.loadYouTubeVideo = window.handleYouTubeVideo;
+window.loadVimeoVideo = window.handleVimeoVideo;
+window.loadInstagramPost = window.handleInstagramPost;
+window.loadFacebookPost = window.handleFacebookPost;
+window.loadTwitterPost = function(container, tweetId, url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    container.innerHTML = `
+        <div class="embed-message twitter-message">
+            <i class="fab fa-twitter"></i>
+            <p>Opening tweet in new tab...</p>
+            <p><small>If it doesn't open automatically, <a href="${url}" target="_blank" rel="noopener noreferrer">click here</a></small></p>
+        </div>
+    `;
+};
+window.loadTikTokVideo = function(container, videoId, url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    container.innerHTML = `
+        <div class="embed-message tiktok-message">
+            <i class="fab fa-tiktok"></i>
+            <p>Opening TikTok in new tab...</p>
+            <p><small>If it doesn't open automatically, <a href="${url}" target="_blank" rel="noopener noreferrer">click here</a></small></p>
+        </div>
+    `;
+};
+
 
 console.log('Chat.js loaded and functions exposed globally');
