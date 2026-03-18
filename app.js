@@ -713,7 +713,6 @@ function switchAdminTab(tabName) {
 // ============================================
 // CLEAR CHAT
 // ============================================
-
 async function clearChat() {
     if (!appState.isConnected || !appState.currentSessionId) {
         alert("You must be connected to clear chat.");
@@ -769,8 +768,17 @@ async function clearChat() {
             };
             localStorage.setItem('clearedChats', JSON.stringify(clearedSessions));
             
-            // Notify host that guest cleared their chat
-            await saveHostNotification(`[${appState.userName}] cleared their local chat`);
+            // FIX: Send system message to host via messages table instead of visitor_notes
+            await supabaseClient
+                .from('messages')
+                .insert([{
+                    session_id: appState.currentSessionId,
+                    sender_id: 'system',
+                    sender_name: 'System',
+                    message: `🔔 [${appState.userName}] cleared chat`,
+                    created_at: new Date().toISOString(),
+                    is_notification: true  // Optional flag if you want to handle notifications differently
+                }]);
         }
     } catch (error) {
         console.error("Error clearing chat:", error);
