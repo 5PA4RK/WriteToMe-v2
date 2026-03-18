@@ -332,7 +332,7 @@ async function reconnectToSession() {
                 appState.currentSessionId = session.session_id;
                 setupRealtimeSubscriptions();
                 setupPendingGuestsSubscription();
-                // loadChatHistory();
+                // REMOVE THIS LINE: loadChatHistory();
                 loadPendingGuests();
                 return true;
             }
@@ -350,7 +350,7 @@ async function reconnectToSession() {
             if (guestStatus.status === 'approved') {
                 appState.currentSessionId = session.session_id;
                 setupRealtimeSubscriptions();
-                loadChatHistory();
+                // REMOVE THIS LINE: loadChatHistory();
                 return true;
             } else if (guestStatus.status === 'pending') {
                 appState.currentSessionId = session.session_id;
