@@ -665,19 +665,22 @@ function createMediaEmbed(text) {
     // Regular expressions for different media types
     const patterns = {
         // Image URLs (common image extensions)
-        image: /(https?:\/\/[^\s]+?\.(?:jpg|jpeg|png|gif|webp|bmp|svg|avif)(?:\?[^\s]*)?)/gi,
+        image: /(https?:\/\/[^\s]+?\.(?:jpg|jpeg|png|gif|webp|bmp|svg|avif|ico|tiff)(?:\?[^\s]*)?)/gi,
         
         // YouTube URLs (multiple formats)
-        youtube: /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/gi,
+        youtube: /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/gi,
         
         // Vimeo URLs
         vimeo: /(?:https?:\/\/)?(?:www\.)?(?:vimeo\.com\/|player\.vimeo\.com\/video\/)(\d+)/gi,
         
+        // Dailymotion
+        dailymotion: /(?:https?:\/\/)?(?:www\.)?(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)/gi,
+        
         // Facebook URLs
-        facebook: /(?:https?:\/\/)?(?:www\.)?facebook\.com\/(?:\d+|[^\/]+\/posts\/\d+|[^\/]+\/videos\/\d+|[^\/]+\/photos\/[^\/]+)/gi,
+        facebook: /(?:https?:\/\/)?(?:www\.)?facebook\.com\/(?:\d+|[^\/]+\/(?:posts|videos|photos|reel)\/\d+|[^\/]+\/videos\/\d+)/gi,
         
         // Instagram URLs
-        instagram: /(?:https?:\/\/)?(?:www\.)?instagram\.com\/p\/([a-zA-Z0-9_-]+)/gi,
+        instagram: /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:p|reel|tv)\/([a-zA-Z0-9_-]+)/gi,
         
         // Twitter/X URLs
         twitter: /(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/gi,
@@ -685,79 +688,179 @@ function createMediaEmbed(text) {
         // TikTok URLs
         tiktok: /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[\w.]+\/video\/(\d+)/gi,
         
+        // Pinterest URLs
+        pinterest: /(?:https?:\/\/)?(?:www\.)?(?:pinterest\.com\/pin\/|pin\.it\/)([a-zA-Z0-9_-]+)/gi,
+        
+        // Twitch URLs
+        twitch: /(?:https?:\/\/)?(?:www\.)?twitch\.tv\/(?:videos\/)?(\d+|[a-zA-Z0-9_]+)/gi,
+        
         // Direct video URLs (common video extensions)
-        video: /(https?:\/\/[^\s]+?\.(?:mp4|webm|ogg|mov|avi|mkv|m4v)(?:\?[^\s]*)?)/gi,
+        video: /(https?:\/\/[^\s]+?\.(?:mp4|webm|ogg|mov|avi|mkv|m4v|3gp|flv|wmv)(?:\?[^\s]*)?)/gi,
         
         // Audio URLs
-        audio: /(https?:\/\/[^\s]+?\.(?:mp3|wav|ogg|m4a|aac|flac)(?:\?[^\s]*)?)/gi,
+        audio: /(https?:\/\/[^\s]+?\.(?:mp3|wav|ogg|m4a|aac|flac|wma|opus)(?:\?[^\s]*)?)/gi,
         
-        // Generic URL (for fallback)
+        // PDF URLs
+        pdf: /(https?:\/\/[^\s]+?\.(?:pdf)(?:\?[^\s]*)?)/gi,
+        
+        // Generic URL (for other sites - will show as link)
         url: /(https?:\/\/[^\s]+)/gi
     };
     
-    // Check for images first
-    let match = patterns.image.exec(text);
-    if (match) {
-        return createImageEmbed(match[0], text);
-    }
-    
-    // Check for YouTube
-    patterns.youtube.lastIndex = 0;
-    match = patterns.youtube.exec(text);
-    if (match) {
-        return createYouTubeEmbed(match[1], match[0], text);
-    }
-    
-    // Check for Vimeo
-    patterns.vimeo.lastIndex = 0;
-    match = patterns.vimeo.exec(text);
-    if (match) {
-        return createVimeoEmbed(match[1], match[0], text);
-    }
-    
-    // Check for Instagram
-    patterns.instagram.lastIndex = 0;
-    match = patterns.instagram.exec(text);
-    if (match) {
-        return createInstagramEmbed(match[1], match[0], text);
-    }
-    
-    // Check for Facebook
-    patterns.facebook.lastIndex = 0;
-    match = patterns.facebook.exec(text);
-    if (match) {
-        return createFacebookEmbed(match[0], text);
-    }
-    
-    // Check for Twitter/X
-    patterns.twitter.lastIndex = 0;
-    match = patterns.twitter.exec(text);
-    if (match) {
-        return createTwitterEmbed(match[1], match[0], text);
-    }
-    
-    // Check for TikTok
-    patterns.tiktok.lastIndex = 0;
-    match = patterns.tiktok.exec(text);
-    if (match) {
-        return createTikTokEmbed(match[1], match[0], text);
-    }
-    
-    // Check for direct video files
-    patterns.video.lastIndex = 0;
-    match = patterns.video.exec(text);
-    if (match) {
-        return createVideoEmbed(match[0], text);
-    }
-    
-    // Check for audio files
-    patterns.audio.lastIndex = 0;
-    match = patterns.audio.exec(text);
-    if (match) {
-        return createAudioEmbed(match[0], text);
+    // Check each pattern in order (most specific first)
+    for (let [type, pattern] of Object.entries(patterns)) {
+        pattern.lastIndex = 0;
+        const match = pattern.exec(text);
+        if (match) {
+            const url = match[0];
+            const id = match[1] || '';
+            
+            switch(type) {
+                case 'image':
+                    return createImageEmbed(url);
+                case 'youtube':
+                    return createYouTubeEmbed(id, url);
+                case 'vimeo':
+                    return createVimeoEmbed(id, url);
+                case 'dailymotion':
+                    return createDailymotionEmbed(id, url);
+                case 'facebook':
+                    return createFacebookEmbed(url);
+                case 'instagram':
+                    return createInstagramEmbed(id, url);
+                case 'twitter':
+                    return createTwitterEmbed(id, url);
+                case 'tiktok':
+                    return createTikTokEmbed(id, url);
+                case 'pinterest':
+                    return createPinterestEmbed(id, url);
+                case 'twitch':
+                    return createTwitchEmbed(id, url);
+                case 'video':
+                    return createVideoEmbed(url);
+                case 'audio':
+                    return createAudioEmbed(url);
+                case 'pdf':
+                    return createPDFEmbed(url);
+                default:
+                    // For other URLs, just return a clickable link
+                    return createLinkEmbed(url);
+            }
+        }
     }
     
     return null;
+}
+
+// Create Pinterest embed
+function createPinterestEmbed(pinId, url) {
+    return {
+        type: 'pinterest',
+        url: url,
+        embedHtml: `<div class="media-embed pinterest-embed">
+            <div class="pinterest-placeholder" onclick="window.open('${url}', '_blank', 'noopener,noreferrer')">
+                <i class="fab fa-pinterest"></i>
+                <span>Pinterest Pin</span>
+                <small>Click to open in new tab</small>
+            </div>
+            <div class="media-source">
+                <i class="fab fa-pinterest"></i> 
+                <a href="${url}" target="_blank" rel="noopener noreferrer">View on Pinterest</a>
+            </div>
+        </div>`
+    };
+}
+
+// Create Dailymotion embed
+function createDailymotionEmbed(videoId, url) {
+    return {
+        type: 'dailymotion',
+        url: url,
+        embedHtml: `<div class="media-embed dailymotion-embed">
+            <div class="dailymotion-placeholder" onclick="window.open('${url}', '_blank', 'noopener,noreferrer')">
+                <i class="fab fa-dailymotion"></i>
+                <span>Dailymotion Video</span>
+                <small>Click to open in new tab</small>
+            </div>
+            <div class="media-source">
+                <i class="fab fa-dailymotion"></i> 
+                <a href="${url}" target="_blank" rel="noopener noreferrer">Watch on Dailymotion</a>
+            </div>
+        </div>`
+    };
+}
+
+// Create Twitch embed
+function createTwitchEmbed(channelId, url) {
+    return {
+        type: 'twitch',
+        url: url,
+        embedHtml: `<div class="media-embed twitch-embed">
+            <div class="twitch-placeholder" onclick="window.open('${url}', '_blank', 'noopener,noreferrer')">
+                <i class="fab fa-twitch"></i>
+                <span>Twitch Stream</span>
+                <small>Click to open in new tab</small>
+            </div>
+            <div class="media-source">
+                <i class="fab fa-twitch"></i> 
+                <a href="${url}" target="_blank" rel="noopener noreferrer">Watch on Twitch</a>
+            </div>
+        </div>`
+    };
+}
+
+// Create PDF embed
+function createPDFEmbed(url) {
+    return {
+        type: 'pdf',
+        url: url,
+        embedHtml: `<div class="media-embed pdf-embed">
+            <div class="pdf-placeholder" onclick="window.open('${url}', '_blank', 'noopener,noreferrer')">
+                <i class="fas fa-file-pdf"></i>
+                <span>PDF Document</span>
+                <small>Click to open in new tab</small>
+            </div>
+            <div class="media-source">
+                <i class="fas fa-file-pdf"></i> 
+                <a href="${url}" target="_blank" rel="noopener noreferrer">View PDF</a>
+            </div>
+        </div>`
+    };
+}
+
+// Create generic link embed (for sites we don't specifically support)
+function createLinkEmbed(url) {
+    return {
+        type: 'link',
+        url: url,
+        embedHtml: `<div class="media-embed link-embed">
+            <div class="link-placeholder" onclick="window.open('${url}', '_blank', 'noopener,noreferrer')">
+                <i class="fas fa-link"></i>
+                <span>External Link</span>
+                <small>${url.substring(0, 50)}${url.length > 50 ? '...' : ''}</small>
+            </div>
+            <div class="media-source">
+                <i class="fas fa-external-link-alt"></i> 
+                <a href="${url}" target="_blank" rel="noopener noreferrer">Open Link</a>
+            </div>
+        </div>`
+    };
+}
+
+// Update video embed with better sizing
+function createVideoEmbed(url) {
+    const extension = url.split('.').pop().split('?')[0].toLowerCase();
+    return {
+        type: 'video',
+        url: url,
+        embedHtml: `<div class="media-embed video-embed">
+            <video controls preload="metadata" playsinline>
+                <source src="${url}" type="video/${extension}">
+                Your browser does not support the video tag. <a href="${url}" target="_blank" rel="noopener noreferrer">Download video</a>
+            </video>
+            <div class="media-source"><i class="fas fa-video"></i> <a href="${url}" target="_blank" rel="noopener noreferrer">Download Video</a></div>
+        </div>`
+    };
 }
 
 // Helper functions for different embed types
