@@ -1526,48 +1526,18 @@ body.modal-open {
         font-size: 1.2rem;
     }
 }
-/* Toast notification for host */
-.toast-notification {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: var(--gradient-primary);
-    color: white;
-    padding: 12px 20px;
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-xl);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    z-index: 10000;
-    transform: translateX(400px);
-    transition: transform 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+/* Add to style.css - Local system messages (guest-only) */
+.message.local-system {
+    opacity: 0.8;
+    background: linear-gradient(135deg, #808080, #666666);
+    border-left: 3px solid #ffcc00;
 }
 
-.toast-notification.show {
-    transform: translateX(0);
+.message.local-system .message-sender::before {
+    background-color: #ffcc00;
 }
 
-.toast-notification i {
-    font-size: 1.2rem;
-}
-
-/* Dark mode adjustments */
-.dark-mode .toast-notification {
-    border-color: rgba(255, 255, 255, 0.1);
-}
-
-/* Mobile adjustments */
-@media (max-width: 768px) {
-    .toast-notification {
-        bottom: 10px;
-        right: 10px;
-        left: 10px;
-        transform: translateY(100px);
-    }
-    
-    .toast-notification.show {
-        transform: translateY(0);
-    }
+/* Ensure system messages are visible in both themes */
+.dark-mode .message.local-system {
+    background: linear-gradient(135deg, #4a4a4a, #3a3a3a);
 }
