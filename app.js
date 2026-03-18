@@ -742,11 +742,8 @@ async function clearChat() {
             chatMessages.innerHTML = '';
             appState.messages = [];
             
-            // Add system message for host
-            addSystemMessage(`[${appState.userName}] deleted chat messages`);
-            
-            // Also save system message to DB so guests see it
-            await saveMessageToDB('System', `[${appState.userName}] deleted chat messages`);
+            // Add system message visible to everyone
+            await saveMessageToDB('System', `[${appState.userName}] deleted all chat messages`);
             
         } else {
             // GUEST: Only hide messages locally for this guest
@@ -754,29 +751,61 @@ async function clearChat() {
             
             if (messageCount === 0) return;
             
-            // Get all messages and check if they're not system messages we want to keep
+            // Get all messages and remove them
             const messages = document.querySelectorAll('.message');
-            
-            // Hide all messages except system messages that might be important
-            messages.forEach(msg => {
-                const isSystem = msg.querySelector('.message-sender')?.textContent === 'System';
-                const isSystemMessage = msg.querySelector('.message-text')?.textContent.includes('deleted chat messages');
-                
-                // Remove all regular messages
-                if (!isSystem && !isSystemMessage) {
-                    msg.remove();
-                }
-            });
+            messages.forEach(msg => msg.remove());
             
             // Add local system message for this guest only
             addSystemMessage(`Chat messages deleted`, true);
             
-            // Notify host that guest cleared their chat (optional)
-            await saveMessageToDB('System', `[${appState.userName}] cleared their local chat`, true);
+            // Send a HOST-ONLY notification (special message type)
+            await saveHostOnlyNotification(`[${appState.userName}] cleared their local chat`);
         }
     } catch (error) {
         console.error("Error clearing chat:", error);
         alert("Failed to clear chat: " + error.message);
+    }
+}
+
+// New function to save host-only notifications
+async function saveHostOnlyNotification(messageText) {
+    try {
+        // Store in a separate table or with a special flag for host-only messages
+        // Option 1: Use a separate table for host notifications
+        const { error } = await supabaseClient
+            .from('host_notifications')
+            .insert([{
+                session_id: appState.currentSessionId,
+                message: messageText,
+                created_at: new Date().toISOString(),
+                is_read: false
+            }]);
+        
+        if (error) {
+            console.error("Error saving host notification:", error);
+            
+            // Fallback: Save as regular message but with a special prefix that only host will see
+            // This works because the host sees all messages, but guests won't see it if we filter
+            if (appState.isHost) {
+                // If current user is host, show immediately
+                addSystemMessage(messageText);
+            } else {
+                // Save to messages table but we'll need to filter it on the client side
+                // This requires modifying the message display logic
+                await supabaseClient
+                    .from('messages')
+                    .insert([{
+                        session_id: appState.currentSessionId,
+                        sender_id: 'system',
+                        sender_name: 'System',
+                        message: `🔒 HOST ONLY: ${messageText}`,
+                        created_at: new Date().toISOString(),
+                        is_host_only: true  // Add this column to your messages table
+                    }]);
+            }
+        }
+    } catch (error) {
+        console.error("Error in saveHostOnlyNotification:", error);
     }
 }
 
@@ -1828,7 +1857,6 @@ function setupRealtimeSubscriptions() {
     console.log("📡 Setting up real-time subscriptions for session:", appState.currentSessionId);
     
     if (appState.realtimeSubscription) {
-        console.log("Removing old subscription");
         supabaseClient.removeChannel(appState.realtimeSubscription);
         appState.realtimeSubscription = null;
     }
@@ -1839,45 +1867,50 @@ function setupRealtimeSubscriptions() {
     }
     
     appState.realtimeSubscription = supabaseClient
-    .channel('messages_' + appState.currentSessionId)
-    .on(
-        'postgres_changes',
-        {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'messages'
-        },
-        (payload) => {
-            console.log('📦 Realtime message received:', payload.new?.sender_name);
-            
-            if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                    // Get reactions for this message
-                    getMessageReactions(payload.new.id).then(reactions => {
-                        displayMessage({
-                            id: payload.new.id,
-                            sender: payload.new.sender_name,
-                            text: payload.new.message,
-                            image: payload.new.image_url,
-                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                            type: 'received',
-                            is_historical: false,
-                            reactions: reactions,
-                            reply_to: payload.new.reply_to
-                        });
-                    });
+        .channel('messages_' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages'
+            },
+            (payload) => {
+                console.log('📦 Realtime message received:', payload.new?.sender_name);
+                
+                if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                    // Check if this is a host-only message and current user is not host
+                    if (payload.new.is_host_only && !appState.isHost) {
+                        console.log('⛔ Skipping host-only message for guest');
+                        return; // Don't show host-only messages to guests
+                    }
                     
-// Play notification sound for new messages
-// PLAY SOUND HERE - for messages from others
-if (appState.soundEnabled && !payload.new.is_notification) {
-    if (window.playNotificationSound) {
-        window.playNotificationSound();
-    }
-}
+                    if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                        // Get reactions for this message
+                        getMessageReactions(payload.new.id).then(reactions => {
+                            displayMessage({
+                                id: payload.new.id,
+                                sender: payload.new.sender_name,
+                                text: payload.new.message,
+                                image: payload.new.image_url,
+                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                                type: 'received',
+                                is_historical: false,
+                                reactions: reactions,
+                                reply_to: payload.new.reply_to
+                            });
+                        });
+                        
+                        // Play notification sound for new messages
+                        if (appState.soundEnabled && !payload.new.is_notification) {
+                            if (window.playNotificationSound) {
+                                window.playNotificationSound();
+                            }
+                        }
+                    }
                 }
             }
-        }
-    )
+        )
     .on(
         'postgres_changes',
         {
@@ -2168,9 +2201,6 @@ function displayMessage(message) {
 // ============================================
 // LOAD CHAT HISTORY
 // ============================================
-// ============================================
-// LOAD CHAT HISTORY
-// ============================================
 async function loadChatHistory(sessionId = null) {
     const targetSessionId = sessionId || appState.currentSessionId;
     if (!targetSessionId) {
@@ -2181,12 +2211,18 @@ async function loadChatHistory(sessionId = null) {
     console.log('Loading chat history for session:', targetSessionId);
     
     try {
-        const { data: messages, error } = await supabaseClient
+        let query = supabaseClient
             .from('messages')
             .select('*')
             .eq('session_id', targetSessionId)
-            .eq('is_deleted', false)
-            .order('created_at', { ascending: true });
+            .eq('is_deleted', false);
+        
+        // If current user is not host, filter out host-only messages
+        if (!appState.isHost) {
+            query = query.eq('is_host_only', false);
+        }
+        
+        const { data: messages, error } = await query.order('created_at', { ascending: true });
         
         if (error) {
             console.error('Error loading messages:', error);
