@@ -1147,6 +1147,22 @@ async function createNewGuestRequest(session, userIP) {
             }
             
             console.log("✅ Guest request updated successfully");
+            
+            // IMPORTANT: Send a system message to notify the host
+            try {
+                await supabaseClient
+                    .from('messages')
+                    .insert([{
+                        session_id: session.session_id,
+                        sender_id: 'system',
+                        sender_name: 'System',
+                        message: `🔔 Guest ${appState.userName} is requesting to rejoin the room.`,
+                        created_at: new Date().toISOString()
+                    }]);
+            } catch (msgError) {
+                console.log("Could not send system message:", msgError);
+            }
+            
         } else {
             // Insert new request
             const { data: newGuest, error: insertError } = await supabaseClient
@@ -1175,24 +1191,25 @@ async function createNewGuestRequest(session, userIP) {
             }
             
             console.log("✅ Guest added to pending list successfully:", newGuest);
+            
+            // Send system message for new request
+            try {
+                await supabaseClient
+                    .from('messages')
+                    .insert([{
+                        session_id: session.session_id,
+                        sender_id: 'system',
+                        sender_name: 'System',
+                        message: `🔔 New guest request from ${appState.userName}${appState.guestNote ? ': ' + appState.guestNote : ''}`,
+                        created_at: new Date().toISOString()
+                    }]);
+            } catch (msgError) {
+                console.log("Could not send system message:", msgError);
+            }
         }
         
         if (appState.guestNote && appState.guestNote.trim() !== '') {
             await saveVisitorNote(session.session_id, appState.guestNote, userIP);
-        }
-        
-        try {
-            await supabaseClient
-                .from('messages')
-                .insert([{
-                    session_id: session.session_id,
-                    sender_id: 'system',
-                    sender_name: 'System',
-                    message: `🔔 New guest request from ${appState.userName}${appState.guestNote ? ': ' + appState.guestNote : ''}`,
-                    created_at: new Date().toISOString()
-                }]);
-        } catch (msgError) {
-            console.log("Could not send system message:", msgError);
         }
         
         appState.sessionId = session.session_id;
@@ -1200,6 +1217,12 @@ async function createNewGuestRequest(session, userIP) {
         resetConnectButton();
         updateUIForPendingGuest();
         setupPendingApprovalSubscription(session.session_id);
+        
+        // Force the host to refresh their pending list
+        if (appState.isHost) {
+            loadPendingGuests();
+        }
+        
     } catch (error) {
         console.error("Error in createNewGuestRequest:", error);
         alert("An error occurred: " + error.message);
@@ -1261,7 +1284,6 @@ function saveSessionToStorage() {
 // ============================================
 // PENDING GUESTS SYSTEM
 // ============================================
-
 function setupPendingGuestsSubscription() {
     console.log("🔄 Setting up pending guests subscription...");
     
@@ -1291,23 +1313,7 @@ function setupPendingGuestsSubscription() {
                 console.log('🎯 NEW PENDING GUEST DETECTED:', payload.new);
                 
                 if (payload.new && payload.new.status === 'pending') {
-                    const exists = appState.pendingGuests.some(g => g.id === payload.new.id);
-                    if (!exists) {
-                        appState.pendingGuests.push(payload.new);
-                    }
-                    
-                    updatePendingButtonUI();
-                    showGuestNotification(payload.new);
-                    
-                    if (appState.soundEnabled && window.playNotificationSound) {
-                        window.playNotificationSound();
-                    }
-                    
-                    addSystemMessage(`🔔 New guest request from ${payload.new.guest_name}${payload.new.guest_note ? ': ' + payload.new.guest_note : ''}`);
-                    
-                    if (pendingGuestsModal.style.display === 'flex') {
-                        showPendingGuests();
-                    }
+                    handleNewPendingGuest(payload.new);
                 }
             }
         )
@@ -1321,7 +1327,33 @@ function setupPendingGuestsSubscription() {
             },
             (payload) => {
                 console.log('🔄 PENDING GUEST UPDATED:', payload.new);
-                loadPendingGuests();
+                
+                // If a guest's status changes to pending, treat it as a new pending request
+                if (payload.new && payload.new.status === 'pending') {
+                    // Check if this guest was previously in a different state
+                    const wasPending = appState.pendingGuests.some(g => g.id === payload.new.id);
+                    if (!wasPending) {
+                        console.log('Guest changed to pending status, adding to list');
+                        handleNewPendingGuest(payload.new);
+                    } else {
+                        // Just update the existing record
+                        const index = appState.pendingGuests.findIndex(g => g.id === payload.new.id);
+                        if (index !== -1) {
+                            appState.pendingGuests[index] = payload.new;
+                        }
+                        updatePendingButtonUI();
+                        if (pendingGuestsModal.style.display === 'flex') {
+                            renderPendingGuestsList();
+                        }
+                    }
+                } else if (payload.new && payload.new.status !== 'pending') {
+                    // Remove from pending list if status changed to something else
+                    appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== payload.new.id);
+                    updatePendingButtonUI();
+                    if (pendingGuestsModal.style.display === 'flex') {
+                        renderPendingGuestsList();
+                    }
+                }
             }
         )
         .subscribe((status, err) => {
@@ -1334,6 +1366,27 @@ function setupPendingGuestsSubscription() {
                 console.error('❌ Subscription error:', err);
             }
         });
+}
+
+// Helper function to handle new pending guests
+function handleNewPendingGuest(guest) {
+    const exists = appState.pendingGuests.some(g => g.id === guest.id);
+    if (!exists) {
+        appState.pendingGuests.push(guest);
+    }
+    
+    updatePendingButtonUI();
+    showGuestNotification(guest);
+    
+    if (appState.soundEnabled && window.playNotificationSound) {
+        window.playNotificationSound();
+    }
+    
+    addSystemMessage(`🔔 New guest request from ${guest.guest_name}${guest.guest_note ? ': ' + guest.guest_note : ''}`);
+    
+    if (pendingGuestsModal.style.display === 'flex') {
+        showPendingGuests();
+    }
 }
 
 async function loadPendingGuests() {
