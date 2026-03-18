@@ -3006,35 +3006,6 @@ async function deleteSession(sessionId) {
             }
         }
 
-        // IMPORTANT: Delete in the correct order to avoid foreign key violations
-        
-        // 1. First delete message_reactions (they reference messages)
-        try {
-            await supabaseClient
-                .from('message_reactions')
-                .delete()
-                .in('message_id', supabaseClient
-                    .from('messages')
-                    .select('id')
-                    .eq('session_id', sessionId)
-                );
-            console.log("✅ Message reactions deleted");
-        } catch (e) {
-            console.log("Message reactions deletion error:", e.message);
-        }
-
-        // 2. Delete cleared_messages (they reference messages)
-        try {
-            await supabaseClient
-                .from('cleared_messages')
-                .delete()
-                .eq('session_id', sessionId);
-            console.log("✅ Cleared messages deleted");
-        } catch (e) {
-            console.log("Cleared messages deletion error:", e.message);
-        }
-
-        // 3. Delete visitor notes
         try {
             await supabaseClient
                 .from('visitor_notes')
@@ -3045,60 +3016,45 @@ async function deleteSession(sessionId) {
             console.log("Visitor notes deletion skipped:", e.message);
         }
 
-        // 4. Delete messages
-        try {
-            const { error: messagesError } = await supabaseClient
-                .from('messages')
-                .delete()
-                .eq('session_id', sessionId);
-            
-            if (messagesError) throw messagesError;
-            console.log("✅ Messages deleted");
-        } catch (e) {
-            console.log("Messages deletion error:", e.message);
-        }
+        const { error: messagesError } = await supabaseClient
+            .from('messages')
+            .delete()
+            .eq('session_id', sessionId);
+        
+        if (messagesError) throw messagesError;
+        console.log("✅ Messages deleted");
 
-        // 5. Delete session guests
-        try {
-            const { error: guestsError } = await supabaseClient
-                .from('session_guests')
-                .delete()
-                .eq('session_id', sessionId);
-            
-            if (guestsError) throw guestsError;
-            console.log("✅ Session guests deleted");
-        } catch (e) {
-            console.log("Session guests deletion error:", e.message);
-        }
+        const { error: guestsError } = await supabaseClient
+            .from('session_guests')
+            .delete()
+            .eq('session_id', sessionId);
+        
+        if (guestsError) throw guestsError;
+        console.log("✅ Session guests deleted");
 
-        // 6. Finally delete the session
-        try {
-            const { error: sessionError } = await supabaseClient
-                .from('sessions')
-                .delete()
-                .eq('session_id', sessionId);
+        const { error: sessionError } = await supabaseClient
+            .from('sessions')
+            .delete()
+            .eq('session_id', sessionId);
+        
+        if (sessionError) {
+            console.error("Session deletion error:", sessionError);
             
-            if (sessionError) {
-                console.error("Session deletion error:", sessionError);
+            if (sessionError.message.includes('permission denied') || 
+                sessionError.message.includes('violates row-level security')) {
                 
-                if (sessionError.message.includes('permission denied') || 
-                    sessionError.message.includes('violates row-level security')) {
-                    
-                    console.log("🔄 RLS blocking, trying admin bypass...");
-                    
-                    const { error: adminError } = await supabaseClient
-                        .from('sessions')
-                        .delete()
-                        .eq('session_id', sessionId)
-                        .select();
-                    
-                    if (adminError) throw adminError;
-                } else {
-                    throw sessionError;
-                }
+                console.log("🔄 RLS blocking, trying admin bypass...");
+                
+                const { error: adminError } = await supabaseClient
+                    .from('sessions')
+                    .delete()
+                    .eq('session_id', sessionId)
+                    .select();
+                
+                if (adminError) throw adminError;
+            } else {
+                throw sessionError;
             }
-        } catch (e) {
-            console.log("Session deletion error:", e.message);
         }
         
         console.log("✅ Session deleted successfully!");
