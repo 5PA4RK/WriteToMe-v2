@@ -1031,7 +1031,7 @@ header {
     font-size: 0.8rem;
     padding: 8px 12px;
     margin-bottom: 8px;
-    background-color: rgba(0, 0, 0, 0.3);
+    background-color: rgba(0, 0, 0, 0.15);
     border-left: 4px solid var(--primary);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
@@ -1046,7 +1046,7 @@ header {
 .message-reply-ref:hover { background-color: rgba(0, 0, 0, 0.4); }
 
 .message.sent .message-reply-ref {
-    background-color: rgba(255, 255, 255, 0.25);
+    background-color: rgba(255, 255, 255, 0.15);
     border-left-color: rgba(255, 255, 255, 0.8);
     color: var(--text-primary);
 }
@@ -1054,7 +1054,7 @@ header {
 .message.sent .message-reply-ref:hover { background-color: rgba(255, 255, 255, 0.35); }
 
 .dark-mode .message-reply-ref { 
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color:  rgba(255, 255, 255, 0.15);
     border-left-color: var(--primary-light);
     color: var(--text-primary);
 }
