@@ -2461,3 +2461,158 @@ body.modal-open {
         transform: translateZ(0);
     }
 }
+/* ========== COMPACT MOBILE HEADER ========== */
+@media (max-width: 768px) {
+    /* More compact header */
+    header {
+        padding: 2px 0;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+    
+    .header-content {
+        padding: 4px 0;
+        gap: 4px;
+    }
+    
+    /* Smaller logo */
+    .logo {
+        gap: 4px;
+    }
+    
+    .logo i {
+        font-size: 20px;
+    }
+    
+    .logo h1 {
+        font-size: 1rem;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    
+    /* More compact header controls */
+    .header-controls {
+        gap: 4px;
+        justify-content: center;
+    }
+    
+    /* Smaller status indicator */
+    .user-status {
+        padding: 2px 8px;
+        font-size: 0.75rem;
+        gap: 4px;
+    }
+    
+    .status-indicator {
+        width: 8px;
+        height: 8px;
+    }
+    
+    /* Smaller theme toggle */
+    .theme-toggle {
+        gap: 2px;
+        padding: 1px;
+    }
+    
+    .theme-toggle-btn {
+        padding: 3px 6px;
+        font-size: 0.7rem;
+    }
+    
+    .theme-toggle-btn i {
+        font-size: 0.7rem;
+        margin-right: 2px;
+    }
+    
+    /* Smaller sound control */
+    .sound-control {
+        padding: 3px 8px;
+        font-size: 0.75rem;
+        gap: 4px;
+    }
+    
+    .sound-control i {
+        font-size: 0.8rem;
+    }
+    
+    /* Compact buttons */
+    #logoutBtn,
+    #pendingGuestsBtn,
+    #notesBtn,
+    #clearChatBtn {
+        padding: 4px 8px;
+        font-size: 0.75rem;
+        min-height: 28px;
+        gap: 4px;
+    }
+    
+    #logoutBtn i,
+    #pendingGuestsBtn i,
+    #notesBtn i,
+    #clearChatBtn i {
+        font-size: 0.8rem;
+    }
+    
+    /* Hide text labels on very small screens, show only icons */
+    @media (max-width: 480px) {
+        #logoutBtn span:not(#pendingCount):not(#notesCount),
+        #pendingGuestsBtn span:not(#pendingCount),
+        #notesBtn span:not(#notesCount),
+        #clearChatBtn span {
+            display: none;
+        }
+        
+        #logoutBtn,
+        #pendingGuestsBtn,
+        #notesBtn,
+        #clearChatBtn {
+            padding: 4px;
+            min-width: 32px;
+            justify-content: center;
+        }
+        
+        #logoutBtn i,
+        #pendingGuestsBtn i,
+        #notesBtn i,
+        #clearChatBtn i {
+            margin: 0;
+            font-size: 1rem;
+        }
+        
+        /* Adjust badge positions */
+        #pendingCount,
+        #notesCount {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            font-size: 0.6rem;
+            min-width: 14px;
+            height: 14px;
+            line-height: 14px;
+        }
+        
+        /* Make theme toggle even more compact */
+        .theme-toggle-btn {
+            padding: 3px;
+        }
+        
+        .theme-toggle-btn span {
+            display: none;
+        }
+        
+        .theme-toggle-btn i {
+            margin: 0;
+            font-size: 0.9rem;
+        }
+        
+        /* User status compact */
+        .user-status span {
+            max-width: 70px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+}
