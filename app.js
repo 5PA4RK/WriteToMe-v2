@@ -4014,37 +4014,3 @@ if (messageInput) {
         this.style.height = (this.scrollHeight) + 'px';
     });
 }
-
-// ============================================
-// HEADER HIDE/SHOW ON SCROLL FOR MOBILE
-// ============================================
-let lastScrollTop = 0;
-const header = document.querySelector('header');
-const scrollThreshold = 10; // Minimum scroll amount to trigger hide/show
-
-window.addEventListener('scroll', () => {
-    // Only on mobile
-    if (window.innerWidth <= 768) {
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        
-        // Make sure they've scrolled more than the threshold
-        if (Math.abs(lastScrollTop - scrollTop) <= scrollThreshold) return;
-        
-        if (scrollTop > lastScrollTop && scrollTop > header.offsetHeight) {
-            // Scrolling down - hide header
-            header.classList.add('header-hidden');
-        } else {
-            // Scrolling up - show header
-            header.classList.remove('header-hidden');
-        }
-        
-        lastScrollTop = scrollTop;
-    }
-}, { passive: true });
-
-// Reset header visibility when reaching the top
-window.addEventListener('scroll', () => {
-    if (window.scrollY === 0) {
-        header.classList.remove('header-hidden');
-    }
-}, { passive: true });
