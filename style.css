@@ -60,6 +60,10 @@
     /* Chat section colors */
     --chat-bg: #ffffff;
     --chat-messages-bg: #faf6eb;
+    
+    /* Header height variables */
+    --header-height: 80px;
+    --header-height-mobile: 60px;
 }
 
 /* Dark Mode - Professional Dark Grays */
@@ -153,7 +157,7 @@ body {
     margin-right: 4px;
 }
 
-/* ========== HEADER ========== */
+/* ========== HEADER with Hide/Show on Scroll ========== */
 header {
     background-color: var(--bg-primary);
     border-bottom: 1px solid var(--border-light);
@@ -161,7 +165,14 @@ header {
     top: 0;
     z-index: 100;
     box-shadow: var(--shadow-sm);
-    transition: background-color var(--transition-base), border-color var(--transition-base);
+    transition: transform var(--transition-base), background-color var(--transition-base), border-color var(--transition-base);
+    height: auto;
+    min-height: var(--header-height);
+}
+
+/* Header hide/show on scroll */
+.header-hidden {
+    transform: translateY(-100%);
 }
 
 .header-content {
@@ -410,7 +421,7 @@ header {
     flex-direction: column;
     height: calc(100vh - 180px);
     box-shadow: var(--shadow-md);
-    transition: background-color var(--transition-base), border-color var(--transition-base);
+    transition: background-color var(--transition-base), border-color var(--transition-base), height var(--transition-base);
 }
 
 .section-header {
@@ -1619,6 +1630,11 @@ header {
 @media (max-width: 768px) {
     .container { padding: 6px; }
     
+    /* Header height for mobile */
+    header {
+        min-height: var(--header-height-mobile);
+    }
+    
     /* Compact header layout */
     .header-content {
         flex-direction: row !important;
@@ -1714,12 +1730,19 @@ header {
         font-size: 0.7rem !important;
     }
     
-    /* Chat section full width */
+    /* Chat section adjusts when header is hidden */
     .chat-section {
         height: calc(100vh - 130px);
         margin: 0;
         border-radius: 10px;
         width: 100%;
+        transition: height var(--transition-base);
+    }
+    
+    /* When header is hidden, chat takes more space */
+    .header-hidden + .container .chat-section,
+    body:has(.header-hidden) .chat-section {
+        height: calc(100vh - 70px);
     }
     
     .section-header { 
