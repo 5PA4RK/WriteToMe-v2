@@ -499,7 +499,7 @@ function openReplyModal(messageId, senderName, messageText) {
         }
     }, 300);
 }
-
+// Send reply - FIXED VERSION
 // Send reply - FIXED VERSION with better desktop handling
 async function sendReply() {
     console.log('🟢 sendReply called from chat.js at:', new Date().toISOString());
@@ -518,24 +518,6 @@ async function sendReply() {
     
     // Close modal first and disable the button to prevent double-clicks
     elements.replyModal.style.display = 'none';
-    document.body.classList.remove('modal-open');
-    
-    // AGGRESSIVE FIX FOR MOBILE: Reset viewport
-    if (window.innerWidth <= 768) {
-        // Remove all stuck positioning
-        document.body.style.position = '';
-        document.body.style.width = '';
-        document.body.style.height = '';
-        document.body.style.overflow = '';
-        
-        // Force a layout recalculation
-        document.body.style.display = 'none';
-        document.body.offsetHeight; // Force reflow
-        document.body.style.display = '';
-        
-        // Scroll to top then to input
-        window.scrollTo(0, 0);
-    }
     
     // Temporarily disable the send button to prevent double-clicks
     if (elements.sendReplyBtn) {
@@ -562,19 +544,6 @@ async function sendReply() {
             console.log('Calling window.sendMessage with temp replyTo:', window.__tempReplyTo);
             await window.sendMessage();
             console.log('window.sendMessage completed');
-            
-            // FIX FOR MOBILE: Scroll to message input after sending
-            if (window.innerWidth <= 768) {
-                setTimeout(() => {
-                    if (elements.messageInput) {
-                        elements.messageInput.scrollIntoView({ 
-                            behavior: 'smooth', 
-                            block: 'center' 
-                        });
-                        elements.messageInput.focus();
-                    }
-                }, 300);
-            }
         }
     } catch (error) {
         console.error('Error sending reply:', error);
