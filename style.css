@@ -11,14 +11,14 @@
     
     /* Light mode backgrounds - Clean and professional */
     --bg-primary: #ddf3fb;
-    --bg-secondary: #98b6d4;
+    --bg-secondary: #d4d4d4;
     --bg-tertiary: #e2e2e2;
     --bg-hover: #e2e8f0;
     --bg-accent: #dbeafe;
     
     /* Borders */
     --border-light: #e2e8f0;
-    --border-medium: #cbd5e1;
+    --border-medium: #2c89fb;
     
     /* Text colors - High contrast */
     --text-primary: #0f172a;
@@ -27,13 +27,13 @@
     --text-inverse: #302c2c;
     
     /* Shadows - Subtle */
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+    --shadow-sm: 0 2px 4px 0 rgb(0 0 0 / 0.2);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.3);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.3);
     
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, #ffcc00, #ff4800b1);
+    --gradient-primary: linear-gradient(135deg, #ffcc00, #f87e46);
     --gradient-success: linear-gradient(135deg, #10b981, #059669);
     --gradient-danger: linear-gradient(135deg, #ef4444, #dc2626);
     --gradient-warning: linear-gradient(135deg, #f59e0b, #d97706);
@@ -58,8 +58,10 @@
     --transition-slow: 0.35s ease;
     
     /* Chat section colors */
-    --chat-bg: #ddf3fb;
+    --chat-bg: #ffffff;
     --chat-messages-bg: #faf6eb;
+    --floral-pattern: url('../media/floral-pattern-background.png'); /* Path to your floral image */
+
 }
 
 /* Dark Mode - Professional Dark Grays */
@@ -465,17 +467,19 @@ header {
     background: var(--gradient-primary);
     color: var(--text-primary);
     border-bottom-right-radius: var(--radius-sm);
+    opacity: 0.88;
 }
 
 .message.received {
     align-self: flex-start;
-    background: linear-gradient(135deg, #4f98ff8b, #db9cffa0);
+    background: linear-gradient(135deg, #76acf8, #deaafc); /* Removed the alpha (8b and a0) */
     color: var(--text-primary);
     border-bottom-left-radius: var(--radius-sm);
+    opacity: 0.88;
 }
 
 .message.local-system {
-    opacity: 0.8;
+    opacity: 0.88; /* Already set to 1, but ensure it's not overridden */
     background: linear-gradient(135deg, #808080, #666666);
     border-left: 3px solid #ffcc00;
 }
@@ -492,7 +496,7 @@ header {
     font-size: 0.8rem;
     font-weight: 600;
     margin-bottom: var(--spacing-xs);
-    opacity: 0.9;
+    opacity: 1;
     display: flex;
     align-items: center;
     gap: var(--spacing-xs);
@@ -505,7 +509,7 @@ header {
     height: 6px;
     border-radius: 50%;
     background-color: currentColor;
-    opacity: 0.5;
+    opacity: 1;
 }
 
 .message.sent .message-sender::before { background-color: rgba(255, 255, 255, 0.8); }
@@ -2403,4 +2407,27 @@ body.modal-open {
         z-index: 100;
         padding-bottom: env(safe-area-inset-bottom, 10px);
     }
+}
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    background-color: var(--chat-messages-bg);
+    background-image: linear-gradient(rgba(250, 246, 235, 0.6), rgba(250, 246, 235, .9)), 
+                      url('../media/floral-pattern-background.png');
+    background-repeat: repeat;
+    background-size: 300px;
+    background-position: top left;
+    scroll-behavior: smooth;
+    transition: background-color var(--transition-base);
+}
+.dark-mode .chat-messages {
+    background-image: linear-gradient(rgba(38, 48, 83, 0.7), rgba(30, 37, 46, 0.95)), 
+                      url('../media/floral-pattern-background.png');
+    background-repeat: repeat;
+    background-size: 300px;
+    background-position: top left;
 }
