@@ -698,7 +698,7 @@ header {
 
 .typing-indicator.show { display: flex; }
 
-/* Chat input */
+/* Chat input - Thin but stretchable */
 .chat-input-area {
     padding: var(--spacing-md);
     background-color: var(--bg-primary);
@@ -706,6 +706,7 @@ header {
     display: flex;
     gap: var(--spacing-md);
     transition: background-color var(--transition-base);
+    align-items: flex-end;
 }
 
 .chat-input-wrapper {
@@ -715,8 +716,11 @@ header {
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-light);
     border-radius: var(--radius-md);
-    padding: var(--spacing-xs);
+    padding: 2px 2px 2px var(--spacing-sm);
     transition: all var(--transition-fast);
+    min-height: 40px;
+    max-height: 150px;
+    align-items: flex-end;
 }
 
 .chat-input-wrapper:focus-within {
@@ -728,15 +732,18 @@ header {
     flex: 1;
     border: none;
     background: transparent;
-    padding: var(--spacing-sm);
+    padding: 8px 4px;
     color: var(--text-primary);
     font-size: 0.95rem;
     resize: none;
-    max-height: 100px;
+    max-height: 140px;
+    min-height: 24px;
     font-family: inherit;
     unicode-bidi: plaintext;
     text-align: start;
     direction: auto;
+    line-height: 1.4;
+    overflow-y: auto;
 }
 
 .message-input:focus { outline: none; }
@@ -748,23 +755,34 @@ header {
 .input-actions {
     display: flex;
     align-items: center;
-    gap: var(--spacing-xs);
-    padding-right: var(--spacing-xs);
+    gap: 2px;
+    padding-right: 2px;
+    align-self: flex-end;
+    margin-bottom: 2px;
 }
 
 .file-input-label {
     cursor: pointer;
-    padding: var(--spacing-sm);
+    padding: 8px;
     border-radius: var(--radius-sm);
     color: var(--text-muted);
     transition: all var(--transition-fast);
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
 }
 
 .file-input-label:hover {
     background-color: var(--bg-tertiary);
     color: var(--primary);
     transform: scale(1.1);
+}
+
+.file-input-label i {
+    font-size: 1.2rem;
 }
 
 /* ========== ADMIN PANEL ========== */
@@ -1557,365 +1575,6 @@ header {
     color: rgba(255, 255, 255, 0.9);
 }
 
-/* Mobile optimizations for media embeds */
-@media (max-width: 768px) {
-    .embedded-image {
-        max-height: 300px;
-    }
-    
-    .video-embed video {
-        max-height: 350px;
-    }
-    
-    .instagram-placeholder,
-    .facebook-placeholder,
-    .twitter-placeholder,
-    .tiktok-placeholder,
-    .vimeo-placeholder,
-    .pinterest-placeholder,
-    .dailymotion-placeholder,
-    .twitch-placeholder,
-    .pdf-placeholder,
-    .link-placeholder {
-        padding: 30px 15px;
-        min-height: 150px;
-    }
-    
-    .instagram-placeholder i,
-    .facebook-placeholder i,
-    .twitter-placeholder i,
-    .tiktok-placeholder i,
-    .vimeo-placeholder i,
-    .pinterest-placeholder i,
-    .dailymotion-placeholder i,
-    .twitch-placeholder i,
-    .pdf-placeholder i,
-    .link-placeholder i {
-        font-size: 48px;
-    }
-    
-    .embed-message i {
-        font-size: 36px;
-    }
-    
-    .youtube-message i,
-    .vimeo-message i,
-    .facebook-message i,
-    .instagram-message i,
-    .twitter-message i,
-    .tiktok-message i,
-    .pinterest-message i {
-        font-size: 48px;
-    }
-    
-    .youtube-message,
-    .vimeo-message,
-    .facebook-message,
-    .instagram-message,
-    .twitter-message,
-    .tiktok-message,
-    .pinterest-message {
-        padding: 30px 15px;
-        min-height: 150px;
-    }
-}
-
-@media (max-width: 480px) {
-    .embedded-image {
-        max-height: 250px;
-    }
-    
-    .video-embed video {
-        max-height: 250px;
-    }
-    
-    .youtube-play-button {
-        width: 50px;
-        height: 35px;
-    }
-    
-    .youtube-play-button i {
-        font-size: 22px;
-    }
-    
-    .instagram-placeholder,
-    .facebook-placeholder,
-    .twitter-placeholder,
-    .tiktok-placeholder,
-    .vimeo-placeholder,
-    .pinterest-placeholder,
-    .dailymotion-placeholder,
-    .twitch-placeholder,
-    .pdf-placeholder,
-    .link-placeholder {
-        padding: 20px 10px;
-        min-height: 120px;
-    }
-    
-    .instagram-placeholder i,
-    .facebook-placeholder i,
-    .twitter-placeholder i,
-    .tiktok-placeholder i,
-    .vimeo-placeholder i,
-    .pinterest-placeholder i,
-    .dailymotion-placeholder i,
-    .twitch-placeholder i,
-    .pdf-placeholder i,
-    .link-placeholder i {
-        font-size: 36px;
-    }
-    
-    .youtube-privacy-notice {
-        font-size: 0.7rem;
-        padding: 4px;
-    }
-}
-
-/* Social media placeholders */
-.instagram-placeholder,
-.facebook-placeholder,
-.twitter-placeholder,
-.tiktok-placeholder,
-.vimeo-placeholder {
-    padding: 40px 20px;
-    background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
-    text-align: center;
-    cursor: pointer;
-    border-radius: var(--radius-sm);
-    transition: all 0.3s ease;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 150px;
-}
-
-.instagram-placeholder:hover,
-.facebook-placeholder:hover,
-.twitter-placeholder:hover,
-.tiktok-placeholder:hover,
-.vimeo-placeholder:hover {
-    background: var(--primary);
-    color: white;
-}
-
-.instagram-placeholder i,
-.facebook-placeholder i,
-.twitter-placeholder i,
-.tiktok-placeholder i,
-.vimeo-placeholder i {
-    font-size: 48px;
-    margin-bottom: 10px;
-    display: block;
-}
-
-.instagram-placeholder small,
-.facebook-placeholder small,
-.twitter-placeholder small,
-.tiktok-placeholder small,
-.vimeo-placeholder small {
-    display: block;
-    margin-top: 10px;
-    opacity: 0.7;
-    font-size: 0.7rem;
-}
-
-/* Vimeo specific */
-.vimeo-thumbnail-placeholder {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-
-.vimeo-thumbnail-placeholder i {
-    font-size: 64px;
-    color: #1ab7ea;
-    margin-bottom: 10px;
-}
-
-/* Platform-specific message styles */
-.youtube-message,
-.vimeo-message,
-.facebook-message,
-.instagram-message,
-.twitter-message,
-.tiktok-message {
-    padding: 40px 20px;
-    text-align: center;
-    background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
-    border-radius: var(--radius-sm);
-    min-height: 200px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-
-.youtube-message i,
-.vimeo-message i,
-.facebook-message i,
-.instagram-message i,
-.twitter-message i,
-.tiktok-message i {
-    font-size: 64px;
-    margin-bottom: 20px;
-}
-
-.youtube-message i { color: #ff0000; }
-.vimeo-message i { color: #1ab7ea; }
-.facebook-message i { color: #1877f2; }
-.instagram-message i { color: #e4405f; }
-.twitter-message i { color: #1da1f2; }
-.tiktok-message i { color: #000000; }
-
-.dark-mode .tiktok-message i { color: #ffffff; }
-
-.youtube-message p,
-.vimeo-message p,
-.facebook-message p,
-.instagram-message p,
-.twitter-message p,
-.tiktok-message p {
-    margin: 10px 0;
-    color: var(--text-secondary);
-}
-
-.youtube-message a,
-.vimeo-message a,
-.facebook-message a,
-.instagram-message a,
-.twitter-message a,
-.tiktok-message a {
-    color: var(--primary);
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.youtube-message a:hover,
-.vimeo-message a:hover,
-.facebook-message a:hover,
-.instagram-message a:hover,
-.twitter-message a:hover,
-.tiktok-message a:hover {
-    text-decoration: underline;
-}
-
-/* Embed message for platforms that can't be embedded */
-.embed-message {
-    padding: 30px 20px;
-    text-align: center;
-    background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
-    border-radius: var(--radius-sm);
-}
-
-.embed-message i {
-    font-size: 48px;
-    margin-bottom: 15px;
-    display: block;
-    color: var(--text-secondary);
-}
-
-.embed-message p {
-    margin: 0;
-    color: var(--text-secondary);
-}
-
-.embed-message a {
-    color: var(--primary);
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.embed-message a:hover {
-    text-decoration: underline;
-}
-
-/* Loading states */
-.embed-loading {
-    padding: 40px;
-    text-align: center;
-    color: var(--text-secondary);
-}
-
-.embed-loading i {
-    font-size: 24px;
-    margin-right: 10px;
-    animation: spin 1s linear infinite;
-}
-
-/* Embed error */
-.embed-error {
-    padding: 20px;
-    text-align: center;
-    background-color: var(--bg-tertiary);
-    border-radius: var(--radius-sm);
-    color: var(--danger);
-}
-
-.embed-error i {
-    margin-right: 8px;
-}
-
-.embed-error a {
-    color: var(--primary);
-    text-decoration: none;
-}
-
-.embed-error a:hover {
-    text-decoration: underline;
-}
-
-/* Dark mode adjustments for embeds */
-.dark-mode .media-embed {
-    background-color: var(--bg-tertiary);
-    border-color: var(--border-medium);
-}
-
-.dark-mode .media-source {
-    background-color: var(--bg-secondary);
-    border-top-color: var(--border-medium);
-}
-
-.dark-mode .embedded-image {
-    border: 1px solid var(--border-medium);
-}
-
-.dark-mode .youtube-placeholder {
-    background-color: #111;
-}
-
-.dark-mode .instagram-placeholder,
-.dark-mode .facebook-placeholder,
-.dark-mode .twitter-placeholder,
-.dark-mode .tiktok-placeholder,
-.dark-mode .vimeo-placeholder {
-    background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
-}
-
-.dark-mode .embed-message {
-    background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
-}
-
-/* Message specific adjustments for embeds */
-.message.sent .media-embed {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
-}
-
-.message.sent .media-source {
-    background-color: rgba(0, 0, 0, 0.2);
-    border-top-color: rgba(255, 255, 255, 0.1);
-}
-
-.message.sent .media-link-reference {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.message.sent .media-link-reference a {
-    color: rgba(255, 255, 255, 0.9);
-}
-
 /* ========== EMOJI PICKER ========== */
 .emoji-picker {
     position: fixed;
@@ -1960,21 +1619,100 @@ header {
 @media (max-width: 768px) {
     .container { padding: 6px; }
     
+    /* Compact header layout */
     .header-content {
-        flex-direction: column;
-        gap: 6px;
-        padding: 6px 0;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        padding: 6px 0 !important;
+        gap: 4px !important;
     }
     
+    /* Smaller logo */
+    .logo {
+        flex: 0 0 auto;
+        margin-right: auto;
+    }
+    
+    .logo h1 {
+        font-size: 1rem !important;
+        white-space: nowrap;
+    }
+    
+    .logo i {
+        font-size: 18px !important;
+    }
+    
+    /* Compact controls in one row */
     .header-controls {
-        width: 100%;
-        justify-content: center;
-        gap: 4px;
+        flex: 1 1 auto;
+        flex-direction: row !important;
         flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 4px !important;
+        margin: 0;
     }
     
-    .logo h1 { font-size: 1.1rem; }
-    .logo i { font-size: 22px; }
+    /* Smaller status indicator */
+    .user-status {
+        padding: 2px 8px !important;
+        font-size: 0.75rem !important;
+        gap: 4px !important;
+        min-height: 28px;
+    }
+    
+    .status-indicator {
+        width: 6px !important;
+        height: 6px !important;
+    }
+    
+    /* Compact theme toggle */
+    .theme-toggle {
+        gap: 2px !important;
+    }
+    
+    .theme-toggle-btn {
+        padding: 3px 6px !important;
+        font-size: 0.7rem !important;
+        min-height: 28px;
+    }
+    
+    .theme-toggle-btn i {
+        font-size: 0.7rem !important;
+        margin-right: 2px !important;
+    }
+    
+    /* Compact sound control */
+    .sound-control {
+        padding: 3px 8px !important;
+        font-size: 0.7rem !important;
+        min-height: 28px;
+        gap: 3px !important;
+    }
+    
+    .sound-control i {
+        font-size: 0.8rem !important;
+    }
+    
+    /* Compact buttons */
+    .header-controls .btn,
+    #logoutBtn,
+    #pendingGuestsBtn,
+    #notesBtn,
+    #clearChatBtn {
+        padding: 4px 8px !important;
+        font-size: 0.7rem !important;
+        min-height: 28px;
+        min-width: 28px;
+        gap: 3px !important;
+    }
+    
+    .header-controls .btn i,
+    #logoutBtn i,
+    #pendingGuestsBtn i,
+    #notesBtn i,
+    #clearChatBtn i {
+        font-size: 0.7rem !important;
+    }
     
     /* Chat section full width */
     .chat-section {
@@ -1990,7 +1728,6 @@ header {
     
     .chat-messages { 
         padding: 10px; 
-        /* Keep floral pattern on mobile */
         background-image: linear-gradient(rgba(250, 246, 235, 0.6), rgba(250, 246, 235, .9)), 
                           url('media/floral-pattern-background.png');
     }
@@ -2009,29 +1746,30 @@ header {
     .message-sender { font-size: 0.8rem; }
     .message-text { font-size: 0.95rem; }
     
-    /* Chat input */
+    /* Thin but stretchable chat input for mobile */
     .chat-input-area {
-        padding: 8px 8px;
+        padding: 6px 8px;
         gap: 6px;
         display: flex;
-        align-items: center;
+        align-items: flex-end;
     }
     
     .chat-input-wrapper {
         flex: 1;
-        min-height: 44px;
-        border-radius: 22px;
-        padding: 2px 2px 2px 12px;
+        min-height: 36px;
+        max-height: 120px;
+        border-radius: 18px;
+        padding: 0 0 0 10px;
         border-width: 2px;
         display: flex;
-        align-items: center;
+        align-items: flex-end;
     }
     
     .message-input {
         font-size: 15px;
-        padding: 10px 6px;
-        min-height: 44px;
-        max-height: 100px;
+        padding: 6px 4px;
+        min-height: 24px;
+        max-height: 110px;
         line-height: 1.4;
     }
     
@@ -2044,27 +1782,26 @@ header {
         padding-right: 2px;
         display: flex;
         align-items: center;
+        margin-bottom: 2px;
     }
     
     .file-input-label {
-        padding: 8px;
-        font-size: 1.2rem;
-        width: 38px;
-        height: 38px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background-color: var(--bg-tertiary);
-        border-radius: 50%;
+        padding: 6px;
+        width: 32px;
+        height: 32px;
+    }
+    
+    .file-input-label i {
+        font-size: 1rem;
     }
     
     #sendMessageBtn {
-        min-width: 44px;
-        width: 44px;
-        height: 44px;
+        min-width: 40px;
+        width: 40px;
+        height: 40px;
         padding: 0;
         font-size: 0;
-        border-radius: 22px;
+        border-radius: 20px;
         background: var(--gradient-primary);
         color: white;
         display: flex;
@@ -2075,8 +1812,98 @@ header {
     }
     
     #sendMessageBtn i {
-        font-size: 1.4rem;
+        font-size: 1.2rem;
         margin: 0;
+    }
+    
+    /* Hide text labels on very small screens, show only icons */
+    @media (max-width: 480px) {
+        .header-controls .btn span:not(#pendingCount):not(#notesCount),
+        .sound-control span,
+        .theme-toggle-btn span {
+            display: none;
+        }
+        
+        .header-controls .btn,
+        .sound-control,
+        .theme-toggle-btn {
+            padding: 4px !important;
+            justify-content: center;
+        }
+        
+        .header-controls .btn i,
+        .sound-control i,
+        .theme-toggle-btn i {
+            margin: 0 !important;
+            font-size: 1rem !important;
+        }
+        
+        /* Keep numbers visible */
+        #pendingCount,
+        #notesCount {
+            display: inline-block !important;
+        }
+        
+        /* Even more compact chat input */
+        .chat-input-wrapper {
+            min-height: 34px;
+        }
+        
+        .message-input {
+            font-size: 14px;
+            padding: 5px 4px;
+        }
+        
+        .file-input-label {
+            width: 30px;
+            height: 30px;
+            padding: 5px;
+        }
+        
+        #sendMessageBtn {
+            min-width: 38px;
+            width: 38px;
+            height: 38px;
+        }
+        
+        #sendMessageBtn i {
+            font-size: 1.1rem;
+        }
+    }
+    
+    /* Adjust for very small screens */
+    @media (max-width: 360px) {
+        .logo h1 {
+            font-size: 0.9rem !important;
+        }
+        
+        .user-status span:not(#userRoleDisplay) {
+            display: none;
+        }
+        
+        .header-controls {
+            gap: 2px !important;
+        }
+        
+        .chat-input-wrapper {
+            min-height: 32px;
+        }
+        
+        .message-input {
+            font-size: 13px;
+            padding: 4px 4px;
+        }
+        
+        .file-input-label {
+            width: 28px;
+            height: 28px;
+        }
+        
+        #sendMessageBtn {
+            min-width: 36px;
+            width: 36px;
+            height: 36px;
+        }
     }
     
     /* Emoji picker */
@@ -2102,27 +1929,6 @@ header {
         font-size: 0.85rem;
         margin: 2px 8px;
         border-radius: 12px;
-    }
-    
-    /* Header controls */
-    .user-status {
-        padding: 4px 10px;
-        font-size: 0.85rem;
-    }
-    
-    .theme-toggle-btn {
-        padding: 4px 8px;
-        font-size: 0.8rem;
-    }
-    
-    /* Buttons */
-    .btn-small,
-    #logoutBtn,
-    #pendingGuestsBtn,
-    #notesBtn {
-        padding: 8px 12px;
-        font-size: 0.9rem;
-        min-height: 40px;
     }
     
     /* Message actions */
@@ -2307,50 +2113,6 @@ header {
         min-height: 44px;
     }
     
-    .header-controls { 
-        flex-direction: column; 
-        align-items: stretch;
-    }
-    
-    .user-status { 
-        width: 100%; 
-        justify-content: center; 
-    }
-    
-    /* Even more compact chat input */
-    .chat-input-area { 
-        padding: 6px 6px; 
-        gap: 4px;
-    }
-    
-    .chat-input-wrapper {
-        min-height: 42px;
-        padding-left: 10px;
-    }
-    
-    .message-input { 
-        min-height: 42px;
-        font-size: 15px;
-        padding: 8px 4px;
-    }
-    
-    .file-input-label {
-        width: 36px;
-        height: 36px;
-        font-size: 1.1rem;
-        padding: 6px;
-    }
-    
-    #sendMessageBtn { 
-        min-width: 42px; 
-        width: 42px;
-        height: 42px; 
-    }
-    
-    #sendMessageBtn i { 
-        font-size: 1.3rem; 
-    }
-    
     /* Full screen modals on very small devices */
     .modal-content {
         max-width: 100%;
@@ -2434,6 +2196,7 @@ body.modal-open {
         padding-bottom: env(safe-area-inset-bottom, 10px);
     }
 }
+
 /* Emergency mobile viewport fix */
 @media (max-width: 768px) {
     /* Force viewport reset after modal closes */
@@ -2459,151 +2222,5 @@ body.modal-open {
     .chat-section {
         -webkit-transform: translateZ(0);
         transform: translateZ(0);
-    }
-}
-/* ========== COMPACT MOBILE HEADER ========== */
-@media (max-width: 768px) {
-    /* Compact header layout */
-    .header-content {
-        flex-direction: row !important;
-        flex-wrap: wrap !important;
-        padding: 6px 0 !important;
-        gap: 4px !important;
-    }
-    
-    /* Smaller logo */
-    .logo {
-        flex: 0 0 auto;
-        margin-right: auto;
-    }
-    
-    .logo h1 {
-        font-size: 1rem !important;
-        white-space: nowrap;
-    }
-    
-    .logo i {
-        font-size: 18px !important;
-    }
-    
-    /* Compact controls in one row */
-    .header-controls {
-        flex: 1 1 auto;
-        flex-direction: row !important;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: 4px !important;
-        margin: 0;
-    }
-    
-    /* Smaller status indicator */
-    .user-status {
-        padding: 2px 8px !important;
-        font-size: 0.75rem !important;
-        gap: 4px !important;
-        min-height: 28px;
-    }
-    
-    .status-indicator {
-        width: 6px !important;
-        height: 6px !important;
-    }
-    
-    /* Compact theme toggle */
-    .theme-toggle {
-        gap: 2px !important;
-    }
-    
-    .theme-toggle-btn {
-        padding: 3px 6px !important;
-        font-size: 0.7rem !important;
-        min-height: 28px;
-    }
-    
-    .theme-toggle-btn i {
-        font-size: 0.7rem !important;
-        margin-right: 2px !important;
-    }
-    
-    /* Compact sound control */
-    .sound-control {
-        padding: 3px 8px !important;
-        font-size: 0.7rem !important;
-        min-height: 28px;
-        gap: 3px !important;
-    }
-    
-    .sound-control i {
-        font-size: 0.8rem !important;
-    }
-    
-    /* Compact buttons */
-    .header-controls .btn,
-    #logoutBtn,
-    #pendingGuestsBtn,
-    #notesBtn,
-    #clearChatBtn {
-        padding: 4px 8px !important;
-        font-size: 0.7rem !important;
-        min-height: 28px;
-        min-width: 28px;
-        gap: 3px !important;
-    }
-    
-    .header-controls .btn i,
-    #logoutBtn i,
-    #pendingGuestsBtn i,
-    #notesBtn i,
-    #clearChatBtn i {
-        font-size: 0.7rem !important;
-    }
-    
-    /* Hide text labels on very small screens, show only icons */
-    @media (max-width: 480px) {
-        .header-controls .btn span:not(#pendingCount):not(#notesCount),
-        .sound-control span,
-        .theme-toggle-btn span {
-            display: none;
-        }
-        
-        .header-controls .btn,
-        .sound-control,
-        .theme-toggle-btn {
-            padding: 4px !important;
-            justify-content: center;
-        }
-        
-        .header-controls .btn i,
-        .sound-control i,
-        .theme-toggle-btn i {
-            margin: 0 !important;
-            font-size: 1rem !important;
-        }
-        
-        /* Keep numbers visible */
-        #pendingCount,
-        #notesCount {
-            display: inline-block !important;
-        }
-    }
-    
-    /* Ensure buttons don't wrap too much */
-    .header-controls {
-        max-width: 100%;
-    }
-    
-    /* Adjust for very small screens */
-    @media (max-width: 360px) {
-        .logo h1 {
-            font-size: 0.9rem !important;
-        }
-        
-        .user-status span:not(#userRoleDisplay) {
-            display: none;
-        }
-        
-        .header-controls {
-            gap: 2px !important;
-        }
     }
 }
