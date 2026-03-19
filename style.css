@@ -2101,7 +2101,7 @@ header {
         padding: 6px 12px;
         font-size: 0.85rem;
         margin: 2px 8px;
-        border-radius: 16px;
+        border-radius: 12px;
     }
     
     /* Header controls */
@@ -2434,35 +2434,30 @@ body.modal-open {
         padding-bottom: env(safe-area-inset-bottom, 10px);
     }
 }
-/* Fix for mobile viewport after modal closes */
+/* Emergency mobile viewport fix */
 @media (max-width: 768px) {
-    body.modal-open {
-        overflow: hidden;
-        position: fixed;
-        width: 100%;
-        height: 100%;
+    /* Force viewport reset after modal closes */
+    body:not(.modal-open):not(.keyboard-open) {
+        position: static !important;
+        width: auto !important;
+        height: auto !important;
+        overflow: auto !important;
+        -webkit-overflow-scrolling: touch !important;
     }
     
-    body:not(.modal-open) {
-        position: static;
-        width: auto;
-        height: auto;
-        overflow: auto;
-    }
-    
-    /* Ensure chat input is visible */
+    /* Ensure chat input is always reachable */
     .chat-input-area {
-        transition: transform 0.2s ease;
-        transform: translateY(0);
+        position: sticky;
+        bottom: 0;
+        z-index: 100;
+        background-color: var(--bg-primary);
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
     }
     
-    /* Force repaint after modal close */
-    body:not(.modal-open) .chat-section {
-        animation: repaint 0.1s;
-    }
-    
-    @keyframes repaint {
-        from { opacity: 0.99; }
-        to { opacity: 1; }
+    /* Force hardware acceleration */
+    .chat-section {
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
     }
 }
