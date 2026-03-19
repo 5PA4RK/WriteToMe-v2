@@ -2461,3 +2461,149 @@ body.modal-open {
         transform: translateZ(0);
     }
 }
+/* ========== COMPACT MOBILE HEADER ========== */
+@media (max-width: 768px) {
+    /* Compact header layout */
+    .header-content {
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        padding: 6px 0 !important;
+        gap: 4px !important;
+    }
+    
+    /* Smaller logo */
+    .logo {
+        flex: 0 0 auto;
+        margin-right: auto;
+    }
+    
+    .logo h1 {
+        font-size: 1rem !important;
+        white-space: nowrap;
+    }
+    
+    .logo i {
+        font-size: 18px !important;
+    }
+    
+    /* Compact controls in one row */
+    .header-controls {
+        flex: 1 1 auto;
+        flex-direction: row !important;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 4px !important;
+        margin: 0;
+    }
+    
+    /* Smaller status indicator */
+    .user-status {
+        padding: 2px 8px !important;
+        font-size: 0.75rem !important;
+        gap: 4px !important;
+        min-height: 28px;
+    }
+    
+    .status-indicator {
+        width: 6px !important;
+        height: 6px !important;
+    }
+    
+    /* Compact theme toggle */
+    .theme-toggle {
+        gap: 2px !important;
+    }
+    
+    .theme-toggle-btn {
+        padding: 3px 6px !important;
+        font-size: 0.7rem !important;
+        min-height: 28px;
+    }
+    
+    .theme-toggle-btn i {
+        font-size: 0.7rem !important;
+        margin-right: 2px !important;
+    }
+    
+    /* Compact sound control */
+    .sound-control {
+        padding: 3px 8px !important;
+        font-size: 0.7rem !important;
+        min-height: 28px;
+        gap: 3px !important;
+    }
+    
+    .sound-control i {
+        font-size: 0.8rem !important;
+    }
+    
+    /* Compact buttons */
+    .header-controls .btn,
+    #logoutBtn,
+    #pendingGuestsBtn,
+    #notesBtn,
+    #clearChatBtn {
+        padding: 4px 8px !important;
+        font-size: 0.7rem !important;
+        min-height: 28px;
+        min-width: 28px;
+        gap: 3px !important;
+    }
+    
+    .header-controls .btn i,
+    #logoutBtn i,
+    #pendingGuestsBtn i,
+    #notesBtn i,
+    #clearChatBtn i {
+        font-size: 0.7rem !important;
+    }
+    
+    /* Hide text labels on very small screens, show only icons */
+    @media (max-width: 480px) {
+        .header-controls .btn span:not(#pendingCount):not(#notesCount),
+        .sound-control span,
+        .theme-toggle-btn span {
+            display: none;
+        }
+        
+        .header-controls .btn,
+        .sound-control,
+        .theme-toggle-btn {
+            padding: 4px !important;
+            justify-content: center;
+        }
+        
+        .header-controls .btn i,
+        .sound-control i,
+        .theme-toggle-btn i {
+            margin: 0 !important;
+            font-size: 1rem !important;
+        }
+        
+        /* Keep numbers visible */
+        #pendingCount,
+        #notesCount {
+            display: inline-block !important;
+        }
+    }
+    
+    /* Ensure buttons don't wrap too much */
+    .header-controls {
+        max-width: 100%;
+    }
+    
+    /* Adjust for very small screens */
+    @media (max-width: 360px) {
+        .logo h1 {
+            font-size: 0.9rem !important;
+        }
+        
+        .user-status span:not(#userRoleDisplay) {
+            display: none;
+        }
+        
+        .header-controls {
+            gap: 2px !important;
+        }
+    }
+}
