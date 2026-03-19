@@ -60,8 +60,6 @@
     /* Chat section colors */
     --chat-bg: #ffffff;
     --chat-messages-bg: #faf6eb;
-    --floral-pattern: url('../media/floral-pattern-background.png'); /* Path to your floral image */
-
 }
 
 /* Dark Mode - Professional Dark Grays */
@@ -435,6 +433,7 @@ header {
 
 .section-header h2 i { color: var(--primary); }
 
+/* Consolidated chat-messages with floral pattern */
 .chat-messages {
     flex: 1;
     overflow-y: auto;
@@ -443,8 +442,18 @@ header {
     flex-direction: column;
     gap: var(--spacing-md);
     background-color: var(--chat-messages-bg);
+    background-image: linear-gradient(rgba(250, 246, 235, 0.6), rgba(250, 246, 235, .9)), 
+                      url('media/floral-pattern-background.png');
+    background-repeat: repeat;
+    background-size: 300px;
+    background-position: top left;
     scroll-behavior: smooth;
     transition: background-color var(--transition-base);
+}
+
+.dark-mode .chat-messages {
+    background-image: linear-gradient(rgba(38, 48, 83, 0.7), rgba(30, 37, 46, 0.95)), 
+                      url('media/floral-pattern-background.png');
 }
 
 /* Messages */
@@ -472,14 +481,14 @@ header {
 
 .message.received {
     align-self: flex-start;
-    background: linear-gradient(135deg, #76acf8, #deaafc); /* Removed the alpha (8b and a0) */
+    background: linear-gradient(135deg, #76acf8, #deaafc);
     color: var(--text-primary);
     border-bottom-left-radius: var(--radius-sm);
     opacity: 0.88;
 }
 
 .message.local-system {
-    opacity: 0.88; /* Already set to 1, but ensure it's not overridden */
+    opacity: 0.88;
     background: linear-gradient(135deg, #808080, #666666);
     border-left: 3px solid #ffcc00;
 }
@@ -1023,28 +1032,36 @@ header {
     padding: 8px 12px;
     margin-bottom: 8px;
     background-color: rgba(0, 0, 0, 0.3);
-    border-left: 3px solid var(--primary);
+    border-left: 4px solid var(--primary);
     border-radius: var(--radius-sm);
-    color: var(--text-secondary);
+    color: var(--text-primary);
     display: flex;
     align-items: center;
     gap: 8px;
     cursor: pointer;
     transition: all var(--transition-fast);
+    font-weight: 500;
 }
 
-.message-reply-ref:hover { background-color: rgba(0, 0, 0, 0.08); }
+.message-reply-ref:hover { background-color: rgba(0, 0, 0, 0.4); }
 
 .message.sent .message-reply-ref {
-    background-color: rgba(255, 255, 255, 0.3);
-    border-left-color: rgba(255, 255, 255, 0.5);
-    color: var(--text-secondary);
+    background-color: rgba(255, 255, 255, 0.25);
+    border-left-color: rgba(255, 255, 255, 0.8);
+    color: var(--text-primary);
 }
 
-.message.sent .message-reply-ref:hover { background-color: rgba(255, 255, 255, 0.15); }
+.message.sent .message-reply-ref:hover { background-color: rgba(255, 255, 255, 0.35); }
 
-.dark-mode .message-reply-ref { background-color: rgba(0, 0, 0, 0.2); }
-.dark-mode .message.sent .message-reply-ref { background-color: rgba(0, 0, 0, 0.2); }
+.dark-mode .message-reply-ref { 
+    background-color: rgba(0, 0, 0, 0.5);
+    border-left-color: var(--primary-light);
+    color: var(--text-primary);
+}
+.dark-mode .message.sent .message-reply-ref { 
+    background-color: rgba(255, 255, 255, 0.15);
+    color: var(--text-primary);
+}
 
 /* ========== UTILITIES ========== */
 .loading-spinner {
@@ -1973,6 +1990,14 @@ header {
     
     .chat-messages { 
         padding: 10px; 
+        /* Keep floral pattern on mobile */
+        background-image: linear-gradient(rgba(250, 246, 235, 0.6), rgba(250, 246, 235, .9)), 
+                          url('media/floral-pattern-background.png');
+    }
+    
+    .dark-mode .chat-messages {
+        background-image: linear-gradient(rgba(38, 48, 83, 0.7), rgba(30, 37, 46, 0.95)), 
+                          url('media/floral-pattern-background.png');
     }
     
     /* Messages */
@@ -2386,6 +2411,7 @@ body.modal-open {
     width: 100%;
     height: 100%;
 }
+
 /* Fix for mobile keyboard scrolling */
 @media (max-width: 768px) {
     body.keyboard-open {
@@ -2396,7 +2422,7 @@ body.modal-open {
     }
     
     body.keyboard-open .chat-section {
-        height: calc(100vh - 250px); /* Adjust based on keyboard height */
+        height: calc(100vh - 250px);
         margin-bottom: 10px;
     }
     
@@ -2407,27 +2433,4 @@ body.modal-open {
         z-index: 100;
         padding-bottom: env(safe-area-inset-bottom, 10px);
     }
-}
-.chat-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: var(--spacing-lg);
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-md);
-    background-color: var(--chat-messages-bg);
-    background-image: linear-gradient(rgba(250, 246, 235, 0.6), rgba(250, 246, 235, .9)), 
-                      url('..media/floral-pattern-background.png');
-    background-repeat: repeat;
-    background-size: 300px;
-    background-position: top left;
-    scroll-behavior: smooth;
-    transition: background-color var(--transition-base);
-}
-.dark-mode .chat-messages {
-    background-image: linear-gradient(rgba(38, 48, 83, 0.7), rgba(30, 37, 46, 0.95)), 
-                      url('..media/floral-pattern-background.png');
-    background-repeat: repeat;
-    background-size: 300px;
-    background-position: top left;
 }
