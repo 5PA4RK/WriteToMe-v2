@@ -959,7 +959,7 @@ header {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 2000;
+    z-index: 9999 !important;
     padding: var(--spacing-md);
     animation: modalFadeIn var(--transition-base);
 }
@@ -974,6 +974,7 @@ header {
     box-shadow: var(--shadow-xl);
     border: 1px solid var(--border-light);
     animation: modalSlideUp var(--transition-base);
+    z-index: 10000 !important;
 }
 
 .modal-header {
@@ -986,6 +987,10 @@ header {
     color: white;
     flex-wrap: wrap;
     gap: var(--spacing-sm);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .modal-header h2 {
@@ -995,7 +1000,255 @@ header {
     font-size: 1.2rem;
 }
 
-.modal-body { padding: var(--spacing-lg); }
+.modal-body { 
+    padding: var(--spacing-lg);
+    max-height: calc(90vh - 80px);
+    overflow-y: auto;
+}
+
+/* ========== REPLY MODAL - FIXED FOR MOBILE ========== */
+#replyModal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999 !important;
+    padding: 10px;
+}
+
+#replyModal .modal-content {
+    max-width: 500px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    background-color: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    border: 1px solid var(--border-light);
+    animation: modalSlideUp 0.25s ease;
+    position: relative;
+    margin: auto;
+    z-index: 100000 !important;
+}
+
+#replyModal .modal-header {
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--gradient-primary);
+    color: white;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+#replyModal .modal-header h2 {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: 1.2rem;
+}
+
+#replyModal .modal-body {
+    padding: var(--spacing-lg);
+    max-height: calc(90vh - 80px);
+    overflow-y: auto;
+}
+
+#replyModal .quoted-message {
+    background: var(--bg-tertiary);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border-left: 3px solid var(--primary);
+    max-height: 150px;
+    overflow-y: auto;
+    position: relative;
+    z-index: 5;
+}
+
+#replyModal .quoted-message strong {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--text-primary);
+}
+
+#replyModal .quoted-message p {
+    margin: 0;
+    font-style: italic;
+    color: var(--text-secondary);
+    word-break: break-word;
+}
+
+#replyModal .form-group {
+    margin-bottom: var(--spacing-lg);
+    position: relative;
+}
+
+#replyModal .form-group label {
+    display: block;
+    margin-bottom: var(--spacing-xs);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+#replyModal textarea#replyInput {
+    width: 100%;
+    padding: 12px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 1rem;
+    resize: vertical;
+    min-height: 120px;
+    max-height: 200px;
+    font-family: inherit;
+}
+
+#replyModal textarea#replyInput:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+#replyModal .modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    position: sticky;
+    bottom: 0;
+    background-color: var(--bg-primary);
+    padding: 15px 0 0;
+    z-index: 10;
+}
+
+#replyModal .btn {
+    min-height: 48px;
+    font-size: 1rem;
+    flex: 1;
+}
+
+#replyModal .btn i {
+    margin-right: 8px;
+}
+
+/* Mobile optimizations for reply modal */
+@media (max-width: 768px) {
+    #replyModal {
+        padding: 0;
+        align-items: flex-end;
+    }
+    
+    #replyModal .modal-content {
+        max-width: 100%;
+        width: 100%;
+        max-height: 85vh;
+        border-radius: 20px 20px 0 0;
+        margin: 0;
+        animation: slideUpModal 0.3s ease;
+    }
+    
+    @keyframes slideUpModal {
+        from {
+            transform: translateY(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+    
+    #replyModal .modal-header {
+        border-radius: 20px 20px 0 0;
+        padding: 15px 20px;
+    }
+    
+    #replyModal .modal-header h2 {
+        font-size: 1.1rem;
+    }
+    
+    #replyModal .modal-body {
+        padding: 20px;
+        max-height: calc(85vh - 120px);
+    }
+    
+    #replyModal .quoted-message {
+        max-height: 120px;
+        padding: 12px;
+        margin-bottom: 15px;
+    }
+    
+    #replyModal .quoted-message strong {
+        font-size: 0.9rem;
+    }
+    
+    #replyModal .quoted-message p {
+        font-size: 0.9rem;
+    }
+    
+    #replyModal textarea#replyInput {
+        min-height: 100px;
+        font-size: 16px;
+        padding: 12px;
+    }
+    
+    #replyModal .modal-actions {
+        gap: 8px;
+        padding: 10px 0 5px;
+    }
+    
+    #replyModal .btn {
+        min-height: 44px;
+        font-size: 0.95rem;
+    }
+    
+    #replyModal .btn i {
+        font-size: 1.1rem;
+    }
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+    #replyModal .modal-content {
+        max-height: 90vh;
+    }
+    
+    #replyModal .modal-body {
+        padding: 15px;
+    }
+    
+    #replyModal .quoted-message {
+        max-height: 100px;
+        padding: 10px;
+    }
+    
+    #replyModal textarea#replyInput {
+        min-height: 80px;
+    }
+    
+    #replyModal .modal-actions {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    #replyModal .btn {
+        width: 100%;
+    }
+}
 
 /* ========== IMAGE MODAL ========== */
 .image-modal-overlay {
@@ -1169,7 +1422,7 @@ header {
 .vimeo-embed,
 .dailymotion-embed {
     position: relative;
-    padding-bottom: 56.25%; /* 16:9 aspect ratio */
+    padding-bottom: 56.25%;
     height: 0;
     overflow: hidden;
     background-color: #000;
@@ -2005,33 +2258,6 @@ header {
     
     /* Modal improvements */
     .modal-body { max-height: 70vh; }
-    
-    #replyModal .modal-content {
-        width: 95%;
-        max-width: 95%;
-        margin: 10px auto;
-        max-height: 90vh;
-        border-radius: 20px;
-    }
-    
-    #replyModal .modal-body {
-        padding: 16px;
-    }
-    
-    #replyModal textarea#replyInput {
-        font-size: 16px;
-        min-height: 120px;
-        padding: 12px;
-    }
-    
-    #replyModal .btn {
-        min-height: 48px;
-        font-size: 16px;
-    }
-    
-    #replyModal .btn i {
-        font-size: 1.2rem;
-    }
     
     /* History cards */
     .history-cards { 
