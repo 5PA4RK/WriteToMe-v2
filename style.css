@@ -1022,7 +1022,7 @@ header {
     font-size: 0.8rem;
     padding: 8px 12px;
     margin-bottom: 8px;
-    background-color: rgba(0, 0, 0, 0.05);
+    background-color: rgba(0, 0, 0, 0.3);
     border-left: 3px solid var(--primary);
     border-radius: var(--radius-sm);
     color: var(--text-secondary);
@@ -1036,7 +1036,7 @@ header {
 .message-reply-ref:hover { background-color: rgba(0, 0, 0, 0.08); }
 
 .message.sent .message-reply-ref {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.3);
     border-left-color: rgba(255, 255, 255, 0.5);
     color: var(--text-secondary);
 }
@@ -2417,7 +2417,7 @@ body.modal-open {
     gap: var(--spacing-md);
     background-color: var(--chat-messages-bg);
     background-image: linear-gradient(rgba(250, 246, 235, 0.6), rgba(250, 246, 235, .9)), 
-                      url('media/floral-pattern-background.png');
+                      url('..media/floral-pattern-background.png');
     background-repeat: repeat;
     background-size: 300px;
     background-position: top left;
@@ -2426,7 +2426,7 @@ body.modal-open {
 }
 .dark-mode .chat-messages {
     background-image: linear-gradient(rgba(38, 48, 83, 0.7), rgba(30, 37, 46, 0.95)), 
-                      url('media/floral-pattern-background.png');
+                      url('..media/floral-pattern-background.png');
     background-repeat: repeat;
     background-size: 300px;
     background-position: top left;
