@@ -452,23 +452,13 @@ function getActionsMenuHtml(message) {
 
 
 // Open reply modal - FIXED for long messages and mobile
-// Open reply modal - FIXED for mobile positioning and visibility
 function openReplyModal(messageId, senderName, messageText) {
     console.log('Opening reply modal for message:', messageId);
     
-    // Get modal elements
-    const modal = document.getElementById('replyModal');
-    const replyToNameEl = document.getElementById('replyToName');
-    const replyToContentEl = document.getElementById('replyToContent');
-    const replyInputEl = document.getElementById('replyInput');
-    
-    if (!modal || !replyToNameEl || !replyToContentEl || !replyInputEl) {
+    if (!elements.replyModal || !elements.replyToName || !elements.replyToContent || !elements.replyInput) {
         console.error('Reply modal elements not found');
         return;
     }
-    
-    // Ensure modal appears above everything
-    modal.style.zIndex = '99999';
     
     // Store the message we're replying to
     if (appState) {
@@ -477,100 +467,44 @@ function openReplyModal(messageId, senderName, messageText) {
     }
     
     // Set the sender name
-    replyToNameEl.textContent = senderName || 'Unknown';
+    elements.replyToName.textContent = senderName || 'Unknown';
     
     // Handle long messages - truncate for display but keep full for reference
     let displayText = messageText || '';
     if (displayText.length > 150) {
         displayText = displayText.substring(0, 150) + '...';
     }
-    replyToContentEl.textContent = displayText;
+    elements.replyToContent.textContent = displayText;
     
     // Store the full message text as a data attribute for reference
-    replyToContentEl.setAttribute('data-full-text', messageText || '');
+    elements.replyToContent.setAttribute('data-full-text', messageText || '');
     
     // Clear any previous input
-    replyInputEl.value = '';
+    elements.replyInput.value = '';
     
     // Show the modal
-    modal.style.display = 'flex';
+    elements.replyModal.style.display = 'flex';
     
     // On mobile, add a class to body to prevent background scrolling
     document.body.classList.add('modal-open');
     
-    // On mobile, ensure modal is properly positioned and not hidden
-    if (window.innerWidth <= 768) {
-        // Small delay to ensure modal is rendered
-        setTimeout(() => {
-            // Scroll the modal into view
-            modal.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            // Ensure the textarea is visible when keyboard opens
-            replyInputEl.addEventListener('focus', function onFocus() {
-                setTimeout(() => {
-                    replyInputEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 300);
-                replyInputEl.removeEventListener('focus', onFocus);
-            }, { once: true });
-            
-            // Focus on the input with a delay for mobile
-            setTimeout(() => {
-                replyInputEl.focus();
-                // On mobile, try to open the keyboard
-                replyInputEl.click();
-            }, 400);
-        }, 100);
-    } else {
-        // Desktop: just focus
-        setTimeout(() => {
-            replyInputEl.focus();
-        }, 300);
-    }
-    
-    // Add click outside to close (optional, but good UX)
-    const closeModal = function(e) {
-        if (e.target === modal) {
-            modal.style.display = 'none';
-            if (appState) appState.replyingTo = null;
-            document.body.classList.remove('modal-open');
-            document.removeEventListener('click', closeModal);
-        }
-    };
-    
-    // Use setTimeout to avoid immediate trigger
+    // Focus on the input with a delay for mobile
     setTimeout(() => {
-        document.addEventListener('click', closeModal);
-    }, 100);
+        if (elements.replyInput) {
+            elements.replyInput.focus();
+            // On mobile, try to open the keyboard
+            if (window.innerWidth <= 768) {
+                elements.replyInput.click();
+            }
+        }
+    }, 300);
 }
-
-// Also add this helper function to properly close the modal
-function closeReplyModal() {
-    const modal = document.getElementById('replyModal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-    if (appState) {
-        appState.replyingTo = null;
-    }
-    document.body.classList.remove('modal-open');
-}
-
-// Make it globally available
-window.openReplyModal = openReplyModal;
-window.closeReplyModal = closeReplyModal;
-
 // Send reply - FIXED VERSION
-// Send reply - FIXED VERSION with better mobile handling
+// Send reply - FIXED VERSION with better desktop handling
 async function sendReply() {
     console.log('🟢 sendReply called from chat.js at:', new Date().toISOString());
     
-    const replyInput = document.getElementById('replyInput');
-    const replyModal = document.getElementById('replyModal');
-    const sendReplyBtn = document.getElementById('sendReplyBtn');
-    
-    if (!replyInput) return;
-    
-    const replyText = replyInput.value.trim();
+    const replyText = elements.replyInput.value.trim();
     if (!replyText) return;
     
     // Store the replyTo ID in a local variable
@@ -582,25 +516,18 @@ async function sendReply() {
         return;
     }
     
-    // Disable the send button to prevent double-clicks
-    if (sendReplyBtn) {
-        sendReplyBtn.disabled = true;
-    }
+    // Close modal first and disable the button to prevent double-clicks
+    elements.replyModal.style.display = 'none';
     
-    // Close modal first
-    if (replyModal) {
-        replyModal.style.display = 'none';
+    // Temporarily disable the send button to prevent double-clicks
+    if (elements.sendReplyBtn) {
+        elements.sendReplyBtn.disabled = true;
     }
-    document.body.classList.remove('modal-open');
     
     // Set the message input
-    const messageInput = document.getElementById('messageInput');
-    if (messageInput) {
-        messageInput.value = replyText;
+    if (elements.messageInput) {
+        elements.messageInput.value = replyText;
         console.log('Message input set to:', replyText);
-        
-        // Trigger input event to resize textarea
-        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
     }
     
     // IMPORTANT: Store the replyToId in a temporary global variable
@@ -620,16 +547,14 @@ async function sendReply() {
         }
     } catch (error) {
         console.error('Error sending reply:', error);
-        alert('Failed to send reply: ' + error.message);
     } finally {
-        // Clear the temp variable
+        // Clear the temp variable and re-enable the button
         window.__tempReplyTo = null;
-        
-        // Re-enable the button after a short delay
-        if (sendReplyBtn) {
+        if (elements.sendReplyBtn) {
+            // Re-enable after a short delay
             setTimeout(() => {
-                sendReplyBtn.disabled = false;
-            }, 1000);
+                elements.sendReplyBtn.disabled = false;
+            }, 500);
         }
     }
 }
