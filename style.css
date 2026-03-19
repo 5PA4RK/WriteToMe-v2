@@ -79,7 +79,7 @@
     --bg-accent: #2a3f5e;
     --border-light: #3a3a4a;
     --border-medium: #4a4a5a;
-    --text-primary: #f1f5f9;
+    --text-primary: #ffffff;
     --text-secondary: #69d6f7;
     --text-muted: #94a3b8;
     --text-inverse: #0f172a;
@@ -473,7 +473,7 @@ header {
 
 .message.sent {
     align-self: flex-end;
-    background: var(--gradient-primary);
+    background: linear-gradient(135deg, #ffa200, #f66b2b);
     color: var(--text-primary);
     border-bottom-right-radius: var(--radius-sm);
     opacity: 0.88;
@@ -481,7 +481,7 @@ header {
 
 .message.received {
     align-self: flex-start;
-    background: linear-gradient(135deg, #76acf8, #deaafc);
+    background: linear-gradient(135deg, #64a3fa, #deaafc);
     color: var(--text-primary);
     border-bottom-left-radius: var(--radius-sm);
     opacity: 0.88;
