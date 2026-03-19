@@ -664,13 +664,31 @@ allInputs.forEach(input => {
         }
     });
     
-    // Reply modal
-// Add this to your setupEventListeners in app.js for the reply modal close button
+// Reply modal
 if (closeReplyModal) {
     const handleCloseModal = () => {
         replyModal.style.display = 'none';
         if (appState) appState.replyingTo = null;
         document.body.classList.remove('modal-open');
+        
+        // CRITICAL FIX FOR MOBILE: Reset viewport
+        if (window.innerWidth <= 768) {
+            // Remove any stuck positioning
+            document.body.style.position = '';
+            document.body.style.width = '';
+            document.body.style.height = '';
+            
+            // Force scroll to message input
+            setTimeout(() => {
+                if (messageInput && appState.isConnected) {
+                    messageInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    messageInput.focus();
+                }
+                // Force a small scroll to trigger viewport reset
+                window.scrollTo(0, window.scrollY + 1);
+                setTimeout(() => window.scrollTo(0, window.scrollY - 1), 10);
+            }, 300);
+        }
     };
     
     closeReplyModal.addEventListener('click', handleCloseModal);
@@ -689,15 +707,27 @@ if (sendReplyBtn) {
     }
 }
     
-    window.addEventListener('click', (e) => {
-        if (e.target === replyModal) {
-            replyModal.style.display = 'none';
-            appState.replyingTo = null;
+// Find this section and update it:
+window.addEventListener('click', (e) => {
+    if (e.target === replyModal) {
+        replyModal.style.display = 'none';
+        appState.replyingTo = null;
+        document.body.classList.remove('modal-open');
+        
+        // CRITICAL FIX FOR MOBILE
+        if (window.innerWidth <= 768) {
+            document.body.style.position = '';
+            document.body.style.width = '';
+            document.body.style.height = '';
+            
+            setTimeout(() => {
+                if (messageInput && appState.isConnected) {
+                    messageInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 300);
         }
-        if (e.target === guestNotificationModal) {
-            guestNotificationModal.style.display = 'none';
-        }
-    });
+    }
+});
     // Add this function to properly close the reply modal
 window.closeReplyModal = function() {
     const replyModal = document.getElementById('replyModal');
