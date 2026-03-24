@@ -22,6 +22,7 @@ const ChatModule = (function() {
     }
 
 // Display a message in the chat
+// Update the displayMessage function in chat.js to properly handle images
 function displayMessage(message) {
     if (!elements.chatMessages) {
         console.error('Chat messages container not found');
@@ -50,8 +51,16 @@ function displayMessage(message) {
     if (message.is_optimistic) {
         messageDiv.classList.add('optimistic');
         messageDiv.style.opacity = '0.7';
+        messageDiv.style.transition = 'opacity 0.3s ease';
+        
+        // For optimistic messages, fade in after a short delay
+        setTimeout(() => {
+            if (messageDiv) {
+                messageDiv.style.opacity = '1';
+            }
+        }, 100);
     }
-    messageDiv.id = message.is_optimistic ? `msg-${message.id}` : `msg-${message.id}`;
+    messageDiv.id = `msg-${message.id}`;
     
     let messageContent = '';
     
@@ -61,7 +70,7 @@ function displayMessage(message) {
     }
     
     // Process message text for media embeds
-    if (message.text) {
+    if (message.text && message.text.trim()) {
         const escapedText = escapeHtml(message.text);
         const mediaEmbed = createMediaEmbed(message.text);
         
@@ -86,9 +95,15 @@ function displayMessage(message) {
         }
     }
     
-    // Add image if present
+    // Add image if present (uploaded file)
     if (message.image) {
-        messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
+        // For image-only messages with no text, add a visual indicator
+        if (!message.text || !message.text.trim()) {
+            messageContent += `<div class="message-text" style="color: var(--text-muted); font-style: italic; margin-bottom: 8px;">
+                <i class="fas fa-image"></i> Image
+            </div>`;
+        }
+        messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')" loading="lazy">`;
     }
     
     // Add reactions section
@@ -121,7 +136,7 @@ function displayMessage(message) {
         renderReactions(reactionsContainer, message.reactions);
     }
     
-    // Store in appState.messages
+    // Store in appState.messages (skip optimistic messages)
     if (appState && appState.messages && Array.isArray(appState.messages) && !message.is_optimistic) {
         const exists = appState.messages.some(m => m.id === message.id);
         if (!exists) {
@@ -141,7 +156,10 @@ function displayMessage(message) {
             });
         }
     });
-}// Helper function to get reply quote HTML
+}
+
+
+// Helper function to get reply quote HTML
 // Replace the getReplyQuoteHtml function with this improved version
 function getReplyQuoteHtml(replyToId, currentMessage) {
     let quotedSender = 'someone';
