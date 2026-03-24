@@ -2243,12 +2243,9 @@ async function handleTyping() {
     }
 }
 
-// Update the sendMessage function
+// Replace the existing sendMessage function in app.js with this optimized version
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
-    console.log('Current replyingTo:', appState.replyingTo);
-    console.log('Current tempReplyTo:', window.__tempReplyTo);
-    console.log('isSendingMessage:', isSendingMessage);
     
     // Prevent double-sending
     if (isSendingMessage) {
@@ -2269,26 +2266,82 @@ async function sendMessage() {
     // Set sending flag
     isSendingMessage = true;
     
-    let imageUrl = null;
-    
-    if (imageFile) {
-        const reader = new FileReader();
-        reader.onload = async function(e) {
-            imageUrl = e.target.result;
-            await sendMessageToDB(messageText, imageUrl, window.__tempReplyTo || appState.replyingTo);
-            // Reset sending flag after completion
-            isSendingMessage = false;
-        };
-        reader.readAsDataURL(imageFile);
-        imageUpload.value = '';
-    } else {
-        await sendMessageToDB(messageText, null, window.__tempReplyTo || appState.replyingTo);
-        // Reset sending flag after completion
-        isSendingMessage = false;
+    // Disable send button temporarily
+    if (sendMessageBtn) {
+        sendMessageBtn.disabled = true;
+        sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     }
     
-    messageInput.value = '';
-    messageInput.style.height = 'auto';
+    try {
+        let imageUrl = null;
+        
+        if (imageFile) {
+            // Validate image size and type
+            if (imageFile.size > 5 * 1024 * 1024) {
+                alert("❌ Image size should be less than 5MB.");
+                imageUpload.value = '';
+                isSendingMessage = false;
+                if (sendMessageBtn) {
+                    sendMessageBtn.disabled = false;
+                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+                }
+                return;
+            }
+            
+            if (!imageFile.type.startsWith('image/')) {
+                alert("❌ Please select an image file.");
+                imageUpload.value = '';
+                isSendingMessage = false;
+                if (sendMessageBtn) {
+                    sendMessageBtn.disabled = false;
+                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+                }
+                return;
+            }
+            
+            // Read image as data URL
+            const reader = new FileReader();
+            const imageData = await new Promise((resolve, reject) => {
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(imageFile);
+            });
+            imageUrl = imageData;
+            imageUpload.value = '';
+        }
+        
+        // Send message to DB
+        const result = await sendMessageToDB(messageText, imageUrl, window.__tempReplyTo || appState.replyingTo);
+        
+        if (result && result.success) {
+            // Clear input and temp variables
+            if (messageInput) {
+                messageInput.value = '';
+                messageInput.style.height = 'auto';
+            }
+            appState.replyingTo = null;
+            window.__tempReplyTo = null;
+            
+            // Scroll to bottom after sending
+            setTimeout(() => {
+                if (chatMessages) {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            }, 100);
+        } else {
+            console.error('Failed to send message');
+            alert('Failed to send message. Please try again.');
+        }
+    } catch (error) {
+        console.error('Error sending message:', error);
+        alert('Failed to send message: ' + error.message);
+    } finally {
+        isSendingMessage = false;
+        if (sendMessageBtn) {
+            sendMessageBtn.disabled = false;
+            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+        }
+    }
 }
 
 async function sendMessageToDB(text, imageUrl, replyToId = null) {
