@@ -2284,6 +2284,7 @@ async function handleTyping() {
 }
 
 // Update the sendMessage function
+// Replace the image upload section in the sendMessage function
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
     
@@ -2310,6 +2311,13 @@ async function sendMessage() {
         sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
     }
     
+    // Store the reply information
+    const replyToId = window.__tempReplyTo || appState.replyingTo;
+    
+    // Clear reply state immediately
+    appState.replyingTo = null;
+    window.__tempReplyTo = null;
+    
     let imageUrl = null;
     
     if (imageFile) {
@@ -2318,9 +2326,14 @@ async function sendMessage() {
         reader.onload = async function(e) {
             imageUrl = e.target.result;
             
+            console.log('📸 Image loaded, displaying optimistic message with image');
+            
+            // Create a unique temporary ID
+            const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+            
             // Show optimistic message with image preview
             const optimisticMessage = {
-                id: 'temp_' + Date.now(),
+                id: tempId,
                 sender: appState.userName,
                 text: messageText,
                 image: imageUrl,
@@ -2328,7 +2341,7 @@ async function sendMessage() {
                 type: 'sent',
                 is_historical: false,
                 reactions: [],
-                reply_to: window.__tempReplyTo || appState.replyingTo,
+                reply_to: replyToId,
                 is_optimistic: true
             };
             
@@ -2340,15 +2353,22 @@ async function sendMessage() {
             // Clear the file input
             imageUpload.value = '';
             
-            // Send to database
-            const result = await sendMessageToDB(messageText, imageUrl, window.__tempReplyTo || appState.replyingTo);
+            // Clear message input
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
             
-            // If successful, replace optimistic message with real one
+            // Send to database
+            const result = await sendMessageToDB(messageText, imageUrl, replyToId);
+            
+            // Remove optimistic message
+            const tempElement = document.getElementById(`msg-${tempId}`);
+            if (tempElement) {
+                tempElement.remove();
+            }
+            
+            // If successful, display real message
             if (result && result.success && result.data) {
-                const tempElement = document.getElementById(`msg-${optimisticMessage.id}`);
-                if (tempElement) {
-                    tempElement.remove();
-                }
+                console.log('✅ Image message saved to DB, ID:', result.data.id);
                 
                 // Display real message
                 if (window.ChatModule) {
@@ -2361,9 +2381,24 @@ async function sendMessage() {
                         type: 'sent',
                         is_historical: false,
                         reactions: [],
-                        reply_to: window.__tempReplyTo || appState.replyingTo
+                        reply_to: replyToId
                     });
                 }
+            } else {
+                // Show error message
+                console.error('Failed to send image message');
+                const errorMsg = document.createElement('div');
+                errorMsg.className = 'message received';
+                errorMsg.innerHTML = `
+                    <div class="message-sender">System</div>
+                    <div class="message-content">
+                        <div class="message-text" style="color: var(--danger);">
+                            <i class="fas fa-exclamation-triangle"></i> Failed to send image. Please try again.
+                        </div>
+                    </div>
+                `;
+                chatMessages.appendChild(errorMsg);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
             }
             
             isSendingMessage = false;
@@ -2372,33 +2407,40 @@ async function sendMessage() {
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
         };
+        
+        reader.onerror = function(e) {
+            console.error('❌ Error reading image:', e);
+            alert("Error reading image file.");
+            imageUpload.value = '';
+            isSendingMessage = false;
+            if (sendMessageBtn) {
+                sendMessageBtn.disabled = false;
+                sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+            }
+        };
+        
         reader.readAsDataURL(imageFile);
     } else {
         // Text-only message - send immediately
-        const result = await sendMessageToDB(messageText, null, window.__tempReplyTo || appState.replyingTo);
+        const result = await sendMessageToDB(messageText, null, replyToId);
         
         isSendingMessage = false;
         if (sendMessageBtn) {
             sendMessageBtn.disabled = false;
             sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
         }
+        
+        // Clear message input
+        messageInput.value = '';
+        messageInput.style.height = 'auto';
+        
+        // Scroll to bottom after sending
+        setTimeout(() => {
+            if (chatMessages) {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }, 100);
     }
-    
-    // Clear reply state
-    const replyToClear = window.__tempReplyTo || appState.replyingTo;
-    appState.replyingTo = null;
-    window.__tempReplyTo = null;
-    
-    // Clear message input
-    messageInput.value = '';
-    messageInput.style.height = 'auto';
-    
-    // Scroll to bottom after sending
-    setTimeout(() => {
-        if (chatMessages) {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-    }, 100);
 }
 
 // Add this function to handle scroll after keyboard closes
