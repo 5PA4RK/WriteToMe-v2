@@ -2547,6 +2547,7 @@ body.modal-open {
     }
 }
 /* Add or update these styles for better reply image previews */
+/* Add these styles for better reply previews - FIXED VERSION */
 .message-reply-ref {
     font-size: 0.8rem;
     padding: 8px 12px;
@@ -2559,24 +2560,28 @@ body.modal-open {
     align-items: center;
     gap: 8px;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color var(--transition-fast);
     font-weight: 500;
     position: relative;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .message-reply-ref .reply-content {
     flex: 1;
     word-break: break-word;
+    min-width: 0; /* Prevents flex overflow */
 }
 
 .message-reply-ref .reply-content i.fa-image {
     margin-left: 4px;
     color: var(--text-muted);
+    font-style: normal;
 }
 
 .message-reply-ref:hover {
     background-color: rgba(0, 0, 0, 0.25);
-    transform: translateX(2px);
+    /* Remove transform to prevent layout shift */
 }
 
 .message.sent .message-reply-ref {
@@ -2595,6 +2600,7 @@ body.modal-open {
     display: inline-flex;
     margin-left: 8px;
     flex-shrink: 0;
+    cursor: pointer;
 }
 
 .reply-image-preview img {
@@ -2604,26 +2610,90 @@ body.modal-open {
     object-fit: cover;
     border: 1px solid var(--border-light);
     background-color: var(--bg-secondary);
+    transition: transform 0.2s ease;
 }
 
-/* On hover, show larger preview */
-.message-reply-ref:hover .reply-image-preview {
+/* On hover, show larger preview using a pseudo-element or tooltip approach */
+.reply-image-preview:hover {
+    position: relative;
+}
+
+.reply-image-preview:hover::after {
+    content: '';
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 300px;
+    height: 300px;
+    background-image: var(--preview-image, none);
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: var(--bg-primary);
+    border: 2px solid var(--border-light);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-xl);
+    z-index: 10000;
+    pointer-events: none;
+}
+
+/* Alternative: Use a tooltip-style preview that doesn't affect layout */
+.reply-image-preview {
+    position: relative;
+}
+
+.reply-image-preview .preview-tooltip {
     position: absolute;
     bottom: 100%;
-    left: 0;
+    left: 50%;
+    transform: translateX(-50%);
     background-color: var(--bg-primary);
     border: 1px solid var(--border-light);
     border-radius: var(--radius-sm);
     padding: 4px;
     box-shadow: var(--shadow-md);
-    z-index: 100;
-    margin-left: 0;
-    display: block !important;
+    z-index: 1000;
+    display: none;
+    margin-bottom: 8px;
+    white-space: nowrap;
 }
 
-.message-reply-ref:hover .reply-image-preview img {
-    max-width: 100px;
-    max-height: 100px;
+.reply-image-preview .preview-tooltip img {
+    max-width: 150px;
+    max-height: 150px;
+    width: auto;
+    height: auto;
+}
+
+.reply-image-preview:hover .preview-tooltip {
+    display: block;
+}
+
+/* For mobile, disable hover preview or use tap */
+@media (max-width: 768px) {
+    .reply-image-preview .preview-tooltip {
+        position: fixed;
+        bottom: auto;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 10001;
+        max-width: 80vw;
+        white-space: normal;
+    }
+    
+    .reply-image-preview .preview-tooltip img {
+        max-width: 80vw;
+        max-height: 60vh;
+        width: auto;
+        height: auto;
+    }
+    
+    /* Add tap-to-preview on mobile */
+    .reply-image-preview:active .preview-tooltip {
+        display: block;
+    }
 }
 
 /* Dark mode adjustments */
@@ -2641,7 +2711,7 @@ body.modal-open {
     background-color: var(--bg-tertiary);
 }
 
-.dark-mode .message-reply-ref:hover .reply-image-preview {
+.dark-mode .reply-image-preview .preview-tooltip {
     background-color: var(--bg-secondary);
     border-color: var(--border-medium);
 }
