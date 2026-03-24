@@ -2178,3 +2178,14 @@ body.modal-open {
         }
     }
 }
+
+/* Add these styles for header hide/show on scroll */
+.header-hidden {
+    transform: translateY(-100%);
+}
+
+/* Add transition for smooth header animation */
+header {
+    transition: transform 0.3s ease-in-out;
+    will-change: transform;
+}
