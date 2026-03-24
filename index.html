@@ -478,5 +478,56 @@
 })();
 </script>
 
+<!-- Add this CSS for viewport fix -->
+<style>
+    /* Viewport height fix for mobile */
+    :root {
+        --vh: 1vh;
+    }
+    
+    @media (max-width: 768px) {
+        .chat-section {
+            height: calc(var(--vh, 1vh) * 100 - 130px) !important;
+        }
+        
+        .message.optimistic {
+            opacity: 0.7;
+            animation: pulse 1s ease-in-out;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.7; }
+            50% { opacity: 1; }
+        }
+        
+        /* Ensure modal doesn't cause scroll issues */
+        body.modal-open {
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #replyModal.modal-overlay {
+            align-items: flex-end;
+        }
+        
+        #replyModal .modal-content {
+            margin-bottom: 0;
+            border-radius: 20px 20px 0 0;
+            animation: slideUp 0.3s ease;
+        }
+        
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+            }
+            to {
+                transform: translateY(0);
+            }
+        }
+    }
+</style>
+
 </body>
 </html>
