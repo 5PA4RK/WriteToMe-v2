@@ -161,29 +161,7 @@ header {
     top: 0;
     z-index: 100;
     box-shadow: var(--shadow-sm);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color var(--transition-base), border-color var(--transition-base);
-    will-change: transform;
-}
-
-/* Header hidden state - ONLY applied when scrolling down */
-.header-hidden {
-    transform: translateY(-100%);
-}
-
-/* Small indicator when header is hidden */
-@media (max-width: 768px) {
-    header.header-hidden::after {
-        content: '';
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, var(--primary), transparent);
-        opacity: 0.7;
-        pointer-events: none;
-        z-index: 101;
-    }
+    transition: background-color var(--transition-base), border-color var(--transition-base);
 }
 
 .header-content {
@@ -435,24 +413,6 @@ header {
     transition: background-color var(--transition-base), border-color var(--transition-base);
 }
 
-/* Viewport height fix for mobile */
-:root {
-    --vh: 1vh;
-}
-
-@media (max-width: 768px) {
-    /* Initial state - header visible */
-    .chat-section {
-        height: calc(var(--vh, 1vh) * 100 - 130px);
-        transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    
-    /* When header is hidden, chat expands to fill space */
-    body.header-hidden .chat-section {
-        height: calc(var(--vh, 1vh) * 100 - 10px) !important;
-    }
-}
-
 .section-header {
     padding: var(--spacing-md) var(--spacing-lg);
     border-bottom: 1px solid var(--border-light);
@@ -473,7 +433,7 @@ header {
 
 .section-header h2 i { color: var(--primary); }
 
-/* Chat messages container - ensure proper scrolling */
+/* Chat messages with floral pattern */
 .chat-messages {
     flex: 1;
     overflow-y: auto;
@@ -489,7 +449,6 @@ header {
     background-position: top left;
     scroll-behavior: smooth;
     transition: background-color var(--transition-base);
-    -webkit-overflow-scrolling: touch;
 }
 
 .dark-mode .chat-messages {
@@ -583,7 +542,7 @@ header {
     margin: 4px 0;
 }
 
-/* Message image styling */
+/* Add to style.css - Ensure images load properly */
 .message-image {
     max-width: 100%;
     max-height: 250px;
@@ -598,13 +557,28 @@ header {
     background-color: rgba(0, 0, 0, 0.05);
 }
 
+/* Loading state for images */
 .message-image[src=""] {
     display: none;
 }
 
+/* Optimistic message image styling */
 .message.optimistic .message-image {
     opacity: 0.9;
     filter: brightness(0.95);
+}
+
+/* Mobile image sizing */
+@media (max-width: 768px) {
+    .message-image {
+        max-height: 200px;
+    }
+}
+
+@media (max-width: 480px) {
+    .message-image {
+        max-height: 150px;
+    }
 }
 
 .message-image:hover { transform: scale(1.02); }
@@ -1082,7 +1056,7 @@ header {
     color: white;
 }
 
-/* ========== MESSAGE REPLY REFERENCE ========== */
+/* ========== MESSAGE REPLY REFERENCE - CLEAN VERSION ========== */
 .message-reply-ref {
     font-size: 0.8rem;
     padding: 8px 12px;
@@ -1137,7 +1111,7 @@ header {
     font-style: normal;
 }
 
-/* Reply image preview - tooltip style */
+/* Reply image preview - tooltip style that doesn't affect layout */
 .reply-image-preview {
     position: relative;
     display: inline-flex;
@@ -1156,6 +1130,7 @@ header {
     transition: transform 0.2s ease;
 }
 
+/* Tooltip that appears on hover - positioned absolutely so it doesn't affect layout */
 .reply-image-preview .preview-tooltip {
     position: fixed;
     background-color: var(--bg-primary);
@@ -1178,10 +1153,12 @@ header {
     border-radius: var(--radius-sm);
 }
 
+/* Show tooltip on hover */
 .reply-image-preview:hover .preview-tooltip {
     display: block;
 }
 
+/* Dark mode */
 .dark-mode .reply-image-preview img {
     border-color: var(--border-medium);
     background-color: var(--bg-tertiary);
@@ -1241,6 +1218,7 @@ header {
     transform: translateY(-2px);
 }
 
+/* Image embeds */
 .image-embed {
     padding: 8px;
     background-color: var(--bg-tertiary);
@@ -1263,6 +1241,7 @@ header {
     transform: scale(1.02);
 }
 
+/* Video embeds */
 .youtube-embed,
 .vimeo-embed,
 .dailymotion-embed {
@@ -1285,6 +1264,7 @@ header {
     border: none;
 }
 
+/* Direct video embeds */
 .video-embed video {
     width: 100%;
     max-height: 500px;
@@ -1293,6 +1273,7 @@ header {
     object-fit: contain;
 }
 
+/* Audio embeds */
 .audio-embed {
     padding: 20px;
     background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
@@ -1303,6 +1284,7 @@ header {
     display: block;
 }
 
+/* Media source link */
 .media-source {
     padding: 8px 12px;
     font-size: 0.85rem;
@@ -1327,6 +1309,7 @@ header {
     color: var(--text-muted);
 }
 
+/* Media link reference */
 .media-link-reference {
     font-size: 0.75rem;
     padding: 4px 8px;
@@ -1491,6 +1474,7 @@ header {
     white-space: nowrap;
 }
 
+/* Platform-specific icon colors */
 .instagram-placeholder i { color: #e4405f; }
 .facebook-placeholder i { color: #1877f2; }
 .twitter-placeholder i { color: #1da1f2; }
@@ -1505,6 +1489,7 @@ header {
 .dark-mode .tiktok-placeholder i { color: #ffffff; }
 .dark-mode .link-placeholder i { color: var(--primary-light); }
 
+/* Vimeo specific */
 .vimeo-thumbnail-placeholder {
     display: flex;
     flex-direction: column;
@@ -1558,6 +1543,7 @@ header {
 
 .dark-mode .tiktok-message i { color: #ffffff; }
 
+/* Embed message for platforms that can't be embedded */
 .embed-message {
     padding: 30px 20px;
     text-align: center;
@@ -1587,6 +1573,7 @@ header {
     text-decoration: underline;
 }
 
+/* Loading states */
 .embed-loading {
     padding: 40px;
     text-align: center;
@@ -1599,6 +1586,7 @@ header {
     animation: spin 1s linear infinite;
 }
 
+/* Embed error */
 .embed-error {
     padding: 20px;
     text-align: center;
@@ -1620,6 +1608,7 @@ header {
     text-decoration: underline;
 }
 
+/* Dark mode adjustments for embeds */
 .dark-mode .media-embed {
     background-color: var(--bg-tertiary);
     border-color: var(--border-medium);
@@ -1655,6 +1644,7 @@ header {
     background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
 }
 
+/* Message specific adjustments for embeds */
 .message.sent .media-embed {
     background-color: rgba(255, 255, 255, 0.1);
     border-color: rgba(255, 255, 255, 0.2);
@@ -1734,6 +1724,7 @@ header {
     .logo i { font-size: 22px; }
     
     .chat-section {
+        height: calc(100vh - 130px);
         margin: 0;
         border-radius: 10px;
         width: 100%;
@@ -1995,44 +1986,6 @@ header {
     .reply-image-preview:active .preview-tooltip {
         display: block;
     }
-    
-    /* Optimistic message animation */
-    .message.optimistic {
-        opacity: 0.7;
-        animation: pulse 1s ease-in-out;
-    }
-    
-    @keyframes pulse {
-        0%, 100% { opacity: 0.7; }
-        50% { opacity: 1; }
-    }
-    
-    /* Ensure modal doesn't cause scroll issues */
-    body.modal-open {
-        overflow: hidden;
-        position: fixed;
-        width: 100%;
-        height: 100%;
-    }
-    
-    #replyModal.modal-overlay {
-        align-items: flex-end;
-    }
-    
-    #replyModal .modal-content {
-        margin-bottom: 0;
-        border-radius: 20px 20px 0 0;
-        animation: slideUp 0.3s ease;
-    }
-    
-    @keyframes slideUp {
-        from {
-            transform: translateY(100%);
-        }
-        to {
-            transform: translateY(0);
-        }
-    }
 }
 
 @media (max-width: 480px) {
@@ -2179,15 +2132,49 @@ body.modal-open {
     }
 }
 
-/* Status bar tap area for iOS-style scroll to top */
-.status-bar-area {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 44px;
-    z-index: 1000;
-    background-color: transparent;
-    pointer-events: auto;
-    cursor: pointer;
+/* Viewport height fix for mobile */
+:root {
+    --vh: 1vh;
+}
+
+@media (max-width: 768px) {
+    .chat-section {
+        height: calc(var(--vh, 1vh) * 100 - 130px) !important;
+    }
+    
+    .message.optimistic {
+        opacity: 0.7;
+        animation: pulse 1s ease-in-out;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 0.7; }
+        50% { opacity: 1; }
+    }
+    
+    body.modal-open {
+        overflow: hidden;
+        position: fixed;
+        width: 100%;
+        height: 100%;
+    }
+    
+    #replyModal.modal-overlay {
+        align-items: flex-end;
+    }
+    
+    #replyModal .modal-content {
+        margin-bottom: 0;
+        border-radius: 20px 20px 0 0;
+        animation: slideUp 0.3s ease;
+    }
+    
+    @keyframes slideUp {
+        from {
+            transform: translateY(100%);
+        }
+        to {
+            transform: translateY(0);
+        }
+    }
 }
