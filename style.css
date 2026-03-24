@@ -161,7 +161,29 @@ header {
     top: 0;
     z-index: 100;
     box-shadow: var(--shadow-sm);
-    transition: background-color var(--transition-base), border-color var(--transition-base);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color var(--transition-base), border-color var(--transition-base);
+    will-change: transform;
+}
+
+/* Header hidden state for mobile */
+.header-hidden {
+    transform: translateY(-100%);
+}
+
+/* When header is hidden, add a small indicator */
+@media (max-width: 768px) {
+    header.header-hidden::after {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--primary), transparent);
+        opacity: 0.7;
+        pointer-events: none;
+        z-index: 101;
+    }
 }
 
 .header-content {
@@ -410,7 +432,20 @@ header {
     flex-direction: column;
     height: calc(100vh - 180px);
     box-shadow: var(--shadow-md);
-    transition: background-color var(--transition-base), border-color var(--transition-base);
+    transition: background-color var(--transition-base), border-color var(--transition-base), height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Mobile specific chat section height with dynamic header */
+@media (max-width: 768px) {
+    .chat-section {
+        height: calc(var(--vh, 1vh) * 100 - 130px);
+        transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    /* When header is hidden, chat takes almost full screen */
+    body.header-hidden .chat-section {
+        height: calc(var(--vh, 1vh) * 100 - 10px) !important;
+    }
 }
 
 .section-header {
@@ -433,7 +468,7 @@ header {
 
 .section-header h2 i { color: var(--primary); }
 
-/* Chat messages with floral pattern */
+/* Chat messages container - ensure proper scrolling */
 .chat-messages {
     flex: 1;
     overflow-y: auto;
@@ -449,6 +484,7 @@ header {
     background-position: top left;
     scroll-behavior: smooth;
     transition: background-color var(--transition-base);
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 
 .dark-mode .chat-messages {
@@ -2188,4 +2224,76 @@ body.modal-open {
 header {
     transition: transform 0.3s ease-in-out;
     will-change: transform;
+}
+/* Viewport height fix for mobile - ensures proper calculation */
+:root {
+    --vh: 1vh;
+}
+
+/* Status bar tap area for iOS-style scroll to top */
+.status-bar-area {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 44px;
+    z-index: 1000;
+    background-color: transparent;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* When header is hidden, ensure chat section expands correctly */
+@media (max-width: 768px) {
+    .chat-section {
+        height: calc(var(--vh, 1vh) * 100 - 130px);
+        transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    body.header-hidden .chat-section {
+        height: calc(var(--vh, 1vh) * 100 - 10px) !important;
+    }
+    
+    /* Ensure smooth header animation */
+    header {
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    /* Optimistic message animation */
+    .message.optimistic {
+        opacity: 0.7;
+        animation: pulse 1s ease-in-out;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 0.7; }
+        50% { opacity: 1; }
+    }
+    
+    /* Ensure modal doesn't cause scroll issues */
+    body.modal-open {
+        overflow: hidden;
+        position: fixed;
+        width: 100%;
+        height: 100%;
+    }
+    
+    #replyModal.modal-overlay {
+        align-items: flex-end;
+    }
+    
+    #replyModal .modal-content {
+        margin-bottom: 0;
+        border-radius: 20px 20px 0 0;
+        animation: slideUp 0.3s ease;
+    }
+    
+    @keyframes slideUp {
+        from {
+            transform: translateY(100%);
+        }
+        to {
+            transform: translateY(0);
+        }
+    }
 }
