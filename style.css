@@ -542,13 +542,43 @@ header {
     margin: 4px 0;
 }
 
+/* Add to style.css - Ensure images load properly */
 .message-image {
     max-width: 100%;
-    max-height: 200px;
+    max-height: 250px;
+    width: auto;
+    height: auto;
     border-radius: var(--radius-sm);
     cursor: pointer;
     margin-top: var(--spacing-sm);
     transition: transform var(--transition-fast);
+    display: block;
+    object-fit: contain;
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Loading state for images */
+.message-image[src=""] {
+    display: none;
+}
+
+/* Optimistic message image styling */
+.message.optimistic .message-image {
+    opacity: 0.9;
+    filter: brightness(0.95);
+}
+
+/* Mobile image sizing */
+@media (max-width: 768px) {
+    .message-image {
+        max-height: 200px;
+    }
+}
+
+@media (max-width: 480px) {
+    .message-image {
+        max-height: 150px;
+    }
 }
 
 .message-image:hover { transform: scale(1.02); }
