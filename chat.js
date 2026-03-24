@@ -142,27 +142,59 @@ function displayMessage(message) {
         }
     });
 }// Helper function to get reply quote HTML
+// Replace the getReplyQuoteHtml function with this improved version
 function getReplyQuoteHtml(replyToId, currentMessage) {
     let quotedSender = 'someone';
     let quotedText = 'a message';
+    let quotedImage = null;
     let found = false;
+    let isImageOnly = false;
     
     // Try to find the original message in the DOM first (most reliable for current session)
     const originalMsgElement = document.getElementById(`msg-${replyToId}`);
     if (originalMsgElement) {
         const senderEl = originalMsgElement.querySelector('.message-sender');
         const textEl = originalMsgElement.querySelector('.message-text');
+        const imageEl = originalMsgElement.querySelector('.message-image');
+        
         if (senderEl) {
             quotedSender = senderEl.textContent;
             found = true;
         }
-        if (textEl) {
-            // Remove any existing (edited) tag and trim
+        
+        // Check if there's an image
+        if (imageEl) {
+            quotedImage = imageEl.src;
+            found = true;
+            
+            // Check if there's also text
+            if (textEl) {
+                const textContent = textEl.textContent
+                    .replace(/\s*\(edited\)\s*$/, '')
+                    .trim();
+                
+                if (textContent && textContent !== '[Image]') {
+                    // Has both image and text
+                    quotedText = textContent.substring(0, 100);
+                    if (textContent.length > 100) quotedText += '...';
+                    isImageOnly = false;
+                } else {
+                    // Image only
+                    quotedText = '[Image]';
+                    isImageOnly = true;
+                }
+            } else {
+                // Image only (no text element)
+                quotedText = '[Image]';
+                isImageOnly = true;
+            }
+        } else if (textEl) {
+            // Text only message
             quotedText = textEl.textContent
                 .replace(/\s*\(edited\)\s*$/, '')
                 .substring(0, 100);
             if (textEl.textContent.length > 100) quotedText += '...';
-            found = true;
+            isImageOnly = false;
         }
     } 
     
@@ -171,21 +203,36 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
         const originalMsg = appState.messages.find(m => m.id === replyToId);
         if (originalMsg) {
             quotedSender = originalMsg.sender;
-            quotedText = (originalMsg.text || '').substring(0, 100);
-            if (originalMsg.text && originalMsg.text.length > 100) quotedText += '...';
+            
+            // Check if it's an image message
+            if (originalMsg.image && (!originalMsg.text || originalMsg.text.trim() === '')) {
+                quotedText = '[Image]';
+                quotedImage = originalMsg.image;
+                isImageOnly = true;
+            } else if (originalMsg.image && originalMsg.text) {
+                // Has both image and text
+                quotedText = (originalMsg.text || '').substring(0, 100);
+                if (originalMsg.text && originalMsg.text.length > 100) quotedText += '...';
+                quotedImage = originalMsg.image;
+                isImageOnly = false;
+            } else {
+                // Text only
+                quotedText = (originalMsg.text || '').substring(0, 100);
+                if (originalMsg.text && originalMsg.text.length > 100) quotedText += '...';
+                isImageOnly = false;
+            }
             found = true;
         }
     }
     
-    // If still not found, try to fetch from database as a fallback
+    // If still not found, try to fetch from database
     if (!found && supabaseClient) {
-        // Store the current message ID for the setTimeout
         const currentMsgId = currentMessage.id;
         
         // Fetch immediately
         supabaseClient
             .from('messages')
-            .select('sender_name, message')
+            .select('sender_name, message, image_url')
             .eq('id', replyToId)
             .single()
             .then(({ data, error }) => {
@@ -193,29 +240,65 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
                     // Update the quote element if it exists
                     const quoteElement = document.querySelector(`#msg-${currentMsgId} .message-reply-ref`);
                     if (quoteElement) {
-                        const span = quoteElement.querySelector('span');
-                        if (span) {
-                            const shortText = data.message.substring(0, 100);
-                            span.innerHTML = `Replying to <strong>${escapeHtml(data.sender_name)}</strong>: ${escapeHtml(shortText)}${data.message.length > 100 ? '...' : ''}`;
+                        const contentDiv = quoteElement.querySelector('.reply-content');
+                        if (contentDiv) {
+                            let displayText = '';
+                            let hasImage = data.image_url && data.image_url.trim() !== '';
+                            let hasText = data.message && data.message.trim() !== '';
+                            
+                            if (hasImage && !hasText) {
+                                displayText = '<i class="fas fa-image"></i> [Image]';
+                            } else if (hasImage && hasText) {
+                                displayText = `${escapeHtml(data.message.substring(0, 100))} <i class="fas fa-image"></i>`;
+                                if (data.message.length > 100) displayText += '...';
+                            } else {
+                                displayText = escapeHtml(data.message.substring(0, 100));
+                                if (data.message && data.message.length > 100) displayText += '...';
+                            }
+                            contentDiv.innerHTML = `Replying to <strong>${escapeHtml(data.sender_name)}</strong>: ${displayText}`;
+                            
+                            // Add image preview if exists
+                            if (data.image_url) {
+                                const previewDiv = quoteElement.querySelector('.reply-image-preview');
+                                if (previewDiv) {
+                                    previewDiv.innerHTML = `<img src="${data.image_url}" style="max-width: 50px; max-height: 50px; border-radius: 4px;">`;
+                                    previewDiv.style.display = 'block';
+                                }
+                            }
                         }
                     }
                 }
             })
             .catch(e => console.log('Error fetching original message:', e));
         
-        // Return loading state
+        // Return loading state with placeholder
         return `
             <div class="message-reply-ref">
                 <i class="fas fa-reply"></i> 
-                <span>Loading quoted message...</span>
+                <div class="reply-content">
+                    <span>Loading quoted message...</span>
+                </div>
+                <div class="reply-image-preview" style="display: none;"></div>
             </div>
         `;
     }
     
+    // Build the display text with image indicator
+    let displayText = quotedText;
+    if (isImageOnly) {
+        displayText = '<i class="fas fa-image"></i> [Image]';
+    } else if (quotedImage && !quotedText.includes('[Image]') && !quotedText.includes('fa-image')) {
+        displayText = `${quotedText} <i class="fas fa-image"></i>`;
+    }
+    
+    // Create the reply HTML with image preview if available
     return `
-        <div class="message-reply-ref">
+        <div class="message-reply-ref" data-original-image="${quotedImage || ''}">
             <i class="fas fa-reply"></i> 
-            <span>Replying to <strong>${escapeHtml(quotedSender)}</strong>: ${escapeHtml(quotedText)}</span>
+            <div class="reply-content">
+                <span>Replying to <strong>${escapeHtml(quotedSender)}</strong>: ${displayText}</span>
+            </div>
+            ${quotedImage ? `<div class="reply-image-preview"><img src="${quotedImage}" style="max-width: 50px; max-height: 50px; border-radius: 4px;"></div>` : '<div class="reply-image-preview" style="display: none;"></div>'}
         </div>
     `;
 }
@@ -625,6 +708,7 @@ function setupEventListeners() {
 }
 // Send reply - FIXED VERSION
 // Replace the sendReply function with this improved version
+// Replace the sendReply function with this improved version
 async function sendReply() {
     console.log('🟢 sendReply called from chat.js at:', new Date().toISOString());
     
@@ -646,7 +730,7 @@ async function sendReply() {
         return;
     }
     
-    // Set the message input
+    // Set the message input with the reply text
     elements.messageInput.value = replyText;
     
     // Store the replyToId in a temporary global variable
@@ -700,6 +784,9 @@ async function sendReply() {
             }
         }, 500);
     }
+    
+    // Clear the message input after sending (in case it wasn't cleared)
+    elements.messageInput.value = '';
     
     // Force scroll to bottom after sending
     setTimeout(() => {
