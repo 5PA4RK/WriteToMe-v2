@@ -433,7 +433,7 @@ header {
 
 .section-header h2 i { color: var(--primary); }
 
-/* Consolidated chat-messages with floral pattern */
+/* Chat messages with floral pattern */
 .chat-messages {
     flex: 1;
     overflow-y: auto;
@@ -1026,7 +1026,7 @@ header {
     color: white;
 }
 
-/* ========== MESSAGE REPLY REFERENCE ========== */
+/* ========== MESSAGE REPLY REFERENCE - CLEAN VERSION ========== */
 .message-reply-ref {
     font-size: 0.8rem;
     padding: 8px 12px;
@@ -1039,11 +1039,16 @@ header {
     align-items: center;
     gap: 8px;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color 0.2s ease;
     font-weight: 500;
+    position: relative;
+    width: 100%;
+    box-sizing: border-box;
 }
 
-.message-reply-ref:hover { background-color: rgba(0, 0, 0, 0.4); }
+.message-reply-ref:hover {
+    background-color: rgba(0, 0, 0, 0.25);
+}
 
 .message.sent .message-reply-ref {
     background-color: rgba(255, 255, 255, 0.15);
@@ -1051,16 +1056,87 @@ header {
     color: var(--text-primary);
 }
 
-.message.sent .message-reply-ref:hover { background-color: rgba(255, 255, 255, 0.35); }
-
-.dark-mode .message-reply-ref { 
-    background-color:  rgba(255, 255, 255, 0.15);
-    border-left-color: var(--primary-light);
-    color: var(--text-primary);
+.message.sent .message-reply-ref:hover {
+    background-color: rgba(255, 255, 255, 0.25);
 }
-.dark-mode .message.sent .message-reply-ref { 
-    background-color: rgba(255, 255, 255, 0.15);
-    color: var(--text-primary);
+
+.dark-mode .message-reply-ref {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-left-color: var(--primary-light);
+}
+
+.dark-mode .message-reply-ref:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.message-reply-ref .reply-content {
+    flex: 1;
+    word-break: break-word;
+    min-width: 0;
+}
+
+.message-reply-ref .reply-content i.fa-image {
+    margin-left: 4px;
+    color: var(--text-muted);
+    font-style: normal;
+}
+
+/* Reply image preview - tooltip style that doesn't affect layout */
+.reply-image-preview {
+    position: relative;
+    display: inline-flex;
+    margin-left: 8px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.reply-image-preview img {
+    max-width: 40px;
+    max-height: 40px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid var(--border-light);
+    background-color: var(--bg-secondary);
+    transition: transform 0.2s ease;
+}
+
+/* Tooltip that appears on hover - positioned absolutely so it doesn't affect layout */
+.reply-image-preview .preview-tooltip {
+    position: fixed;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: 8px;
+    box-shadow: var(--shadow-lg);
+    z-index: 10000;
+    display: none;
+    max-width: 300px;
+    max-height: 300px;
+    pointer-events: none;
+}
+
+.reply-image-preview .preview-tooltip img {
+    max-width: 280px;
+    max-height: 280px;
+    width: auto;
+    height: auto;
+    border-radius: var(--radius-sm);
+}
+
+/* Show tooltip on hover */
+.reply-image-preview:hover .preview-tooltip {
+    display: block;
+}
+
+/* Dark mode */
+.dark-mode .reply-image-preview img {
+    border-color: var(--border-medium);
+    background-color: var(--bg-tertiary);
+}
+
+.dark-mode .reply-image-preview .preview-tooltip {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-medium);
 }
 
 /* ========== UTILITIES ========== */
@@ -1135,12 +1211,12 @@ header {
     transform: scale(1.02);
 }
 
-/* Video embeds (YouTube, Vimeo, direct video) */
+/* Video embeds */
 .youtube-embed,
 .vimeo-embed,
 .dailymotion-embed {
     position: relative;
-    padding-bottom: 56.25%; /* 16:9 aspect ratio */
+    padding-bottom: 56.25%;
     height: 0;
     overflow: hidden;
     background-color: #000;
@@ -1158,7 +1234,7 @@ header {
     border: none;
 }
 
-/* Direct video embeds - better sizing */
+/* Direct video embeds */
 .video-embed video {
     width: 100%;
     max-height: 500px;
@@ -1295,7 +1371,7 @@ header {
     z-index: 2;
 }
 
-/* Social media placeholders - unified style */
+/* Social media placeholders */
 .instagram-placeholder,
 .facebook-placeholder,
 .twitter-placeholder,
@@ -1557,365 +1633,6 @@ header {
     color: rgba(255, 255, 255, 0.9);
 }
 
-/* Mobile optimizations for media embeds */
-@media (max-width: 768px) {
-    .embedded-image {
-        max-height: 300px;
-    }
-    
-    .video-embed video {
-        max-height: 350px;
-    }
-    
-    .instagram-placeholder,
-    .facebook-placeholder,
-    .twitter-placeholder,
-    .tiktok-placeholder,
-    .vimeo-placeholder,
-    .pinterest-placeholder,
-    .dailymotion-placeholder,
-    .twitch-placeholder,
-    .pdf-placeholder,
-    .link-placeholder {
-        padding: 30px 15px;
-        min-height: 150px;
-    }
-    
-    .instagram-placeholder i,
-    .facebook-placeholder i,
-    .twitter-placeholder i,
-    .tiktok-placeholder i,
-    .vimeo-placeholder i,
-    .pinterest-placeholder i,
-    .dailymotion-placeholder i,
-    .twitch-placeholder i,
-    .pdf-placeholder i,
-    .link-placeholder i {
-        font-size: 48px;
-    }
-    
-    .embed-message i {
-        font-size: 36px;
-    }
-    
-    .youtube-message i,
-    .vimeo-message i,
-    .facebook-message i,
-    .instagram-message i,
-    .twitter-message i,
-    .tiktok-message i,
-    .pinterest-message i {
-        font-size: 48px;
-    }
-    
-    .youtube-message,
-    .vimeo-message,
-    .facebook-message,
-    .instagram-message,
-    .twitter-message,
-    .tiktok-message,
-    .pinterest-message {
-        padding: 30px 15px;
-        min-height: 150px;
-    }
-}
-
-@media (max-width: 480px) {
-    .embedded-image {
-        max-height: 250px;
-    }
-    
-    .video-embed video {
-        max-height: 250px;
-    }
-    
-    .youtube-play-button {
-        width: 50px;
-        height: 35px;
-    }
-    
-    .youtube-play-button i {
-        font-size: 22px;
-    }
-    
-    .instagram-placeholder,
-    .facebook-placeholder,
-    .twitter-placeholder,
-    .tiktok-placeholder,
-    .vimeo-placeholder,
-    .pinterest-placeholder,
-    .dailymotion-placeholder,
-    .twitch-placeholder,
-    .pdf-placeholder,
-    .link-placeholder {
-        padding: 20px 10px;
-        min-height: 120px;
-    }
-    
-    .instagram-placeholder i,
-    .facebook-placeholder i,
-    .twitter-placeholder i,
-    .tiktok-placeholder i,
-    .vimeo-placeholder i,
-    .pinterest-placeholder i,
-    .dailymotion-placeholder i,
-    .twitch-placeholder i,
-    .pdf-placeholder i,
-    .link-placeholder i {
-        font-size: 36px;
-    }
-    
-    .youtube-privacy-notice {
-        font-size: 0.7rem;
-        padding: 4px;
-    }
-}
-
-/* Social media placeholders */
-.instagram-placeholder,
-.facebook-placeholder,
-.twitter-placeholder,
-.tiktok-placeholder,
-.vimeo-placeholder {
-    padding: 40px 20px;
-    background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
-    text-align: center;
-    cursor: pointer;
-    border-radius: var(--radius-sm);
-    transition: all 0.3s ease;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 150px;
-}
-
-.instagram-placeholder:hover,
-.facebook-placeholder:hover,
-.twitter-placeholder:hover,
-.tiktok-placeholder:hover,
-.vimeo-placeholder:hover {
-    background: var(--primary);
-    color: white;
-}
-
-.instagram-placeholder i,
-.facebook-placeholder i,
-.twitter-placeholder i,
-.tiktok-placeholder i,
-.vimeo-placeholder i {
-    font-size: 48px;
-    margin-bottom: 10px;
-    display: block;
-}
-
-.instagram-placeholder small,
-.facebook-placeholder small,
-.twitter-placeholder small,
-.tiktok-placeholder small,
-.vimeo-placeholder small {
-    display: block;
-    margin-top: 10px;
-    opacity: 0.7;
-    font-size: 0.7rem;
-}
-
-/* Vimeo specific */
-.vimeo-thumbnail-placeholder {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-
-.vimeo-thumbnail-placeholder i {
-    font-size: 64px;
-    color: #1ab7ea;
-    margin-bottom: 10px;
-}
-
-/* Platform-specific message styles */
-.youtube-message,
-.vimeo-message,
-.facebook-message,
-.instagram-message,
-.twitter-message,
-.tiktok-message {
-    padding: 40px 20px;
-    text-align: center;
-    background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
-    border-radius: var(--radius-sm);
-    min-height: 200px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-
-.youtube-message i,
-.vimeo-message i,
-.facebook-message i,
-.instagram-message i,
-.twitter-message i,
-.tiktok-message i {
-    font-size: 64px;
-    margin-bottom: 20px;
-}
-
-.youtube-message i { color: #ff0000; }
-.vimeo-message i { color: #1ab7ea; }
-.facebook-message i { color: #1877f2; }
-.instagram-message i { color: #e4405f; }
-.twitter-message i { color: #1da1f2; }
-.tiktok-message i { color: #000000; }
-
-.dark-mode .tiktok-message i { color: #ffffff; }
-
-.youtube-message p,
-.vimeo-message p,
-.facebook-message p,
-.instagram-message p,
-.twitter-message p,
-.tiktok-message p {
-    margin: 10px 0;
-    color: var(--text-secondary);
-}
-
-.youtube-message a,
-.vimeo-message a,
-.facebook-message a,
-.instagram-message a,
-.twitter-message a,
-.tiktok-message a {
-    color: var(--primary);
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.youtube-message a:hover,
-.vimeo-message a:hover,
-.facebook-message a:hover,
-.instagram-message a:hover,
-.twitter-message a:hover,
-.tiktok-message a:hover {
-    text-decoration: underline;
-}
-
-/* Embed message for platforms that can't be embedded */
-.embed-message {
-    padding: 30px 20px;
-    text-align: center;
-    background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
-    border-radius: var(--radius-sm);
-}
-
-.embed-message i {
-    font-size: 48px;
-    margin-bottom: 15px;
-    display: block;
-    color: var(--text-secondary);
-}
-
-.embed-message p {
-    margin: 0;
-    color: var(--text-secondary);
-}
-
-.embed-message a {
-    color: var(--primary);
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.embed-message a:hover {
-    text-decoration: underline;
-}
-
-/* Loading states */
-.embed-loading {
-    padding: 40px;
-    text-align: center;
-    color: var(--text-secondary);
-}
-
-.embed-loading i {
-    font-size: 24px;
-    margin-right: 10px;
-    animation: spin 1s linear infinite;
-}
-
-/* Embed error */
-.embed-error {
-    padding: 20px;
-    text-align: center;
-    background-color: var(--bg-tertiary);
-    border-radius: var(--radius-sm);
-    color: var(--danger);
-}
-
-.embed-error i {
-    margin-right: 8px;
-}
-
-.embed-error a {
-    color: var(--primary);
-    text-decoration: none;
-}
-
-.embed-error a:hover {
-    text-decoration: underline;
-}
-
-/* Dark mode adjustments for embeds */
-.dark-mode .media-embed {
-    background-color: var(--bg-tertiary);
-    border-color: var(--border-medium);
-}
-
-.dark-mode .media-source {
-    background-color: var(--bg-secondary);
-    border-top-color: var(--border-medium);
-}
-
-.dark-mode .embedded-image {
-    border: 1px solid var(--border-medium);
-}
-
-.dark-mode .youtube-placeholder {
-    background-color: #111;
-}
-
-.dark-mode .instagram-placeholder,
-.dark-mode .facebook-placeholder,
-.dark-mode .twitter-placeholder,
-.dark-mode .tiktok-placeholder,
-.dark-mode .vimeo-placeholder {
-    background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
-}
-
-.dark-mode .embed-message {
-    background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
-}
-
-/* Message specific adjustments for embeds */
-.message.sent .media-embed {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
-}
-
-.message.sent .media-source {
-    background-color: rgba(0, 0, 0, 0.2);
-    border-top-color: rgba(255, 255, 255, 0.1);
-}
-
-.message.sent .media-link-reference {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.message.sent .media-link-reference a {
-    color: rgba(255, 255, 255, 0.9);
-}
-
 /* ========== EMOJI PICKER ========== */
 .emoji-picker {
     position: fixed;
@@ -1976,7 +1693,6 @@ header {
     .logo h1 { font-size: 1.1rem; }
     .logo i { font-size: 22px; }
     
-    /* Chat section full width */
     .chat-section {
         height: calc(100vh - 130px);
         margin: 0;
@@ -1990,7 +1706,6 @@ header {
     
     .chat-messages { 
         padding: 10px; 
-        /* Keep floral pattern on mobile */
         background-image: linear-gradient(rgba(250, 246, 235, 0.6), rgba(250, 246, 235, .9)), 
                           url('media/floral-pattern-background.png');
     }
@@ -2000,7 +1715,6 @@ header {
                           url('media/floral-pattern-background.png');
     }
     
-    /* Messages */
     .message {
         max-width: 85%;
         padding: 10px 12px;
@@ -2009,7 +1723,6 @@ header {
     .message-sender { font-size: 0.8rem; }
     .message-text { font-size: 0.95rem; }
     
-    /* Chat input */
     .chat-input-area {
         padding: 8px 8px;
         gap: 6px;
@@ -2079,7 +1792,6 @@ header {
         margin: 0;
     }
     
-    /* Emoji picker */
     .emoji-picker {
         bottom: 70px;
         animation: slideUp 0.2s ease;
@@ -2096,7 +1808,6 @@ header {
         }
     }
     
-    /* Typing indicator */
     .typing-indicator {
         padding: 6px 12px;
         font-size: 0.85rem;
@@ -2104,7 +1815,6 @@ header {
         border-radius: 16px;
     }
     
-    /* Header controls */
     .user-status {
         padding: 4px 10px;
         font-size: 0.85rem;
@@ -2115,7 +1825,6 @@ header {
         font-size: 0.8rem;
     }
     
-    /* Buttons */
     .btn-small,
     #logoutBtn,
     #pendingGuestsBtn,
@@ -2125,7 +1834,6 @@ header {
         min-height: 40px;
     }
     
-    /* Message actions */
     .message-action-dots {
         opacity: 0.7;
         padding: 6px;
@@ -2138,7 +1846,6 @@ header {
         border-radius: 20px;
     }
     
-    /* Message actions menu */
     .message-actions-menu {
         position: fixed !important;
         top: auto !important;
@@ -2174,7 +1881,6 @@ header {
         border-radius: 10px !important;
     }
     
-    /* Modal improvements */
     .modal-body { max-height: 70vh; }
     
     #replyModal .modal-content {
@@ -2204,7 +1910,6 @@ header {
         font-size: 1.2rem;
     }
     
-    /* History cards */
     .history-cards { 
         grid-template-columns: 1fr; 
         gap: 10px;
@@ -2212,78 +1917,44 @@ header {
     
     .notes-panel { width: 100%; }
     
-    /* Admin tabs */
     .admin-tab {
         padding: 8px 12px;
         font-size: 0.9rem;
     }
     
-    /* Media embeds mobile */
-    .embedded-image {
-        max-height: 200px;
-    }
-    
-    .youtube-embed,
-    .vimeo-embed {
-        padding-bottom: 56.25%;
-    }
-    
-    .video-embed video {
-        max-height: 250px;
-    }
-    
-    .audio-embed {
-        padding: 10px;
-    }
-    
-    .media-source {
+    /* Reply reference mobile */
+    .message-reply-ref {
         padding: 6px 10px;
-        font-size: 0.8rem;
+        font-size: 0.75rem;
     }
     
-    .media-link-reference {
-        font-size: 0.7rem;
-        padding: 3px 6px;
+    .message-reply-ref .reply-content {
+        max-width: calc(100% - 50px);
     }
     
-    .instagram-placeholder,
-    .facebook-placeholder,
-    .twitter-placeholder,
-    .tiktok-placeholder,
-    .vimeo-placeholder {
-        padding: 30px 15px;
-        min-height: 120px;
+    .reply-image-preview img {
+        max-width: 32px;
+        max-height: 32px;
     }
     
-    .instagram-placeholder i,
-    .facebook-placeholder i,
-    .twitter-placeholder i,
-    .tiktok-placeholder i,
-    .vimeo-placeholder i {
-        font-size: 36px;
+    /* Mobile tooltip - tap to preview */
+    .reply-image-preview .preview-tooltip {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        max-width: 85vw;
+        max-height: 70vh;
+        z-index: 10001;
     }
     
-    .embed-message i {
-        font-size: 36px;
+    .reply-image-preview .preview-tooltip img {
+        max-width: 80vw;
+        max-height: 60vh;
     }
     
-    .youtube-message i,
-    .vimeo-message i,
-    .facebook-message i,
-    .instagram-message i,
-    .twitter-message i,
-    .tiktok-message i {
-        font-size: 48px;
-    }
-    
-    .youtube-message,
-    .vimeo-message,
-    .facebook-message,
-    .instagram-message,
-    .twitter-message,
-    .tiktok-message {
-        padding: 30px 15px;
-        min-height: 150px;
+    .reply-image-preview:active .preview-tooltip {
+        display: block;
     }
 }
 
@@ -2317,7 +1988,6 @@ header {
         justify-content: center; 
     }
     
-    /* Even more compact chat input */
     .chat-input-area { 
         padding: 6px 6px; 
         gap: 4px;
@@ -2351,7 +2021,6 @@ header {
         font-size: 1.3rem; 
     }
     
-    /* Full screen modals on very small devices */
     .modal-content {
         max-width: 100%;
         height: 100%;
@@ -2366,7 +2035,6 @@ header {
         border-radius: 16px;
     }
     
-    /* Emoji picker adjustments */
     .emoji-picker {
         bottom: 65px;
         width: 260px;
@@ -2379,7 +2047,6 @@ header {
         padding: 6px;
     }
     
-    /* Media embeds */
     .embedded-image {
         max-height: 150px;
     }
@@ -2435,300 +2102,49 @@ body.modal-open {
     }
 }
 
-/* Add these styles for better reply previews */
-.message-reply-ref {
-    font-size: 0.8rem;
-    padding: 8px 12px;
-    margin-bottom: 8px;
-    background-color: rgba(0, 0, 0, 0.15);
-    border-left: 4px solid var(--primary);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    font-weight: 500;
+/* Viewport height fix for mobile */
+:root {
+    --vh: 1vh;
 }
 
-.message-reply-ref .reply-content {
-    flex: 1;
-    word-break: break-word;
-}
-
-.message-reply-ref .reply-content i.fa-image {
-    margin-left: 4px;
-    color: var(--text-muted);
-}
-
-.message-reply-ref:hover {
-    background-color: rgba(0, 0, 0, 0.25);
-    transform: translateX(2px);
-}
-
-.message.sent .message-reply-ref {
-    background-color: rgba(255, 255, 255, 0.15);
-    border-left-color: rgba(255, 255, 255, 0.8);
-    color: var(--text-primary);
-}
-
-.message.sent .message-reply-ref:hover {
-    background-color: rgba(255, 255, 255, 0.25);
-}
-
-/* Reply image preview on hover */
-.message-reply-ref:hover .reply-image-preview {
-    display: block !important;
-    position: absolute;
-    bottom: 100%;
-    left: 0;
-    background-color: var(--bg-primary);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-sm);
-    padding: 4px;
-    box-shadow: var(--shadow-md);
-    z-index: 100;
-}
-
-.reply-image-preview {
-    position: absolute;
-    bottom: 100%;
-    left: 0;
-    background-color: var(--bg-primary);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-sm);
-    padding: 4px;
-    box-shadow: var(--shadow-md);
-    z-index: 100;
-    display: none;
-}
-
-.reply-image-preview img {
-    max-width: 100px;
-    max-height: 100px;
-    object-fit: cover;
-    border-radius: 4px;
-}
-
-/* Dark mode adjustments */
-.dark-mode .message-reply-ref {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-left-color: var(--primary-light);
-}
-
-.dark-mode .message-reply-ref:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-}
-
-.dark-mode .reply-image-preview {
-    background-color: var(--bg-secondary);
-    border-color: var(--border-medium);
-}
-
-/* Mobile optimizations */
 @media (max-width: 768px) {
-    .message-reply-ref {
-        padding: 6px 10px;
-        font-size: 0.75rem;
+    .chat-section {
+        height: calc(var(--vh, 1vh) * 100 - 130px) !important;
     }
     
-    .message-reply-ref .reply-content {
-        max-width: calc(100% - 24px);
+    .message.optimistic {
+        opacity: 0.7;
+        animation: pulse 1s ease-in-out;
     }
     
-    .reply-image-preview {
-        max-width: 80px;
+    @keyframes pulse {
+        0%, 100% { opacity: 0.7; }
+        50% { opacity: 1; }
     }
     
-    .reply-image-preview img {
-        max-width: 70px;
-        max-height: 70px;
-    }
-}
-/* Add or update these styles for better reply image previews */
-/* Add these styles for better reply previews - FIXED VERSION */
-.message-reply-ref {
-    font-size: 0.8rem;
-    padding: 8px 12px;
-    margin-bottom: 8px;
-    background-color: rgba(0, 0, 0, 0.15);
-    border-left: 4px solid var(--primary);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    transition: background-color var(--transition-fast);
-    font-weight: 500;
-    position: relative;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.message-reply-ref .reply-content {
-    flex: 1;
-    word-break: break-word;
-    min-width: 0; /* Prevents flex overflow */
-}
-
-.message-reply-ref .reply-content i.fa-image {
-    margin-left: 4px;
-    color: var(--text-muted);
-    font-style: normal;
-}
-
-.message-reply-ref:hover {
-    background-color: rgba(0, 0, 0, 0.25);
-    /* Remove transform to prevent layout shift */
-}
-
-.message.sent .message-reply-ref {
-    background-color: rgba(255, 255, 255, 0.15);
-    border-left-color: rgba(255, 255, 255, 0.8);
-    color: var(--text-primary);
-}
-
-.message.sent .message-reply-ref:hover {
-    background-color: rgba(255, 255, 255, 0.25);
-}
-
-/* Reply image preview - always visible for image replies */
-.reply-image-preview {
-    position: relative;
-    display: inline-flex;
-    margin-left: 8px;
-    flex-shrink: 0;
-    cursor: pointer;
-}
-
-.reply-image-preview img {
-    max-width: 40px;
-    max-height: 40px;
-    border-radius: 6px;
-    object-fit: cover;
-    border: 1px solid var(--border-light);
-    background-color: var(--bg-secondary);
-    transition: transform 0.2s ease;
-}
-
-/* On hover, show larger preview using a pseudo-element or tooltip approach */
-.reply-image-preview:hover {
-    position: relative;
-}
-
-.reply-image-preview:hover::after {
-    content: '';
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 300px;
-    height: 300px;
-    background-image: var(--preview-image, none);
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    background-color: var(--bg-primary);
-    border: 2px solid var(--border-light);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-xl);
-    z-index: 10000;
-    pointer-events: none;
-}
-
-/* Alternative: Use a tooltip-style preview that doesn't affect layout */
-.reply-image-preview {
-    position: relative;
-}
-
-.reply-image-preview .preview-tooltip {
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: var(--bg-primary);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-sm);
-    padding: 4px;
-    box-shadow: var(--shadow-md);
-    z-index: 1000;
-    display: none;
-    margin-bottom: 8px;
-    white-space: nowrap;
-}
-
-.reply-image-preview .preview-tooltip img {
-    max-width: 150px;
-    max-height: 150px;
-    width: auto;
-    height: auto;
-}
-
-.reply-image-preview:hover .preview-tooltip {
-    display: block;
-}
-
-/* For mobile, disable hover preview or use tap */
-@media (max-width: 768px) {
-    .reply-image-preview .preview-tooltip {
+    body.modal-open {
+        overflow: hidden;
         position: fixed;
-        bottom: auto;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 10001;
-        max-width: 80vw;
-        white-space: normal;
+        width: 100%;
+        height: 100%;
     }
     
-    .reply-image-preview .preview-tooltip img {
-        max-width: 80vw;
-        max-height: 60vh;
-        width: auto;
-        height: auto;
+    #replyModal.modal-overlay {
+        align-items: flex-end;
     }
     
-    /* Add tap-to-preview on mobile */
-    .reply-image-preview:active .preview-tooltip {
-        display: block;
-    }
-}
-
-/* Dark mode adjustments */
-.dark-mode .message-reply-ref {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-left-color: var(--primary-light);
-}
-
-.dark-mode .message-reply-ref:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-}
-
-.dark-mode .reply-image-preview img {
-    border-color: var(--border-medium);
-    background-color: var(--bg-tertiary);
-}
-
-.dark-mode .reply-image-preview .preview-tooltip {
-    background-color: var(--bg-secondary);
-    border-color: var(--border-medium);
-}
-
-/* Mobile optimizations */
-@media (max-width: 768px) {
-    .message-reply-ref {
-        padding: 6px 10px;
-        font-size: 0.75rem;
+    #replyModal .modal-content {
+        margin-bottom: 0;
+        border-radius: 20px 20px 0 0;
+        animation: slideUp 0.3s ease;
     }
     
-    .message-reply-ref .reply-content {
-        max-width: calc(100% - 50px);
-    }
-    
-    .reply-image-preview img {
-        max-width: 32px;
-        max-height: 32px;
+    @keyframes slideUp {
+        from {
+            transform: translateY(100%);
+        }
+        to {
+            transform: translateY(0);
+        }
     }
 }
