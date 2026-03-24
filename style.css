@@ -1771,10 +1771,6 @@ header {
         padding: 10px 12px; 
     }
     
-    .section-header { 
-        padding: 10px 12px; 
-    }
-    
     .chat-messages { 
         padding: 10px; 
         background-image: linear-gradient(rgba(250, 246, 235, 0.6), rgba(250, 246, 235, .9)), 
