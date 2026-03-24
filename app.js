@@ -1,5 +1,8 @@
 // Add this at the top of app.js with other global variables
 let isSendingMessage = false;
+let pendingImageUpload = null;
+let imageUploadTimeout = null;
+
 
 // Supabase Configuration
 const SUPABASE_URL = 'https://plqvqenoroacvzwtgoxq.supabase.co';
@@ -470,18 +473,55 @@ if (emojiPicker) {
 // In the setupEventListeners function, update the messageInput keydown handler:
 if (messageInput) {
     messageInput.addEventListener('keydown', (e) => {
-        // Check if it's Enter AND (Ctrl or Cmd) is pressed - this sends the message
+        // Enter + Ctrl/Cmd sends message
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !isSendingMessage) {
             e.preventDefault();
             e.stopPropagation();
             sendMessage();
+            
+            // Force scroll after sending on mobile
+            setTimeout(() => {
+                if (chatMessages) {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            }, 200);
         }
-        // Plain Enter just adds a new line (default behavior)
-        // No need to prevent default for plain Enter
+    });
+    
+    // Handle focus to ensure proper scrolling
+    messageInput.addEventListener('focus', function() {
+        if (window.innerWidth <= 768) {
+            setTimeout(() => {
+                this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                scrollChatToBottom(300);
+            }, 300);
+        }
     });
     
     messageInput.addEventListener('input', handleTyping);
 }
+
+function fixMobileViewport() {
+    if (window.innerWidth <= 768) {
+        // Fix for iOS viewport issues
+        const setViewportHeight = () => {
+            let vh = window.innerHeight * 0.01;
+            document.documentElement.style.setProperty('--vh', `${vh}px`);
+            
+            const chatSection = document.querySelector('.chat-section');
+            if (chatSection) {
+                chatSection.style.height = `calc(var(--vh, 1vh) * 100 - 130px)`;
+            }
+        };
+        
+        setViewportHeight();
+        window.addEventListener('resize', setViewportHeight);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(setViewportHeight, 100);
+        });
+    }
+}
+
     
     if (sendMessageBtn) {
         sendMessageBtn.addEventListener('click', sendMessage);
@@ -2246,11 +2286,7 @@ async function handleTyping() {
 // Update the sendMessage function
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
-    console.log('Current replyingTo:', appState.replyingTo);
-    console.log('Current tempReplyTo:', window.__tempReplyTo);
-    console.log('isSendingMessage:', isSendingMessage);
     
-    // Prevent double-sending
     if (isSendingMessage) {
         console.log('Message already sending, skipping...');
         return;
@@ -2266,29 +2302,112 @@ async function sendMessage() {
     
     if (!messageText && !imageFile) return;
     
-    // Set sending flag
     isSendingMessage = true;
+    
+    // Disable send button immediately to prevent double clicks
+    if (sendMessageBtn) {
+        sendMessageBtn.disabled = true;
+        sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+    }
     
     let imageUrl = null;
     
     if (imageFile) {
+        // Show preview immediately for better UX
         const reader = new FileReader();
         reader.onload = async function(e) {
             imageUrl = e.target.result;
-            await sendMessageToDB(messageText, imageUrl, window.__tempReplyTo || appState.replyingTo);
-            // Reset sending flag after completion
+            
+            // Show optimistic message with image preview
+            const optimisticMessage = {
+                id: 'temp_' + Date.now(),
+                sender: appState.userName,
+                text: messageText,
+                image: imageUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false,
+                reactions: [],
+                reply_to: window.__tempReplyTo || appState.replyingTo,
+                is_optimistic: true
+            };
+            
+            // Display optimistic message immediately
+            if (window.ChatModule) {
+                window.ChatModule.displayMessage(optimisticMessage);
+            }
+            
+            // Clear the file input
+            imageUpload.value = '';
+            
+            // Send to database
+            const result = await sendMessageToDB(messageText, imageUrl, window.__tempReplyTo || appState.replyingTo);
+            
+            // If successful, replace optimistic message with real one
+            if (result && result.success && result.data) {
+                const tempElement = document.getElementById(`msg-${optimisticMessage.id}`);
+                if (tempElement) {
+                    tempElement.remove();
+                }
+                
+                // Display real message
+                if (window.ChatModule) {
+                    window.ChatModule.displayMessage({
+                        id: result.data.id,
+                        sender: appState.userName,
+                        text: messageText,
+                        image: imageUrl,
+                        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                        type: 'sent',
+                        is_historical: false,
+                        reactions: [],
+                        reply_to: window.__tempReplyTo || appState.replyingTo
+                    });
+                }
+            }
+            
             isSendingMessage = false;
+            if (sendMessageBtn) {
+                sendMessageBtn.disabled = false;
+                sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+            }
         };
         reader.readAsDataURL(imageFile);
-        imageUpload.value = '';
     } else {
-        await sendMessageToDB(messageText, null, window.__tempReplyTo || appState.replyingTo);
-        // Reset sending flag after completion
+        // Text-only message - send immediately
+        const result = await sendMessageToDB(messageText, null, window.__tempReplyTo || appState.replyingTo);
+        
         isSendingMessage = false;
+        if (sendMessageBtn) {
+            sendMessageBtn.disabled = false;
+            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+        }
     }
     
+    // Clear reply state
+    const replyToClear = window.__tempReplyTo || appState.replyingTo;
+    appState.replyingTo = null;
+    window.__tempReplyTo = null;
+    
+    // Clear message input
     messageInput.value = '';
     messageInput.style.height = 'auto';
+    
+    // Scroll to bottom after sending
+    setTimeout(() => {
+        if (chatMessages) {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    }, 100);
+}
+
+// Add this function to handle scroll after keyboard closes
+function scrollChatToBottom(delay = 300) {
+    setTimeout(() => {
+        if (chatMessages && !appState.isViewingHistory) {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    }, delay);
 }
 
 async function sendMessageToDB(text, imageUrl, replyToId = null) {
