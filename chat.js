@@ -22,7 +22,6 @@ const ChatModule = (function() {
     }
 
 // Display a message in the chat
-// Display a message in the chat
 function displayMessage(message) {
     if (!elements.chatMessages) {
         console.error('Chat messages container not found');
@@ -34,10 +33,13 @@ function displayMessage(message) {
         return;
     }
     
-    // Check if message already exists to prevent duplicates
-    if (document.getElementById(`msg-${message.id}`)) {
-        console.log('Message already exists, skipping display:', message.id);
-        return;
+    // Check if message already exists (except optimistic messages)
+    if (message.id && !message.is_optimistic) {
+        const existingMsg = document.getElementById(`msg-${message.id}`);
+        if (existingMsg) {
+            console.log('Message already exists, skipping display:', message.id);
+            return;
+        }
     }
     
     const messageDiv = document.createElement('div');
@@ -45,7 +47,11 @@ function displayMessage(message) {
     if (message.is_historical) {
         messageDiv.classList.add('historical');
     }
-    messageDiv.id = `msg-${message.id}`;
+    if (message.is_optimistic) {
+        messageDiv.classList.add('optimistic');
+        messageDiv.style.opacity = '0.7';
+    }
+    messageDiv.id = message.is_optimistic ? `msg-${message.id}` : `msg-${message.id}`;
     
     let messageContent = '';
     
@@ -56,42 +62,31 @@ function displayMessage(message) {
     
     // Process message text for media embeds
     if (message.text) {
-        // Escape HTML first
         const escapedText = escapeHtml(message.text);
-        
-        // Check for media embeds
         const mediaEmbed = createMediaEmbed(message.text);
         
         if (mediaEmbed) {
-            // If media embed found, show it with the text
             const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
             const dirAttr = hasArabic ? ' dir="auto"' : '';
             
-            // Split text to show the link and embed separately
             const textWithoutUrl = message.text.replace(mediaEmbed.url, '').trim();
             
             if (textWithoutUrl) {
-                // If there's text before/after the link
                 const textWithBreaks = escapeHtml(textWithoutUrl).replace(/\n/g, '<br>');
                 messageContent += `<div class="message-text"${dirAttr}>${textWithBreaks}</div>`;
             }
             
-            // Add the media embed
             messageContent += mediaEmbed.embedHtml;
-            
-            // Add the original link as a small reference
             messageContent += `<div class="media-link-reference"><i class="fas fa-link"></i> <a href="${mediaEmbed.url}" target="_blank">${mediaEmbed.url.substring(0, 50)}${mediaEmbed.url.length > 50 ? '...' : ''}</a></div>`;
         } else {
-            // No media embed, just show text with line breaks
             const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
             const dirAttr = hasArabic ? ' dir="auto"' : '';
-            
             const textWithBreaks = escapedText.replace(/\n/g, '<br>');
             messageContent += `<div class="message-text"${dirAttr}>${textWithBreaks}</div>`;
         }
     }
     
-    // Add image if present (uploaded file)
+    // Add image if present
     if (message.image) {
         messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')">`;
     }
@@ -99,11 +94,11 @@ function displayMessage(message) {
     // Add reactions section
     const reactionsHtml = `<div class="message-reactions"></div>`;
     
-    // Add action button (three dots)
-    const actionButton = `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
+    // Add action button (only for non-optimistic messages)
+    const actionButton = message.is_optimistic ? '' : `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
     
-    // Actions menu (initially hidden)
-    const actionsMenu = getActionsMenuHtml(message);
+    // Actions menu (only for non-optimistic messages)
+    const actionsMenu = message.is_optimistic ? '' : getActionsMenuHtml(message);
     
     messageDiv.innerHTML = `
         <div class="message-sender">${escapeHtml(message.sender)}</div>
@@ -126,22 +121,27 @@ function displayMessage(message) {
         renderReactions(reactionsContainer, message.reactions);
     }
     
-    // Store in appState.messages for future reference
-    if (appState && appState.messages && Array.isArray(appState.messages)) {
+    // Store in appState.messages
+    if (appState && appState.messages && Array.isArray(appState.messages) && !message.is_optimistic) {
         const exists = appState.messages.some(m => m.id === message.id);
         if (!exists) {
             appState.messages.push(message);
-            
-            // Keep only last 100 messages in state
             if (appState.messages.length > 100) {
                 appState.messages = appState.messages.slice(-100);
             }
         }
     }
     
-    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
-}
-// Helper function to get reply quote HTML
+    // Scroll to bottom - use requestAnimationFrame for smooth scrolling
+    requestAnimationFrame(() => {
+        if (elements.chatMessages) {
+            elements.chatMessages.scrollTo({
+                top: elements.chatMessages.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+    });
+}// Helper function to get reply quote HTML
 function getReplyQuoteHtml(replyToId, currentMessage) {
     let quotedSender = 'someone';
     let quotedText = 'a message';
@@ -469,14 +469,14 @@ function openReplyModal(messageId, senderName, messageText) {
     // Set the sender name
     elements.replyToName.textContent = senderName || 'Unknown';
     
-    // Handle long messages - truncate for display but keep full for reference
+    // Handle long messages - truncate for display
     let displayText = messageText || '';
     if (displayText.length > 150) {
         displayText = displayText.substring(0, 150) + '...';
     }
     elements.replyToContent.textContent = displayText;
     
-    // Store the full message text as a data attribute for reference
+    // Store the full message text as a data attribute
     elements.replyToContent.setAttribute('data-full-text', messageText || '');
     
     // Clear any previous input
@@ -484,30 +484,154 @@ function openReplyModal(messageId, senderName, messageText) {
     
     // Show the modal
     elements.replyModal.style.display = 'flex';
-    
-    // On mobile, add a class to body to prevent background scrolling
     document.body.classList.add('modal-open');
     
-    // Focus on the input with a delay for mobile
-    setTimeout(() => {
-        if (elements.replyInput) {
-            elements.replyInput.focus();
-            // On mobile, try to open the keyboard
-            if (window.innerWidth <= 768) {
-                elements.replyInput.click();
+    // For mobile, prevent background scrolling
+    if (window.innerWidth <= 768) {
+        // Ensure the modal is positioned correctly
+        elements.replyModal.style.top = '0';
+        elements.replyModal.style.left = '0';
+        elements.replyModal.style.right = '0';
+        elements.replyModal.style.bottom = '0';
+        elements.replyModal.style.position = 'fixed';
+        
+        // Focus the input with a delay for mobile
+        setTimeout(() => {
+            if (elements.replyInput) {
+                elements.replyInput.focus();
+                
+                // Scroll the input into view
+                setTimeout(() => {
+                    elements.replyInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 100);
+            }
+        }, 100);
+    } else {
+        // Desktop: just focus
+        setTimeout(() => {
+            if (elements.replyInput) {
+                elements.replyInput.focus();
+            }
+        }, 100);
+    }
+}
+
+// Add debounced scroll handler for performance
+let scrollTimeout = null;
+function handleChatScroll() {
+    if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+    }
+    scrollTimeout = setTimeout(() => {
+        // Throttled scroll handling
+        if (elements.chatMessages && elements.chatMessages.scrollTop < 50) {
+            // User scrolled to top - could load more messages
+        }
+    }, 100);
+}
+
+// Add this to setupEventListeners
+function setupEventListeners() {
+    // Handle reply button clicks with delegation
+    const handleReplyClick = function(e) {
+        const replyBtn = e.target.closest('.reply-btn');
+        if (replyBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const messageId = replyBtn.dataset.messageId;
+            const sender = replyBtn.dataset.sender;
+            const messageText = replyBtn.dataset.messageText;
+            
+            console.log('Reply button clicked:', { messageId, sender });
+            
+            // Close any open message actions menu
+            if (window.ChatModule && typeof window.ChatModule.closeMessageActions === 'function') {
+                window.ChatModule.closeMessageActions();
+            }
+            
+            // Call the openReplyModal function
+            if (window.ChatModule && typeof window.ChatModule.openReplyModal === 'function') {
+                window.ChatModule.openReplyModal(messageId, sender, messageText);
             }
         }
-    }, 300);
+    };
+    
+    // Add event listeners with passive: false for better touch handling
+    document.addEventListener('click', handleReplyClick);
+    document.addEventListener('touchstart', handleReplyClick, { passive: false });
+    
+    // Add scroll listener with throttling
+    if (elements.chatMessages) {
+        elements.chatMessages.addEventListener('scroll', handleChatScroll, { passive: true });
+    }
+    
+    // Send reply button handler
+    if (elements.sendReplyBtn) {
+        // Remove any existing listeners
+        const oldBtn = elements.sendReplyBtn;
+        const newBtn = oldBtn.cloneNode(true);
+        oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+        elements.sendReplyBtn = newBtn;
+        
+        let isProcessing = false;
+        
+        const handleSendReply = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (isProcessing) {
+                console.log('Reply already processing, skipping...');
+                return;
+            }
+            
+            isProcessing = true;
+            sendReply().finally(() => {
+                setTimeout(() => {
+                    isProcessing = false;
+                }, 1000);
+            });
+        };
+        
+        elements.sendReplyBtn.addEventListener('click', handleSendReply);
+        elements.sendReplyBtn.addEventListener('touchstart', handleSendReply, { passive: false });
+    }
+    
+    // Close reply modal handlers
+    if (elements.closeReplyModal) {
+        const handleCloseModal = () => {
+            elements.replyModal.style.display = 'none';
+            document.body.classList.remove('modal-open');
+            if (appState) appState.replyingTo = null;
+        };
+        
+        elements.closeReplyModal.addEventListener('click', handleCloseModal);
+        elements.closeReplyModal.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleCloseModal();
+        }, { passive: false });
+    }
+    
+    // Click outside modal to close
+    if (elements.replyModal) {
+        elements.replyModal.addEventListener('click', (e) => {
+            if (e.target === elements.replyModal) {
+                elements.replyModal.style.display = 'none';
+                document.body.classList.remove('modal-open');
+                if (appState) appState.replyingTo = null;
+            }
+        });
+    }
 }
 // Send reply - FIXED VERSION
-// Send reply - FIXED VERSION with better desktop handling
+// Replace the sendReply function with this improved version
 async function sendReply() {
     console.log('🟢 sendReply called from chat.js at:', new Date().toISOString());
     
-    const replyText = elements.replyInput.value.trim();
+    const replyText = elements.replyInput ? elements.replyInput.value.trim() : '';
     if (!replyText) return;
     
-    // Store the replyTo ID in a local variable
+    // Store the replyTo ID
     const replyToId = appState ? appState.replyingTo : null;
     console.log('Replying to message ID:', replyToId);
     
@@ -516,47 +640,73 @@ async function sendReply() {
         return;
     }
     
-    // Close modal first and disable the button to prevent double-clicks
-    elements.replyModal.style.display = 'none';
+    // Get the message input element
+    if (!elements.messageInput) {
+        console.error('Message input not found');
+        return;
+    }
     
-    // Temporarily disable the send button to prevent double-clicks
+    // Set the message input
+    elements.messageInput.value = replyText;
+    
+    // Store the replyToId in a temporary global variable
+    window.__tempReplyTo = replyToId;
+    
+    // Clear the appState replyingTo
+    appState.replyingTo = null;
+    
+    // Close the modal first
+    if (elements.replyModal) {
+        elements.replyModal.style.display = 'none';
+        document.body.classList.remove('modal-open');
+    }
+    
+    // Disable send button temporarily
     if (elements.sendReplyBtn) {
         elements.sendReplyBtn.disabled = true;
     }
     
-    // Set the message input
-    if (elements.messageInput) {
-        elements.messageInput.value = replyText;
-        console.log('Message input set to:', replyText);
-    }
-    
-    // IMPORTANT: Store the replyToId in a temporary global variable
-    window.__tempReplyTo = replyToId;
-    
-    // Clear the appState replyingTo immediately
-    if (appState) {
-        appState.replyingTo = null;
-    }
-    
-    try {
-        // Call sendMessage
-        if (typeof window.sendMessage === 'function') {
-            console.log('Calling window.sendMessage with temp replyTo:', window.__tempReplyTo);
-            await window.sendMessage();
-            console.log('window.sendMessage completed');
+    // For mobile, ensure the keyboard doesn't interfere
+    if (window.innerWidth <= 768) {
+        // Blur any focused elements to stabilize viewport
+        if (document.activeElement && document.activeElement.blur) {
+            document.activeElement.blur();
         }
-    } catch (error) {
-        console.error('Error sending reply:', error);
-    } finally {
-        // Clear the temp variable and re-enable the button
-        window.__tempReplyTo = null;
-        if (elements.sendReplyBtn) {
-            // Re-enable after a short delay
-            setTimeout(() => {
+        
+        // Small delay to allow modal to close
+        await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    
+    // Focus the message input
+    elements.messageInput.focus();
+    
+    // Small delay to ensure focus is set
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Call sendMessage
+    if (typeof window.sendMessage === 'function') {
+        console.log('Calling window.sendMessage');
+        await window.sendMessage();
+        console.log('window.sendMessage completed');
+    }
+    
+    // Clear the temporary variable and re-enable button
+    window.__tempReplyTo = null;
+    
+    if (elements.sendReplyBtn) {
+        setTimeout(() => {
+            if (elements.sendReplyBtn) {
                 elements.sendReplyBtn.disabled = false;
-            }, 500);
-        }
+            }
+        }, 500);
     }
+    
+    // Force scroll to bottom after sending
+    setTimeout(() => {
+        if (elements.chatMessages) {
+            elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+        }
+    }, 200);
 }
 
 // In the setupEventListeners function in chat.js, update the sendReplyBtn handler:
