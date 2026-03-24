@@ -2284,7 +2284,7 @@ async function handleTyping() {
 }
 
 // Update the sendMessage function
-// Replace the image upload section in the sendMessage function
+// Replace the entire sendMessage function with this improved version
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
     
@@ -2321,8 +2321,9 @@ async function sendMessage() {
     let imageUrl = null;
     
     if (imageFile) {
-        // Show preview immediately for better UX
+        // Read the image file
         const reader = new FileReader();
+        
         reader.onload = async function(e) {
             imageUrl = e.target.result;
             
@@ -2350,10 +2351,8 @@ async function sendMessage() {
                 window.ChatModule.displayMessage(optimisticMessage);
             }
             
-            // Clear the file input
+            // Clear the file input and message input
             imageUpload.value = '';
-            
-            // Clear message input
             messageInput.value = '';
             messageInput.style.height = 'auto';
             
@@ -2366,11 +2365,11 @@ async function sendMessage() {
                 tempElement.remove();
             }
             
-            // If successful, display real message
+            // If successful, display the real message
             if (result && result.success && result.data) {
                 console.log('✅ Image message saved to DB, ID:', result.data.id);
                 
-                // Display real message
+                // Display the real message with the same content
                 if (window.ChatModule) {
                     window.ChatModule.displayMessage({
                         id: result.data.id,
@@ -2385,7 +2384,7 @@ async function sendMessage() {
                     });
                 }
             } else {
-                // Show error message
+                // Show error message if failed
                 console.error('Failed to send image message');
                 const errorMsg = document.createElement('div');
                 errorMsg.className = 'message received';
@@ -2399,6 +2398,11 @@ async function sendMessage() {
                 `;
                 chatMessages.appendChild(errorMsg);
                 chatMessages.scrollTop = chatMessages.scrollHeight;
+                
+                // Also restore the message text to input
+                if (messageText) {
+                    messageInput.value = messageText;
+                }
             }
             
             isSendingMessage = false;
@@ -2406,6 +2410,13 @@ async function sendMessage() {
                 sendMessageBtn.disabled = false;
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
+            
+            // Scroll to bottom
+            setTimeout(() => {
+                if (chatMessages) {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            }, 100);
         };
         
         reader.onerror = function(e) {
