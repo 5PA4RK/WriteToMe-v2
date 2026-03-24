@@ -142,27 +142,50 @@ function displayMessage(message) {
         }
     });
 }// Helper function to get reply quote HTML
+// Replace the entire getReplyQuoteHtml function with this version
 function getReplyQuoteHtml(replyToId, currentMessage) {
     let quotedSender = 'someone';
-    let quotedText = 'a message';
+    let quotedContent = '';
+    let quotedImage = null;
     let found = false;
+    let isImageOnly = false;
     
     // Try to find the original message in the DOM first (most reliable for current session)
     const originalMsgElement = document.getElementById(`msg-${replyToId}`);
     if (originalMsgElement) {
         const senderEl = originalMsgElement.querySelector('.message-sender');
         const textEl = originalMsgElement.querySelector('.message-text');
+        const imageEl = originalMsgElement.querySelector('.message-image');
+        
         if (senderEl) {
             quotedSender = senderEl.textContent;
             found = true;
         }
+        
+        // Check if there's an image
+        if (imageEl) {
+            quotedImage = imageEl.src;
+            isImageOnly = true;
+        }
+        
+        // Get the message text
         if (textEl) {
-            // Remove any existing (edited) tag and trim
-            quotedText = textEl.textContent
+            let text = textEl.textContent
                 .replace(/\s*\(edited\)\s*$/, '')
-                .substring(0, 100);
-            if (textEl.textContent.length > 100) quotedText += '...';
-            found = true;
+                .trim();
+            
+            if (text) {
+                isImageOnly = false;
+                quotedContent = text;
+                if (quotedContent.length > 100) {
+                    quotedContent = quotedContent.substring(0, 100) + '...';
+                }
+            }
+        }
+        
+        // If no text but there's an image, mark as image-only
+        if (!quotedContent && quotedImage) {
+            isImageOnly = true;
         }
     } 
     
@@ -171,21 +194,34 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
         const originalMsg = appState.messages.find(m => m.id === replyToId);
         if (originalMsg) {
             quotedSender = originalMsg.sender;
-            quotedText = (originalMsg.text || '').substring(0, 100);
-            if (originalMsg.text && originalMsg.text.length > 100) quotedText += '...';
+            
+            // Check if original message has image
+            if (originalMsg.image) {
+                quotedImage = originalMsg.image;
+                isImageOnly = true;
+            }
+            
+            // Get text if exists
+            if (originalMsg.text && originalMsg.text.trim()) {
+                isImageOnly = false;
+                quotedContent = originalMsg.text.trim();
+                if (quotedContent.length > 100) {
+                    quotedContent = quotedContent.substring(0, 100) + '...';
+                }
+            }
+            
             found = true;
         }
     }
     
-    // If still not found, try to fetch from database as a fallback
+    // If still not found, try to fetch from database
     if (!found && supabaseClient) {
-        // Store the current message ID for the setTimeout
         const currentMsgId = currentMessage.id;
         
         // Fetch immediately
         supabaseClient
             .from('messages')
-            .select('sender_name, message')
+            .select('sender_name, message, image_url')
             .eq('id', replyToId)
             .single()
             .then(({ data, error }) => {
@@ -193,10 +229,30 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
                     // Update the quote element if it exists
                     const quoteElement = document.querySelector(`#msg-${currentMsgId} .message-reply-ref`);
                     if (quoteElement) {
-                        const span = quoteElement.querySelector('span');
-                        if (span) {
-                            const shortText = data.message.substring(0, 100);
-                            span.innerHTML = `Replying to <strong>${escapeHtml(data.sender_name)}</strong>: ${escapeHtml(shortText)}${data.message.length > 100 ? '...' : ''}`;
+                        const contentSpan = quoteElement.querySelector('.reply-content span');
+                        if (contentSpan) {
+                            let displayHtml = '';
+                            if (data.image_url && (!data.message || !data.message.trim())) {
+                                displayHtml = `<i class="fas fa-image"></i> 📷 Image`;
+                            } else if (data.image_url && data.message && data.message.trim()) {
+                                let shortText = data.message.substring(0, 80);
+                                if (data.message.length > 80) shortText += '...';
+                                displayHtml = `${escapeHtml(shortText)} <i class="fas fa-image"></i>`;
+                            } else {
+                                let shortText = (data.message || '').substring(0, 80);
+                                if (data.message && data.message.length > 80) shortText += '...';
+                                displayHtml = escapeHtml(shortText);
+                            }
+                            contentSpan.innerHTML = `Replying to <strong>${escapeHtml(data.sender_name)}</strong>: ${displayHtml}`;
+                        }
+                        
+                        // Add image preview if exists
+                        if (data.image_url && !quoteElement.querySelector('.reply-image-preview')) {
+                            const previewDiv = document.createElement('div');
+                            previewDiv.className = 'reply-image-preview';
+                            previewDiv.style.display = 'none';
+                            previewDiv.innerHTML = `<img src="${data.image_url}" style="max-width: 50px; max-height: 50px; border-radius: 4px;">`;
+                            quoteElement.appendChild(previewDiv);
                         }
                     }
                 }
@@ -207,21 +263,46 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
         return `
             <div class="message-reply-ref">
                 <i class="fas fa-reply"></i> 
-                <span>Loading quoted message...</span>
+                <div class="reply-content">
+                    <span>Loading quoted message...</span>
+                </div>
             </div>
         `;
     }
     
+    // Build the display text based on whether it's an image or text
+    let displayHtml = '';
+    
+    if (isImageOnly && !quotedContent) {
+        // Image-only message
+        displayHtml = '<i class="fas fa-image"></i> 📷 Image';
+    } else if (isImageOnly && quotedContent) {
+        // Message with both text and image
+        displayHtml = `${escapeHtml(quotedContent)} <i class="fas fa-image"></i>`;
+    } else {
+        // Text-only message
+        displayHtml = escapeHtml(quotedContent);
+    }
+    
+    // Return the reply reference with image preview capability
     return `
-        <div class="message-reply-ref">
+        <div class="message-reply-ref" data-original-image="${quotedImage || ''}" data-is-image-only="${isImageOnly}">
             <i class="fas fa-reply"></i> 
-            <span>Replying to <strong>${escapeHtml(quotedSender)}</strong>: ${escapeHtml(quotedText)}</span>
+            <div class="reply-content">
+                <span>Replying to <strong>${escapeHtml(quotedSender)}</strong>: ${displayHtml}</span>
+            </div>
+            ${quotedImage ? `
+            <div class="reply-image-preview" style="display: none;">
+                <img src="${quotedImage}" style="max-width: 60px; max-height: 60px; border-radius: 6px; object-fit: cover;">
+            </div>
+            ` : ''}
         </div>
     `;
 }
 
 
 // Helper function to get actions menu HTML
+// Update the getActionsMenuHtml function to store image info in reply button
 function getActionsMenuHtml(message) {
     const isOwnMessage = message.sender === (appState ? appState.userName : '');
     
@@ -235,12 +316,18 @@ function getActionsMenuHtml(message) {
     // Convert to string if it's not already
     const messageIdStr = String(messageId);
     
-    // Create a safe ID for data storage (remove any non-alphanumeric chars)
-    const safeId = messageIdStr.replace(/[^a-zA-Z0-9]/g, '_');
-    
     // Safely escape the message text
     const escapedSender = escapeHtml(message.sender || '');
     const messageText = message.text || '';
+    const hasImage = !!message.image;
+    
+    // Create a display text for the reply button that indicates if it's an image
+    let replyButtonText = messageText;
+    if (hasImage && !replyButtonText) {
+        replyButtonText = '[Image]';
+    } else if (hasImage && replyButtonText) {
+        replyButtonText = replyButtonText + ' 📷';
+    }
     
     return `
         <div class="message-actions-menu" id="actions-${messageIdStr}" style="display: none;">
@@ -249,7 +336,7 @@ function getActionsMenuHtml(message) {
                 <button onclick="window.deleteMessage('${messageIdStr}')"><i class="fas fa-trash"></i> Delete</button>
                 <div class="menu-divider"></div>
             ` : ''}
-            <button class="reply-btn" data-message-id="${messageIdStr}" data-sender="${escapedSender}" data-message-text="${escapeHtml(messageText)}">
+            <button class="reply-btn" data-message-id="${messageIdStr}" data-sender="${escapedSender}" data-message-text="${escapeHtml(replyButtonText)}" data-has-image="${hasImage}">
                 <i class="fas fa-reply"></i> Reply
             </button>
             <div class="menu-divider"></div>
