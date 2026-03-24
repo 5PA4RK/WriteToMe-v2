@@ -2546,3 +2546,119 @@ body.modal-open {
         max-height: 70px;
     }
 }
+/* Add or update these styles for better reply image previews */
+.message-reply-ref {
+    font-size: 0.8rem;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background-color: rgba(0, 0, 0, 0.15);
+    border-left: 4px solid var(--primary);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-weight: 500;
+    position: relative;
+}
+
+.message-reply-ref .reply-content {
+    flex: 1;
+    word-break: break-word;
+}
+
+.message-reply-ref .reply-content i.fa-image {
+    margin-left: 4px;
+    color: var(--text-muted);
+}
+
+.message-reply-ref:hover {
+    background-color: rgba(0, 0, 0, 0.25);
+    transform: translateX(2px);
+}
+
+.message.sent .message-reply-ref {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-left-color: rgba(255, 255, 255, 0.8);
+    color: var(--text-primary);
+}
+
+.message.sent .message-reply-ref:hover {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Reply image preview - always visible for image replies */
+.reply-image-preview {
+    position: relative;
+    display: inline-flex;
+    margin-left: 8px;
+    flex-shrink: 0;
+}
+
+.reply-image-preview img {
+    max-width: 40px;
+    max-height: 40px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid var(--border-light);
+    background-color: var(--bg-secondary);
+}
+
+/* On hover, show larger preview */
+.message-reply-ref:hover .reply-image-preview {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    box-shadow: var(--shadow-md);
+    z-index: 100;
+    margin-left: 0;
+    display: block !important;
+}
+
+.message-reply-ref:hover .reply-image-preview img {
+    max-width: 100px;
+    max-height: 100px;
+}
+
+/* Dark mode adjustments */
+.dark-mode .message-reply-ref {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-left-color: var(--primary-light);
+}
+
+.dark-mode .message-reply-ref:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark-mode .reply-image-preview img {
+    border-color: var(--border-medium);
+    background-color: var(--bg-tertiary);
+}
+
+.dark-mode .message-reply-ref:hover .reply-image-preview {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-medium);
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    .message-reply-ref {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+    }
+    
+    .message-reply-ref .reply-content {
+        max-width: calc(100% - 50px);
+    }
+    
+    .reply-image-preview img {
+        max-width: 32px;
+        max-height: 32px;
+    }
+}
