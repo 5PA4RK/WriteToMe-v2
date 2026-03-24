@@ -2546,3 +2546,142 @@ body.modal-open {
         max-height: 70px;
     }
 }
+/* Enhanced reply styles for images */
+.message-reply-ref {
+    font-size: 0.8rem;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background-color: rgba(0, 0, 0, 0.15);
+    border-left: 4px solid var(--primary);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-weight: 500;
+    position: relative;
+}
+
+.message-reply-ref .reply-content {
+    flex: 1;
+    word-break: break-word;
+}
+
+.message-reply-ref .reply-content i.fa-image {
+    margin-left: 4px;
+    color: #f97316;
+    font-size: 0.9rem;
+}
+
+.message-reply-ref:hover {
+    background-color: rgba(0, 0, 0, 0.25);
+    transform: translateX(2px);
+}
+
+.message.sent .message-reply-ref {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-left-color: rgba(255, 255, 255, 0.8);
+    color: var(--text-primary);
+}
+
+.message.sent .message-reply-ref:hover {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Reply image preview on hover */
+.message-reply-ref:hover .reply-image-preview {
+    display: block !important;
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 6px;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    animation: fadeInUp 0.2s ease;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.reply-image-preview {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 6px;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    display: none;
+}
+
+.reply-image-preview img {
+    max-width: 100px;
+    max-height: 100px;
+    object-fit: cover;
+    border-radius: 6px;
+    display: block;
+}
+
+/* For mobile, show preview on tap instead of hover */
+@media (max-width: 768px) {
+    .reply-image-preview {
+        position: fixed;
+        bottom: auto;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        max-width: 80vw;
+        max-height: 80vh;
+        z-index: 10000;
+        background-color: rgba(0, 0, 0, 0.9);
+        border: none;
+        border-radius: 12px;
+        padding: 10px;
+    }
+    
+    .reply-image-preview img {
+        max-width: 70vw;
+        max-height: 70vh;
+        width: auto;
+        height: auto;
+    }
+    
+    /* Add tap indicator for mobile */
+    .message-reply-ref:active {
+        background-color: rgba(0, 0, 0, 0.3);
+    }
+    
+    .message.sent .message-reply-ref:active {
+        background-color: rgba(255, 255, 255, 0.3);
+    }
+}
+
+/* Dark mode adjustments */
+.dark-mode .message-reply-ref {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-left-color: var(--primary-light);
+}
+
+.dark-mode .message-reply-ref:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark-mode .reply-image-preview {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-medium);
+}
