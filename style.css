@@ -410,8 +410,7 @@ header {
     flex-direction: column;
     height: calc(100vh - 180px);
     box-shadow: var(--shadow-md);
-    transition: height 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1), background-color var(--transition-base), border-color var(--transition-base);
-    will-change: height;
+    transition: background-color var(--transition-base), border-color var(--transition-base);
 }
 
 .section-header {
@@ -448,9 +447,8 @@ header {
     background-repeat: repeat;
     background-size: 300px;
     background-position: top left;
+    scroll-behavior: smooth;
     transition: background-color var(--transition-base);
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: auto;
 }
 
 .dark-mode .chat-messages {
@@ -568,6 +566,19 @@ header {
 .message.optimistic .message-image {
     opacity: 0.9;
     filter: brightness(0.95);
+}
+
+/* Mobile image sizing */
+@media (max-width: 768px) {
+    .message-image {
+        max-height: 200px;
+    }
+}
+
+@media (max-width: 480px) {
+    .message-image {
+        max-height: 150px;
+    }
 }
 
 .message-image:hover { transform: scale(1.02); }
@@ -1045,7 +1056,7 @@ header {
     color: white;
 }
 
-/* ========== MESSAGE REPLY REFERENCE ========== */
+/* ========== MESSAGE REPLY REFERENCE - CLEAN VERSION ========== */
 .message-reply-ref {
     font-size: 0.8rem;
     padding: 8px 12px;
@@ -1100,7 +1111,7 @@ header {
     font-style: normal;
 }
 
-/* Reply image preview */
+/* Reply image preview - tooltip style that doesn't affect layout */
 .reply-image-preview {
     position: relative;
     display: inline-flex;
@@ -1119,6 +1130,7 @@ header {
     transition: transform 0.2s ease;
 }
 
+/* Tooltip that appears on hover - positioned absolutely so it doesn't affect layout */
 .reply-image-preview .preview-tooltip {
     position: fixed;
     background-color: var(--bg-primary);
@@ -1141,10 +1153,12 @@ header {
     border-radius: var(--radius-sm);
 }
 
+/* Show tooltip on hover */
 .reply-image-preview:hover .preview-tooltip {
     display: block;
 }
 
+/* Dark mode */
 .dark-mode .reply-image-preview img {
     border-color: var(--border-medium);
     background-color: var(--bg-tertiary);
@@ -1204,6 +1218,7 @@ header {
     transform: translateY(-2px);
 }
 
+/* Image embeds */
 .image-embed {
     padding: 8px;
     background-color: var(--bg-tertiary);
@@ -1226,6 +1241,7 @@ header {
     transform: scale(1.02);
 }
 
+/* Video embeds */
 .youtube-embed,
 .vimeo-embed,
 .dailymotion-embed {
@@ -1248,6 +1264,7 @@ header {
     border: none;
 }
 
+/* Direct video embeds */
 .video-embed video {
     width: 100%;
     max-height: 500px;
@@ -1256,6 +1273,7 @@ header {
     object-fit: contain;
 }
 
+/* Audio embeds */
 .audio-embed {
     padding: 20px;
     background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
@@ -1266,6 +1284,7 @@ header {
     display: block;
 }
 
+/* Media source link */
 .media-source {
     padding: 8px 12px;
     font-size: 0.85rem;
@@ -1290,6 +1309,7 @@ header {
     color: var(--text-muted);
 }
 
+/* Media link reference */
 .media-link-reference {
     font-size: 0.75rem;
     padding: 4px 8px;
@@ -1316,7 +1336,7 @@ header {
     text-decoration: underline;
 }
 
-/* YouTube placeholder */
+/* YouTube placeholder styles */
 .youtube-placeholder {
     position: relative;
     width: 100%;
@@ -1469,6 +1489,7 @@ header {
 .dark-mode .tiktok-placeholder i { color: #ffffff; }
 .dark-mode .link-placeholder i { color: var(--primary-light); }
 
+/* Vimeo specific */
 .vimeo-thumbnail-placeholder {
     display: flex;
     flex-direction: column;
@@ -1522,6 +1543,7 @@ header {
 
 .dark-mode .tiktok-message i { color: #ffffff; }
 
+/* Embed message for platforms that can't be embedded */
 .embed-message {
     padding: 30px 20px;
     text-align: center;
@@ -1551,6 +1573,7 @@ header {
     text-decoration: underline;
 }
 
+/* Loading states */
 .embed-loading {
     padding: 40px;
     text-align: center;
@@ -1563,6 +1586,7 @@ header {
     animation: spin 1s linear infinite;
 }
 
+/* Embed error */
 .embed-error {
     padding: 20px;
     text-align: center;
@@ -1584,6 +1608,7 @@ header {
     text-decoration: underline;
 }
 
+/* Dark mode adjustments for embeds */
 .dark-mode .media-embed {
     background-color: var(--bg-tertiary);
     border-color: var(--border-medium);
@@ -1619,6 +1644,7 @@ header {
     background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
 }
 
+/* Message specific adjustments for embeds */
 .message.sent .media-embed {
     background-color: rgba(255, 255, 255, 0.1);
     border-color: rgba(255, 255, 255, 0.2);
@@ -1677,65 +1703,6 @@ header {
     transform: scale(1.15);
 }
 
-/* ========== HEADER COLLAPSE - MOBILE ONLY ========== */
-@media (max-width: 768px) {
-    header {
-        transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
-        will-change: transform;
-        z-index: 1000;
-        position: sticky;
-        top: 0;
-        background-color: var(--bg-primary);
-        transform: translateY(0);
-        backface-visibility: hidden;
-        -webkit-backface-visibility: hidden;
-    }
-    
-    header.header-hidden {
-        transform: translateY(-100%);
-    }
-    
-    .chat-section {
-        transition: height 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
-        will-change: height;
-    }
-    
-    body.header-collapsed .chat-section {
-        height: calc(var(--vh, 1vh) * 100 - 50px) !important;
-    }
-    
-    /* Prevent layout thrashing */
-    .chat-section,
-    header,
-    .chat-messages {
-        backface-visibility: hidden;
-        -webkit-backface-visibility: hidden;
-    }
-    
-    /* Ensure smooth scrolling doesn't conflict */
-    .chat-messages {
-        -webkit-overflow-scrolling: touch;
-        scroll-behavior: auto;
-        touch-action: pan-y pinch-zoom;
-    }
-    
-    /* Prevent white flash during transition */
-    body.header-collapsed {
-        background-color: var(--bg-secondary);
-    }
-    
-    /* Ensure header doesn't cause content shift */
-    header {
-        transform: translateZ(0);
-        -webkit-transform: translateZ(0);
-    }
-    
-    /* Prevent header children from having their own transitions during collapse */
-    header * {
-        transition: none;
-    }
-}
-
 /* ========== MOBILE OPTIMIZATIONS ========== */
 @media (max-width: 768px) {
     .container { padding: 6px; }
@@ -1785,41 +1752,34 @@ header {
     
     .message-sender { font-size: 0.8rem; }
     .message-text { font-size: 0.95rem; }
-    .message-image { max-height: 200px; }
     
-    /* THINNER CHAT INPUT AREA - MOBILE */
     .chat-input-area {
-        padding: 6px 8px;
-        gap: 8px;
+        padding: 8px 8px;
+        gap: 6px;
         display: flex;
         align-items: center;
-        background-color: var(--bg-primary);
-        border-top: 1px solid var(--border-light);
     }
     
     .chat-input-wrapper {
         flex: 1;
-        min-height: 36px;
-        border-radius: 18px;
+        min-height: 44px;
+        border-radius: 22px;
         padding: 2px 2px 2px 12px;
-        border-width: 1px;
+        border-width: 2px;
         display: flex;
         align-items: center;
-        background-color: var(--bg-secondary);
     }
     
     .message-input {
-        font-size: 14px;
-        padding: 6px 4px;
-        min-height: 32px;
-        max-height: 80px;
-        line-height: 1.3;
-        color: var(--text-primary);
+        font-size: 15px;
+        padding: 10px 6px;
+        min-height: 44px;
+        max-height: 100px;
+        line-height: 1.4;
     }
     
     .message-input::placeholder { 
-        font-size: 13px; 
-        color: var(--text-muted);
+        font-size: 14px; 
     }
     
     .input-actions { 
@@ -1830,32 +1790,24 @@ header {
     }
     
     .file-input-label {
-        padding: 6px;
-        font-size: 1rem;
-        width: 32px;
-        height: 32px;
+        padding: 8px;
+        font-size: 1.2rem;
+        width: 38px;
+        height: 38px;
         display: flex;
         align-items: center;
         justify-content: center;
         background-color: var(--bg-tertiary);
         border-radius: 50%;
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-    
-    .file-input-label:active {
-        transform: scale(0.95);
-        background-color: var(--primary);
-        color: white;
     }
     
     #sendMessageBtn {
-        min-width: 36px;
-        width: 36px;
-        height: 36px;
+        min-width: 44px;
+        width: 44px;
+        height: 44px;
         padding: 0;
         font-size: 0;
-        border-radius: 18px;
+        border-radius: 22px;
         background: var(--gradient-primary);
         color: white;
         display: flex;
@@ -1863,25 +1815,15 @@ header {
         justify-content: center;
         margin: 0;
         flex-shrink: 0;
-        transition: all 0.2s ease;
-    }
-    
-    #sendMessageBtn:active {
-        transform: scale(0.95);
     }
     
     #sendMessageBtn i {
-        font-size: 1.1rem;
+        font-size: 1.4rem;
         margin: 0;
     }
     
-    #sendMessageBtn:disabled {
-        opacity: 0.5;
-        transform: none;
-    }
-    
     .emoji-picker {
-        bottom: 65px;
+        bottom: 70px;
         animation: slideUp 0.2s ease;
     }
     
@@ -1897,9 +1839,9 @@ header {
     }
     
     .typing-indicator {
-        padding: 4px 12px;
-        font-size: 0.8rem;
-        margin: 0 8px;
+        padding: 6px 12px;
+        font-size: 0.85rem;
+        margin: 2px 8px;
         border-radius: 16px;
     }
     
@@ -1917,9 +1859,9 @@ header {
     #logoutBtn,
     #pendingGuestsBtn,
     #notesBtn {
-        padding: 6px 10px;
-        font-size: 0.85rem;
-        min-height: 34px;
+        padding: 8px 12px;
+        font-size: 0.9rem;
+        min-height: 40px;
     }
     
     .message-action-dots {
@@ -2010,6 +1952,7 @@ header {
         font-size: 0.9rem;
     }
     
+    /* Reply reference mobile */
     .message-reply-ref {
         padding: 6px 10px;
         font-size: 0.75rem;
@@ -2024,6 +1967,7 @@ header {
         max-height: 32px;
     }
     
+    /* Mobile tooltip - tap to preview */
     .reply-image-preview .preview-tooltip {
         position: fixed;
         top: 50%;
@@ -2044,7 +1988,6 @@ header {
     }
 }
 
-/* Even smaller screens */
 @media (max-width: 480px) {
     .message { max-width: 90%; }
     
@@ -2052,9 +1995,9 @@ header {
     
     .admin-tab {
         flex: 1;
-        padding: 8px 4px;
-        font-size: 0.8rem;
-        min-height: 40px;
+        padding: 10px 6px;
+        font-size: 0.85rem;
+        min-height: 44px;
     }
     
     .guest-actions { flex-direction: column; }
@@ -2075,40 +2018,37 @@ header {
         justify-content: center; 
     }
     
-    /* EVEN THINNER INPUT FOR VERY SMALL SCREENS */
     .chat-input-area { 
-        padding: 4px 6px; 
-        gap: 6px;
+        padding: 6px 6px; 
+        gap: 4px;
     }
     
     .chat-input-wrapper {
-        min-height: 34px;
-        border-radius: 17px;
+        min-height: 42px;
         padding-left: 10px;
     }
     
     .message-input { 
-        min-height: 30px;
-        font-size: 13px;
-        padding: 5px 3px;
+        min-height: 42px;
+        font-size: 15px;
+        padding: 8px 4px;
     }
     
     .file-input-label {
-        width: 30px;
-        height: 30px;
-        font-size: 0.9rem;
-        padding: 5px;
+        width: 36px;
+        height: 36px;
+        font-size: 1.1rem;
+        padding: 6px;
     }
     
     #sendMessageBtn { 
-        min-width: 34px; 
-        width: 34px;
-        height: 34px; 
-        border-radius: 17px;
+        min-width: 42px; 
+        width: 42px;
+        height: 42px; 
     }
     
     #sendMessageBtn i { 
-        font-size: 1rem; 
+        font-size: 1.3rem; 
     }
     
     .modal-content {
@@ -2126,15 +2066,15 @@ header {
     }
     
     .emoji-picker {
-        bottom: 60px;
-        width: 240px;
-        padding: 8px;
-        gap: 5px;
+        bottom: 65px;
+        width: 260px;
+        padding: 10px;
+        gap: 6px;
     }
     
     .emoji-picker span {
-        font-size: 1.4rem;
-        padding: 5px;
+        font-size: 1.6rem;
+        padding: 6px;
     }
     
     .embedded-image {
@@ -2146,18 +2086,18 @@ header {
     }
     
     .youtube-play-button {
-        width: 36px;
-        height: 26px;
-        border-radius: 7px;
+        width: 40px;
+        height: 28px;
+        border-radius: 8px;
     }
     
     .youtube-play-button i {
-        font-size: 16px;
+        font-size: 18px;
     }
     
     .youtube-privacy-notice {
-        font-size: 0.65rem;
-        padding: 3px;
+        font-size: 0.7rem;
+        padding: 4px;
     }
 }
 
