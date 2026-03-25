@@ -410,7 +410,8 @@ header {
     flex-direction: column;
     height: calc(100vh - 180px);
     box-shadow: var(--shadow-md);
-    transition: background-color var(--transition-base), border-color var(--transition-base);
+    transition: height 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1), background-color var(--transition-base), border-color var(--transition-base);
+    will-change: height;
 }
 
 .section-header {
@@ -447,8 +448,9 @@ header {
     background-repeat: repeat;
     background-size: 300px;
     background-position: top left;
-    scroll-behavior: smooth;
     transition: background-color var(--transition-base);
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: auto;
 }
 
 .dark-mode .chat-messages {
@@ -567,14 +569,6 @@ header {
     opacity: 0.9;
     filter: brightness(0.95);
 }
-
-/* Mobile image sizing */
-@media (max-width: 768px) {
-    .message-image {
-        max-height: 200px;
-    }
-}
-
 
 .message-image:hover { transform: scale(1.02); }
 
@@ -1051,7 +1045,7 @@ header {
     color: white;
 }
 
-/* ========== MESSAGE REPLY REFERENCE - CLEAN VERSION ========== */
+/* ========== MESSAGE REPLY REFERENCE ========== */
 .message-reply-ref {
     font-size: 0.8rem;
     padding: 8px 12px;
@@ -1106,7 +1100,7 @@ header {
     font-style: normal;
 }
 
-/* Reply image preview - tooltip style that doesn't affect layout */
+/* Reply image preview */
 .reply-image-preview {
     position: relative;
     display: inline-flex;
@@ -1125,7 +1119,6 @@ header {
     transition: transform 0.2s ease;
 }
 
-/* Tooltip that appears on hover - positioned absolutely so it doesn't affect layout */
 .reply-image-preview .preview-tooltip {
     position: fixed;
     background-color: var(--bg-primary);
@@ -1148,12 +1141,10 @@ header {
     border-radius: var(--radius-sm);
 }
 
-/* Show tooltip on hover */
 .reply-image-preview:hover .preview-tooltip {
     display: block;
 }
 
-/* Dark mode */
 .dark-mode .reply-image-preview img {
     border-color: var(--border-medium);
     background-color: var(--bg-tertiary);
@@ -1213,7 +1204,6 @@ header {
     transform: translateY(-2px);
 }
 
-/* Image embeds */
 .image-embed {
     padding: 8px;
     background-color: var(--bg-tertiary);
@@ -1236,7 +1226,6 @@ header {
     transform: scale(1.02);
 }
 
-/* Video embeds */
 .youtube-embed,
 .vimeo-embed,
 .dailymotion-embed {
@@ -1259,7 +1248,6 @@ header {
     border: none;
 }
 
-/* Direct video embeds */
 .video-embed video {
     width: 100%;
     max-height: 500px;
@@ -1268,7 +1256,6 @@ header {
     object-fit: contain;
 }
 
-/* Audio embeds */
 .audio-embed {
     padding: 20px;
     background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
@@ -1279,7 +1266,6 @@ header {
     display: block;
 }
 
-/* Media source link */
 .media-source {
     padding: 8px 12px;
     font-size: 0.85rem;
@@ -1304,7 +1290,6 @@ header {
     color: var(--text-muted);
 }
 
-/* Media link reference */
 .media-link-reference {
     font-size: 0.75rem;
     padding: 4px 8px;
@@ -1331,7 +1316,7 @@ header {
     text-decoration: underline;
 }
 
-/* YouTube placeholder styles */
+/* YouTube placeholder */
 .youtube-placeholder {
     position: relative;
     width: 100%;
@@ -1484,7 +1469,6 @@ header {
 .dark-mode .tiktok-placeholder i { color: #ffffff; }
 .dark-mode .link-placeholder i { color: var(--primary-light); }
 
-/* Vimeo specific */
 .vimeo-thumbnail-placeholder {
     display: flex;
     flex-direction: column;
@@ -1538,7 +1522,6 @@ header {
 
 .dark-mode .tiktok-message i { color: #ffffff; }
 
-/* Embed message for platforms that can't be embedded */
 .embed-message {
     padding: 30px 20px;
     text-align: center;
@@ -1568,7 +1551,6 @@ header {
     text-decoration: underline;
 }
 
-/* Loading states */
 .embed-loading {
     padding: 40px;
     text-align: center;
@@ -1581,7 +1563,6 @@ header {
     animation: spin 1s linear infinite;
 }
 
-/* Embed error */
 .embed-error {
     padding: 20px;
     text-align: center;
@@ -1603,7 +1584,6 @@ header {
     text-decoration: underline;
 }
 
-/* Dark mode adjustments for embeds */
 .dark-mode .media-embed {
     background-color: var(--bg-tertiary);
     border-color: var(--border-medium);
@@ -1639,7 +1619,6 @@ header {
     background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
 }
 
-/* Message specific adjustments for embeds */
 .message.sent .media-embed {
     background-color: rgba(255, 255, 255, 0.1);
     border-color: rgba(255, 255, 255, 0.2);
@@ -1698,6 +1677,65 @@ header {
     transform: scale(1.15);
 }
 
+/* ========== HEADER COLLAPSE - MOBILE ONLY ========== */
+@media (max-width: 768px) {
+    header {
+        transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+        will-change: transform;
+        z-index: 1000;
+        position: sticky;
+        top: 0;
+        background-color: var(--bg-primary);
+        transform: translateY(0);
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+    }
+    
+    header.header-hidden {
+        transform: translateY(-100%);
+    }
+    
+    .chat-section {
+        transition: height 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+        will-change: height;
+    }
+    
+    body.header-collapsed .chat-section {
+        height: calc(var(--vh, 1vh) * 100 - 50px) !important;
+    }
+    
+    /* Prevent layout thrashing */
+    .chat-section,
+    header,
+    .chat-messages {
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+    }
+    
+    /* Ensure smooth scrolling doesn't conflict */
+    .chat-messages {
+        -webkit-overflow-scrolling: touch;
+        scroll-behavior: auto;
+        touch-action: pan-y pinch-zoom;
+    }
+    
+    /* Prevent white flash during transition */
+    body.header-collapsed {
+        background-color: var(--bg-secondary);
+    }
+    
+    /* Ensure header doesn't cause content shift */
+    header {
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
+    }
+    
+    /* Prevent header children from having their own transitions during collapse */
+    header * {
+        transition: none;
+    }
+}
+
 /* ========== MOBILE OPTIMIZATIONS ========== */
 @media (max-width: 768px) {
     .container { padding: 6px; }
@@ -1747,6 +1785,7 @@ header {
     
     .message-sender { font-size: 0.8rem; }
     .message-text { font-size: 0.95rem; }
+    .message-image { max-height: 200px; }
     
     .chat-input-area {
         padding: 8px 8px;
@@ -1947,7 +1986,6 @@ header {
         font-size: 0.9rem;
     }
     
-    /* Reply reference mobile */
     .message-reply-ref {
         padding: 6px 10px;
         font-size: 0.75rem;
@@ -1962,7 +2000,6 @@ header {
         max-height: 32px;
     }
     
-    /* Mobile tooltip - tap to preview */
     .reply-image-preview .preview-tooltip {
         position: fixed;
         top: 50%;
@@ -2171,30 +2208,5 @@ body.modal-open {
         to {
             transform: translateY(0);
         }
-    }
-}
-/* Header hide/show transition - Mobile Only */
-@media (max-width: 768px) {
-    header {
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        will-change: transform;
-        z-index: 1000;
-        position: sticky;
-        top: 0;
-        background-color: var(--bg-primary);
-    }
-    
-    header.header-hidden {
-        transform: translateY(-100%);
-    }
-    
-    body.header-collapsed .chat-section {
-        transition: height 0.3s ease;
-        height: calc(100vh - 50px) !important;
-    }
-    
-    /* Fix for iOS viewport */
-    .chat-section {
-        transition: height 0.3s ease;
     }
 }
