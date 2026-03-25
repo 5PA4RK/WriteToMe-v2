@@ -2538,194 +2538,176 @@ function displayMessage(message) {
 // Add this function to handle header hide/show on scroll for mobile
 // Enhanced mobile header scroll behavior - collapse on scroll up, show on scroll down
 function setupMobileHeaderScroll() {
+    console.log('Setting up mobile header scroll behavior...');
+    
     // Only apply on mobile devices
-    if (window.innerWidth <= 768) {
-        let lastScrollTop = 0;
-        let scrollDirection = 'down';
-        let ticking = false;
-        const header = document.querySelector('header');
-        
-        if (!header) return;
-        
-        // Get the chat messages container
-        const chatMessages = document.getElementById('chatMessages');
-        if (!chatMessages) return;
-        
-        // Track scroll direction for better UX
-        let scrollDelta = 0;
-        let lastScrollY = 0;
-        let headerHidden = false;
-        
-        // Function to hide header
-        function hideHeader() {
-            if (!headerHidden && header) {
-                header.classList.add('header-hidden');
-                headerHidden = true;
-                // Add a class to body to adjust chat section height
-                document.body.classList.add('header-collapsed');
-            }
-        }
-        
-        // Function to show header
-        function showHeader() {
-            if (headerHidden && header) {
-                header.classList.remove('header-hidden');
-                headerHidden = false;
-                document.body.classList.remove('header-collapsed');
-            }
-        }
-        
-        // Listen for scroll on the chat messages container
-        chatMessages.addEventListener('scroll', function() {
-            if (!ticking) {
-                requestAnimationFrame(() => {
-                    const scrollTop = chatMessages.scrollTop;
-                    const scrollHeight = chatMessages.scrollHeight;
-                    const clientHeight = chatMessages.clientHeight;
-                    
-                    // Calculate scroll direction and speed
-                    if (scrollTop > lastScrollTop) {
-                        // Scrolling down (finger moving up) - hide header
-                        scrollDirection = 'down';
-                        scrollDelta = scrollTop - lastScrollY;
-                        
-                        // Only hide if we've scrolled down enough (minimum 30px) and not at top
-                        if (scrollTop > 30 && scrollDelta > 5) {
-                            hideHeader();
-                        }
-                    } else if (scrollTop < lastScrollTop) {
-                        // Scrolling up (finger moving down) - show header
-                        scrollDirection = 'up';
-                        scrollDelta = lastScrollY - scrollTop;
-                        
-                        // Show header when scrolling up
-                        if (scrollDelta > 5) {
-                            showHeader();
-                        }
-                    }
-                    
-                    // Special case: at very top of chat, always show header
-                    if (scrollTop <= 10) {
-                        showHeader();
-                    }
-                    
-                    // Special case: at bottom of chat and user tries to scroll up from bottom
-                    if (scrollTop + clientHeight >= scrollHeight - 10 && scrollDirection === 'up') {
-                        showHeader();
-                    }
-                    
-                    lastScrollTop = scrollTop;
-                    lastScrollY = scrollTop;
-                    ticking = false;
-                });
-                ticking = true;
-            }
-        }, { passive: true });
-        
-        // Touch start - track initial position for swipe detection
-        let touchStartY = 0;
-        let touchStartScrollTop = 0;
-        
-        chatMessages.addEventListener('touchstart', function(e) {
-            touchStartY = e.touches[0].clientY;
-            touchStartScrollTop = chatMessages.scrollTop;
-        }, { passive: true });
-        
-        // Touch move - detect swipe direction for immediate response
-        chatMessages.addEventListener('touchmove', function(e) {
-            const touchCurrentY = e.touches[0].clientY;
-            const deltaY = touchCurrentY - touchStartY;
-            const currentScrollTop = chatMessages.scrollTop;
+    if (window.innerWidth > 768) {
+        console.log('Desktop mode - header scroll disabled');
+        return;
+    }
+    
+    const header = document.querySelector('header');
+    const chatMessages = document.getElementById('chatMessages');
+    
+    if (!header) {
+        console.error('Header element not found');
+        return;
+    }
+    
+    if (!chatMessages) {
+        console.error('Chat messages container not found');
+        return;
+    }
+    
+    console.log('Mobile header scroll initialized');
+    
+    let lastScrollTop = 0;
+    let headerHidden = false;
+    let scrollTimeout = null;
+    let touchStartY = 0;
+    let isTouching = false;
+    
+    // Function to hide header
+    function hideHeader() {
+        if (!headerHidden && header) {
+            header.classList.add('header-hidden');
+            headerHidden = true;
+            document.body.classList.add('header-collapsed');
+            console.log('Header hidden');
             
-            // Detect swipe up (finger moving up, deltaY negative) - hide header
-            if (deltaY < -20 && currentScrollTop > 30 && !headerHidden) {
+            // Adjust chat section height
+            const chatSection = document.querySelector('.chat-section');
+            if (chatSection) {
+                chatSection.style.transition = 'height 0.3s ease';
+                const vh = window.innerHeight * 0.01;
+                document.documentElement.style.setProperty('--vh', `${vh}px`);
+            }
+        }
+    }
+    
+    // Function to show header
+    function showHeader() {
+        if (headerHidden && header) {
+            header.classList.remove('header-hidden');
+            headerHidden = false;
+            document.body.classList.remove('header-collapsed');
+            console.log('Header shown');
+            
+            // Restore chat section height
+            const chatSection = document.querySelector('.chat-section');
+            if (chatSection) {
+                chatSection.style.transition = 'height 0.3s ease';
+                const vh = window.innerHeight * 0.01;
+                document.documentElement.style.setProperty('--vh', `${vh}px`);
+            }
+        }
+    }
+    
+    // Scroll event listener
+    chatMessages.addEventListener('scroll', function() {
+        if (scrollTimeout) {
+            clearTimeout(scrollTimeout);
+        }
+        
+        scrollTimeout = setTimeout(() => {
+            const scrollTop = chatMessages.scrollTop;
+            const scrollHeight = chatMessages.scrollHeight;
+            const clientHeight = chatMessages.clientHeight;
+            const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10;
+            const isAtTop = scrollTop <= 10;
+            
+            // Always show header at top
+            if (isAtTop) {
+                showHeader();
+                return;
+            }
+            
+            // Show header when near bottom and scrolling up
+            if (isAtBottom && scrollTop < lastScrollTop) {
+                showHeader();
+                return;
+            }
+            
+            // Hide on scroll down, show on scroll up
+            if (scrollTop > lastScrollTop && scrollTop > 30) {
+                // Scrolling down (finger moving up) - hide header
+                hideHeader();
+            } else if (scrollTop < lastScrollTop && headerHidden) {
+                // Scrolling up (finger moving down) - show header
+                showHeader();
+            }
+            
+            lastScrollTop = scrollTop;
+        }, 50);
+    }, { passive: true });
+    
+    // Touch events for immediate swipe response
+    chatMessages.addEventListener('touchstart', function(e) {
+        touchStartY = e.touches[0].clientY;
+        isTouching = true;
+    }, { passive: true });
+    
+    chatMessages.addEventListener('touchmove', function(e) {
+        if (!isTouching) return;
+        
+        const touchCurrentY = e.touches[0].clientY;
+        const deltaY = touchCurrentY - touchStartY;
+        const currentScrollTop = chatMessages.scrollTop;
+        
+        // Swipe up (finger moving up) - hide header
+        if (deltaY < -30 && currentScrollTop > 30 && !headerHidden) {
+            hideHeader();
+        }
+        // Swipe down (finger moving down) - show header
+        else if (deltaY > 30 && headerHidden) {
+            showHeader();
+        }
+    }, { passive: true });
+    
+    chatMessages.addEventListener('touchend', function() {
+        isTouching = false;
+    });
+    
+    // Show header when tapping near the top
+    chatMessages.addEventListener('click', function(e) {
+        const clickY = e.clientY;
+        if (clickY < 80 && headerHidden) {
+            showHeader();
+        }
+    });
+    
+    // Handle window resize and orientation change
+    window.addEventListener('resize', function() {
+        setTimeout(() => {
+            const vh = window.innerHeight * 0.01;
+            document.documentElement.style.setProperty('--vh', `${vh}px`);
+            
+            if (chatMessages.scrollTop <= 10) {
+                showHeader();
+            } else if (chatMessages.scrollTop > 30 && headerHidden === false) {
                 hideHeader();
             }
-            // Detect swipe down (finger moving down, deltaY positive) - show header
-            else if (deltaY > 20 && headerHidden) {
+        }, 100);
+    });
+    
+    window.addEventListener('orientationchange', function() {
+        setTimeout(() => {
+            const vh = window.innerHeight * 0.01;
+            document.documentElement.style.setProperty('--vh', `${vh}px`);
+            
+            if (chatMessages.scrollTop <= 10) {
                 showHeader();
             }
-        }, { passive: true });
-        
-        // Show header when user taps on the top area of chat
-        chatMessages.addEventListener('touchstart', function(e) {
-            const touchY = e.touches[0].clientY;
-            // If tapping near the top (within 80px) and header is hidden, show it
-            if (touchY < 100 && headerHidden) {
-                showHeader();
-                // Auto-hide after 3 seconds if user doesn't interact
-                setTimeout(() => {
-                    if (headerHidden === false && chatMessages.scrollTop > 50) {
-                        hideHeader();
-                    }
-                }, 3000);
-            }
-        });
-        
-        // Also handle when user scrolls to top by tapping status bar (iOS)
-        // This is a hack that works on iOS when user taps status bar
-        let scrollTimeout;
-        chatMessages.addEventListener('scroll', function() {
-            if (scrollTimeout) clearTimeout(scrollTimeout);
-            scrollTimeout = setTimeout(() => {
-                if (chatMessages.scrollTop <= 10) {
-                    showHeader();
-                }
-            }, 100);
-        });
-        
-        // Listen for orientation change
-        window.addEventListener('orientationchange', function() {
-            setTimeout(() => {
-                // Reset header state on orientation change
-                if (chatMessages.scrollTop <= 10) {
-                    showHeader();
-                } else if (chatMessages.scrollTop > 30 && headerHidden === false) {
-                    hideHeader();
-                }
-            }, 100);
-        });
-        
-        // Add CSS for header transition and body adjustments
-        const style = document.createElement('style');
-        style.textContent = `
-            header {
-                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-                will-change: transform;
-            }
-            
-            header.header-hidden {
-                transform: translateY(-100%);
-            }
-            
-            body.header-collapsed .chat-section {
-                transition: height 0.3s ease;
-            }
-            
-            @media (max-width: 768px) {
-                body.header-collapsed .chat-section {
-                    height: calc(var(--vh, 1vh) * 100 - 50px) !important;
-                }
-            }
-        `;
-        document.head.appendChild(style);
+        }, 100);
+    });
+    
+    // Initial check
+    if (chatMessages.scrollTop <= 10) {
+        showHeader();
     }
+    
+    console.log('Mobile header scroll behavior ready');
 }
-
-// Also handle window resize (if user rotates device)
-window.addEventListener('resize', function() {
-    if (window.innerWidth <= 768) {
-        setupMobileHeaderScroll();
-    } else {
-        // On desktop, make sure header is visible and remove any hidden classes
-        const header = document.querySelector('header');
-        if (header) {
-            header.classList.remove('header-hidden');
-        }
-        document.body.classList.remove('header-collapsed');
-    }
-});
-
 // ============================================
 // LOAD CHAT HISTORY
 // ============================================
