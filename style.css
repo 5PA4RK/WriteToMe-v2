@@ -575,11 +575,6 @@ header {
     }
 }
 
-@media (max-width: 480px) {
-    .message-image {
-        max-height: 150px;
-    }
-}
 
 .message-image:hover { transform: scale(1.02); }
 
@@ -2178,24 +2173,28 @@ body.modal-open {
         }
     }
 }
-/* Header hide/show transition */
-header {
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    will-change: transform;
-    z-index: 100;
-}
-
-header.header-hidden {
-    transform: translateY(-100%);
-}
-
-/* Adjust chat section height when header is hidden */
-body.header-collapsed .chat-section {
-    transition: height 0.3s ease;
-}
-
+/* Header hide/show transition - Mobile Only */
 @media (max-width: 768px) {
+    header {
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        will-change: transform;
+        z-index: 1000;
+        position: sticky;
+        top: 0;
+        background-color: var(--bg-primary);
+    }
+    
+    header.header-hidden {
+        transform: translateY(-100%);
+    }
+    
     body.header-collapsed .chat-section {
-        height: calc(var(--vh, 1vh) * 100 - 50px) !important;
+        transition: height 0.3s ease;
+        height: calc(100vh - 50px) !important;
+    }
+    
+    /* Fix for iOS viewport */
+    .chat-section {
+        transition: height 0.3s ease;
     }
 }
