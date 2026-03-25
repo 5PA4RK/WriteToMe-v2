@@ -2570,60 +2570,85 @@ function setupMobileHeaderScroll() {
     let animationFrame = null;
     let isAnimating = false;
     
-    // Function to hide header with smooth transition
-    function hideHeader() {
-        if (headerHidden || isAnimating) return;
+// Function to hide header with smooth transition
+function hideHeader() {
+    if (headerHidden || isAnimating) return;
+    
+    isAnimating = true;
+    
+    // Store current scroll position
+    const currentScrollTop = chatMessages.scrollTop;
+    
+    if (header) {
+        header.classList.add('header-hidden');
+        headerHidden = true;
+    }
+    
+    // Update chat section height immediately
+    updateChatSectionHeight();
+    
+    // Ensure chat area snaps to top if needed
+    setTimeout(() => {
+        // If user was at the very top, maintain that position
+        if (currentScrollTop === 0) {
+            chatMessages.scrollTop = 0;
+        }
+        isAnimating = false;
+    }, 300);
+}
+
+// Function to show header with smooth transition
+function showHeader() {
+    if (!headerHidden || isAnimating) return;
+    
+    isAnimating = true;
+    
+    // Store current scroll position
+    const currentScrollTop = chatMessages.scrollTop;
+    
+    if (header) {
+        header.classList.remove('header-hidden');
+        headerHidden = false;
+    }
+    
+    // Update chat section height immediately
+    updateChatSectionHeight();
+    
+    // Restore scroll position after transition
+    setTimeout(() => {
+        chatMessages.scrollTop = currentScrollTop;
+        isAnimating = false;
+    }, 300);
+}
+// Update chat section height based on viewport with immediate snap
+function updateChatSectionHeight() {
+    const chatSection = document.querySelector('.chat-section');
+    if (chatSection) {
+        const vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--vh', `${vh}px`);
         
-        isAnimating = true;
+        // Force reflow to ensure smooth transition
+        void chatSection.offsetHeight;
         
-        if (header) {
-            header.classList.add('header-hidden');
-            headerHidden = true;
+        if (headerHidden) {
+            // When header is hidden, chat takes full height minus bottom input area
+            chatSection.style.height = `calc(var(--vh, 1vh) * 100 - 50px)`;
+            // Add a class to body for additional styling
             document.body.classList.add('header-collapsed');
-            console.log('Header hidden');
-        }
-        
-        // Update chat section height after transition
-        setTimeout(() => {
-            updateChatSectionHeight();
-            isAnimating = false;
-        }, 300);
-    }
-    
-    // Function to show header with smooth transition
-    function showHeader() {
-        if (!headerHidden || isAnimating) return;
-        
-        isAnimating = true;
-        
-        if (header) {
-            header.classList.remove('header-hidden');
-            headerHidden = false;
+        } else {
+            // When header is visible, account for header height
+            chatSection.style.height = `calc(var(--vh, 1vh) * 100 - 130px)`;
             document.body.classList.remove('header-collapsed');
-            console.log('Header shown');
         }
         
-        // Update chat section height after transition
-        setTimeout(() => {
-            updateChatSectionHeight();
-            isAnimating = false;
-        }, 300);
-    }
-    
-    // Update chat section height based on viewport
-    function updateChatSectionHeight() {
-        const chatSection = document.querySelector('.chat-section');
-        if (chatSection) {
-            const vh = window.innerHeight * 0.01;
-            document.documentElement.style.setProperty('--vh', `${vh}px`);
-            
-            if (headerHidden) {
-                chatSection.style.height = `calc(var(--vh, 1vh) * 100 - 50px)`;
-            } else {
-                chatSection.style.height = `calc(var(--vh, 1vh) * 100 - 130px)`;
-            }
+        // Ensure the top of chat messages is visible
+        const chatMessages = document.getElementById('chatMessages');
+        if (chatMessages && chatMessages.scrollTop === 0) {
+            // If at top, maintain position
+            chatMessages.scrollTop = 0;
         }
     }
+}
     
     // Debounced scroll handler
     function handleScroll() {
