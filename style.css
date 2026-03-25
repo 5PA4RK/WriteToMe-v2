@@ -2178,3 +2178,24 @@ body.modal-open {
         }
     }
 }
+/* Header hide/show transition */
+header {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+    z-index: 100;
+}
+
+header.header-hidden {
+    transform: translateY(-100%);
+}
+
+/* Adjust chat section height when header is hidden */
+body.header-collapsed .chat-section {
+    transition: height 0.3s ease;
+}
+
+@media (max-width: 768px) {
+    body.header-collapsed .chat-section {
+        height: calc(var(--vh, 1vh) * 100 - 50px) !important;
+    }
+}
