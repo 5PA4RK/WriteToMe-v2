@@ -470,19 +470,19 @@ function setupEventListeners() {
     
     if (messageInput) {
         messageInput.addEventListener('keydown', (e) => {
+            // Enter + Ctrl/Cmd sends message (desktop)
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !isSendingMessage) {
                 e.preventDefault();
                 e.stopPropagation();
                 sendMessage();
-                forceScrollToBottom('smooth', 200);
             }
+            // For mobile, Enter key alone shouldn't send (prevents accidental sends)
         });
         
         messageInput.addEventListener('focus', function() {
             if (window.innerWidth <= 768) {
                 setTimeout(() => {
                     this.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    forceScrollToBottom('smooth', 300);
                 }, 300);
             }
         });
@@ -511,7 +511,27 @@ function setupEventListeners() {
     }
     
     if (sendMessageBtn) {
-        sendMessageBtn.addEventListener('click', sendMessage);
+        // REPLACE THE EXISTING CODE HERE with the new code below
+        const newSendBtn = sendMessageBtn.cloneNode(true);
+        sendMessageBtn.parentNode.replaceChild(newSendBtn, sendMessageBtn);
+        
+        const freshSendBtn = document.getElementById('sendMessageBtn');
+        if (freshSendBtn) {
+            freshSendBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                if (window.innerWidth <= 768) {
+                    setTimeout(() => {
+                        sendMessage();
+                    }, 50);
+                } else {
+                    sendMessage();
+                }
+            });
+            
+            window.sendMessageBtn = freshSendBtn;
+        }
     }
     
     if (clearChatBtn) {
@@ -2144,6 +2164,7 @@ async function handleTyping() {
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
     
+    // Prevent double sending
     if (isSendingMessage) {
         console.log('Message already sending, skipping...');
         return;
@@ -2159,11 +2180,18 @@ async function sendMessage() {
     
     if (!messageText && !imageFile) return;
     
+    // Set sending flag immediately
     isSendingMessage = true;
     
+    // Disable send button immediately
     if (sendMessageBtn) {
         sendMessageBtn.disabled = true;
-        sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+        if (window.innerWidth <= 768) {
+            sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            sendMessageBtn.style.opacity = '0.7';
+        } else {
+            sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+        }
     }
     
     const replyToId = window.__tempReplyTo || appState.replyingTo;
@@ -2171,55 +2199,42 @@ async function sendMessage() {
     appState.replyingTo = null;
     window.__tempReplyTo = null;
     
-    // Store the original message text and image for retry
     const originalMessageText = messageText;
     const originalImageFile = imageFile;
     
+    // Clear input immediately for better UX
+    messageInput.value = '';
+    messageInput.style.height = 'auto';
+    
+    // Clear image upload if present
     if (imageFile) {
-        // For images, we need to upload first
+        imageUpload.value = '';
+    }
+    
+    if (imageFile) {
         const reader = new FileReader();
         
         reader.onload = async function(e) {
             const imageUrl = e.target.result;
-            
             console.log('📸 Image loaded, sending to database...');
             
-            // Clear inputs immediately for better UX
-            imageUpload.value = '';
-            messageInput.value = '';
-            messageInput.style.height = 'auto';
-            
-            // Send to database
             const result = await sendMessageToDB(originalMessageText, imageUrl, replyToId);
             
-            if (result && result.success && result.data) {
-                console.log('✅ Image message saved to DB, ID:', result.data.id);
-                // Message will appear via realtime subscription
-            } else {
+            if (!result || !result.success) {
                 console.error('Failed to send image message');
-                const errorMsg = document.createElement('div');
-                errorMsg.className = 'message received';
-                errorMsg.innerHTML = `
-                    <div class="message-sender">System</div>
-                    <div class="message-content">
-                        <div class="message-text" style="color: var(--danger);">
-                            <i class="fas fa-exclamation-triangle"></i> Failed to send image. Please try again.
-                        </div>
-                    </div>
-                `;
-                chatMessages.appendChild(errorMsg);
-                forceScrollToBottom('smooth', 100);
-                
-                // Restore the message text to input
-                if (originalMessageText) {
-                    messageInput.value = originalMessageText;
-                }
+                showSendError(originalMessageText);
             }
             
+            // Re-enable send button
             isSendingMessage = false;
             if (sendMessageBtn) {
                 sendMessageBtn.disabled = false;
-                sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+                if (window.innerWidth <= 768) {
+                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+                    sendMessageBtn.style.opacity = '1';
+                } else {
+                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+                }
             }
         };
         
@@ -2230,7 +2245,15 @@ async function sendMessage() {
             isSendingMessage = false;
             if (sendMessageBtn) {
                 sendMessageBtn.disabled = false;
-                sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+                if (window.innerWidth <= 768) {
+                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+                    sendMessageBtn.style.opacity = '1';
+                } else {
+                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+                }
+            }
+            if (originalMessageText) {
+                messageInput.value = originalMessageText;
             }
         };
         
@@ -2239,35 +2262,44 @@ async function sendMessage() {
         // Text-only message
         const result = await sendMessageToDB(originalMessageText, null, replyToId);
         
+        if (!result || !result.success) {
+            console.error('Failed to send text message');
+            showSendError(originalMessageText);
+        }
+        
+        // Re-enable send button
         isSendingMessage = false;
         if (sendMessageBtn) {
             sendMessageBtn.disabled = false;
-            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
-        }
-        
-        messageInput.value = '';
-        messageInput.style.height = 'auto';
-        
-        if (!result || !result.success) {
-            // Show error if failed
-            const errorMsg = document.createElement('div');
-            errorMsg.className = 'message received';
-            errorMsg.innerHTML = `
-                <div class="message-sender">System</div>
-                <div class="message-content">
-                    <div class="message-text" style="color: var(--danger);">
-                        <i class="fas fa-exclamation-triangle"></i> Failed to send message. Please try again.
-                    </div>
-                </div>
-            `;
-            chatMessages.appendChild(errorMsg);
-            forceScrollToBottom('smooth', 100);
-            
-            // Restore text
-            if (originalMessageText) {
-                messageInput.value = originalMessageText;
+            if (window.innerWidth <= 768) {
+                sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+                sendMessageBtn.style.opacity = '1';
+            } else {
+                sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
         }
+    }
+}
+
+// Add this helper function right after sendMessage
+function showSendError(originalText) {
+    const errorMsg = document.createElement('div');
+    errorMsg.className = 'message received';
+    errorMsg.innerHTML = `
+        <div class="message-sender">System</div>
+        <div class="message-content">
+            <div class="message-text" style="color: var(--danger);">
+                <i class="fas fa-exclamation-triangle"></i> Failed to send message. Please try again.
+            </div>
+        </div>
+    `;
+    chatMessages.appendChild(errorMsg);
+    forceScrollToBottom('smooth', 100);
+    
+    // Restore the message text to input
+    if (originalText) {
+        messageInput.value = originalText;
+        messageInput.focus();
     }
 }
 
