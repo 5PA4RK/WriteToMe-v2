@@ -111,33 +111,13 @@ if (message.image && message.image.trim() !== '') {
     // Properly escape the image URL for HTML
     const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     
-    // Add image with better loading handling
-    messageContent += `<div class="image-container">
-        <img src="${safeImageUrl}" 
-             class="message-image" 
-             onclick="window.showFullImage('${safeImageUrl}')" 
-             loading="lazy"
-             onload="this.style.display='block'; this.parentElement.querySelector('.image-loading')?.remove();"
-             onerror="this.onerror=null; this.style.display='none'; this.parentElement.innerHTML+='<div class=\'image-error\'><i class=\'fas fa-image-slash\'></i> Image failed to load<br><small>Format may not be supported</small></div>';">
-        <div class="image-loading" style="text-align: center; padding: 20px; color: var(--text-muted);">
-            <i class="fas fa-spinner fa-spin"></i> Loading image...
-        </div>
-    </div>`;
-    
-    // Add a small delay to remove loading indicator
-    setTimeout(() => {
-        const container = messageDiv.querySelector('.image-container');
-        if (container) {
-            const loading = container.querySelector('.image-loading');
-            if (loading) {
-                setTimeout(() => {
-                    if (loading && loading.parentNode) {
-                        loading.remove();
-                    }
-                }, 2000);
-            }
-        }
-    }, 100);
+    // Simplified image rendering without the loading indicator that causes issues
+    messageContent += `<img src="${safeImageUrl}" 
+        class="message-image" 
+        onclick="window.showFullImage('${safeImageUrl}')" 
+        loading="lazy"
+        style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;"
+        onerror="this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load</div>');">`;
 }
         
         // Add reactions section
