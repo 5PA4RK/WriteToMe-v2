@@ -99,7 +99,8 @@ const ChatModule = (function() {
         
 // Add image if present (uploaded file)
 if (message.image && message.image.trim() !== '') {
-    console.log('Rendering image in message:', message.id, 'image length:', message.image.length);
+    console.log('Rendering image in message:', message.id);
+    console.log('Image type:', message.image.substring(0, 50));
     
     if (!message.text || !message.text.trim()) {
         messageContent += `<div class="message-text" style="color: var(--text-muted); font-style: italic; margin-bottom: 8px;">
@@ -107,9 +108,36 @@ if (message.image && message.image.trim() !== '') {
         </div>`;
     }
     
-    // Ensure the image URL is properly escaped
+    // Properly escape the image URL for HTML
     const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    messageContent += `<img src="${safeImageUrl}" class="message-image" onclick="window.showFullImage('${safeImageUrl}')" loading="lazy" onerror="this.onerror=null; this.style.display='none'; this.parentElement.innerHTML+='<div class=\'image-error\'><i class=\'fas fa-image-slash\'></i> Image failed to load</div>';">`;
+    
+    // Add image with better loading handling
+    messageContent += `<div class="image-container">
+        <img src="${safeImageUrl}" 
+             class="message-image" 
+             onclick="window.showFullImage('${safeImageUrl}')" 
+             loading="lazy"
+             onload="this.style.display='block'; this.parentElement.querySelector('.image-loading')?.remove();"
+             onerror="this.onerror=null; this.style.display='none'; this.parentElement.innerHTML+='<div class=\'image-error\'><i class=\'fas fa-image-slash\'></i> Image failed to load<br><small>Format may not be supported</small></div>';">
+        <div class="image-loading" style="text-align: center; padding: 20px; color: var(--text-muted);">
+            <i class="fas fa-spinner fa-spin"></i> Loading image...
+        </div>
+    </div>`;
+    
+    // Add a small delay to remove loading indicator
+    setTimeout(() => {
+        const container = messageDiv.querySelector('.image-container');
+        if (container) {
+            const loading = container.querySelector('.image-loading');
+            if (loading) {
+                setTimeout(() => {
+                    if (loading && loading.parentNode) {
+                        loading.remove();
+                    }
+                }, 2000);
+            }
+        }
+    }, 100);
 }
         
         // Add reactions section
