@@ -97,15 +97,20 @@ const ChatModule = (function() {
             }
         }
         
-        // Add image if present (uploaded file)
-        if (message.image) {
-            if (!message.text || !message.text.trim()) {
-                messageContent += `<div class="message-text" style="color: var(--text-muted); font-style: italic; margin-bottom: 8px;">
-                    <i class="fas fa-image"></i> Image
-                </div>`;
-            }
-            messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')" loading="lazy">`;
-        }
+// Add image if present (uploaded file)
+if (message.image && message.image.trim() !== '') {
+    console.log('Rendering image in message:', message.id, 'image length:', message.image.length);
+    
+    if (!message.text || !message.text.trim()) {
+        messageContent += `<div class="message-text" style="color: var(--text-muted); font-style: italic; margin-bottom: 8px;">
+            <i class="fas fa-image"></i> Image
+        </div>`;
+    }
+    
+    // Ensure the image URL is properly escaped
+    const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    messageContent += `<img src="${safeImageUrl}" class="message-image" onclick="window.showFullImage('${safeImageUrl}')" loading="lazy" onerror="this.onerror=null; this.style.display='none'; this.parentElement.innerHTML+='<div class=\'image-error\'><i class=\'fas fa-image-slash\'></i> Image failed to load</div>';">`;
+}
         
         // Add reactions section
         const reactionsHtml = `<div class="message-reactions"></div>`;
@@ -148,15 +153,32 @@ const ChatModule = (function() {
             }
         }
         
+// In displayMessage function, replace the scroll section with:
+        
         // Smart scroll: only auto-scroll if user is near bottom
         const isNearBottom = elements.chatMessages.scrollHeight - elements.chatMessages.scrollTop - elements.chatMessages.clientHeight < 100;
-        if (isNearBottom && !appState.isViewingHistory) {
-            requestAnimationFrame(() => {
+        
+        // Always scroll for user's own messages
+        const isOwnMessage = message.type === 'sent';
+        
+        if (isOwnMessage || (isNearBottom && !appState.isViewingHistory)) {
+            // Use multiple scroll attempts to ensure it works
+            setTimeout(() => {
                 elements.chatMessages.scrollTo({
                     top: elements.chatMessages.scrollHeight,
                     behavior: 'smooth'
                 });
-            });
+            }, 50);
+            
+            // Second attempt for images that load slowly
+            if (message.image) {
+                setTimeout(() => {
+                    elements.chatMessages.scrollTo({
+                        top: elements.chatMessages.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }, 300);
+            }
         }
     }
 
