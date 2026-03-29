@@ -1971,24 +1971,21 @@ function setupRealtimeSubscriptions() {
                     if (cleared) shouldDisplay = false;
                 }
                 
-// In the INSERT handler, replace the image handling section
+// In the INSERT handler, ensure image is processed
 if (shouldDisplay) {
     const messageType = payload.new.sender_id === appState.userId ? 'sent' : 'received';
     
-    // Check if message already exists in DOM
     const existingMsg = document.getElementById(`msg-${payload.new.id}`);
     if (!existingMsg) {
-        // Get reactions first
         const reactions = await getMessageReactions(payload.new.id);
         
-        // FIX: Properly handle image URL - don't use ensureValidImageUrl as it's not defined properly
+        // Ensure image URL is valid
         let imageUrl = null;
         if (payload.new.image_url && payload.new.image_url.trim() !== '') {
             imageUrl = payload.new.image_url;
-            console.log('Processing image URL, type:', imageUrl.substring(0, 50));
+            console.log('Processing image for display, length:', imageUrl.length);
         }
         
-        // Create message object with ALL data including image_url
         const messageObj = {
             id: payload.new.id,
             sender: payload.new.sender_name,
@@ -2003,10 +2000,7 @@ if (shouldDisplay) {
         
         console.log('Displaying message with image:', !!messageObj.image);
         
-        // Display the message
         displayMessage(messageObj);
-        
-        // Auto-scroll for new messages
         forceScrollToBottom('smooth', 100);
     }
 }
@@ -2318,15 +2312,21 @@ function showSendError(originalText) {
 async function sendMessageToDB(text, imageUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
     console.log('Image URL present:', !!imageUrl);
-    if (imageUrl) {
-        console.log('Image type detected:', imageUrl.substring(0, 100));
-    }
     
     try {
         const finalReplyToId = replyToId || window.__tempReplyTo || appState.replyingTo;
         
         appState.replyingTo = null;
         window.__tempReplyTo = null;
+        
+        let finalImageUrl = imageUrl;
+        
+        // Compress PNG and GIF images to prevent database size issues
+        if (imageUrl && (imageUrl.startsWith('data:image/png') || imageUrl.startsWith('data:image/gif'))) {
+            console.log('Compressing PNG/GIF image...');
+            finalImageUrl = await compressImage(imageUrl);
+            console.log('Compressed image length:', finalImageUrl.length);
+        }
         
         const messageData = {
             session_id: appState.currentSessionId,
@@ -2337,17 +2337,8 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
             reply_to: finalReplyToId
         };
         
-        // IMPORTANT: For PNG and GIF, ensure the entire data URL is saved
-        if (imageUrl && imageUrl.trim() !== '') {
-            // Verify it's a complete data URL
-            if (imageUrl.startsWith('data:image/')) {
-                console.log('Data URL detected, length:', imageUrl.length);
-                // Make sure it's not truncated
-                if (imageUrl.length < 100) {
-                    console.error('Image data URL too short, might be corrupted');
-                }
-            }
-            messageData.image_url = imageUrl;
+        if (finalImageUrl && finalImageUrl.trim() !== '') {
+            messageData.image_url = finalImageUrl;
             console.log('📸 Adding image to message');
         }
         
@@ -2363,7 +2354,6 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
         }
         
         console.log('✅ Message saved to DB. ID:', data.id);
-        console.log('Image URL in response:', data.image_url ? 'YES (length: ' + data.image_url.length + ')' : 'NO');
         
         return { success: true, data };
     } catch (error) {
@@ -2371,6 +2361,48 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
         alert("Failed to send message: " + error.message);
         return null;
     }
+}
+
+// Add this helper function to compress images
+function compressImage(dataUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            
+            // Max dimensions for compressed image
+            const maxWidth = 800;
+            const maxHeight = 800;
+            
+            if (width > height) {
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+            } else {
+                if (height > maxHeight) {
+                    width = Math.round((width * maxHeight) / height);
+                    height = maxHeight;
+                }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Compress as JPEG for better compatibility
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            resolve(compressedDataUrl);
+        };
+        img.onerror = () => {
+            console.error('Failed to compress image, using original');
+            resolve(dataUrl);
+        };
+        img.src = dataUrl;
+    });
 }
 
 // Helper function to validate and fix image data URLs
