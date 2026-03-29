@@ -2383,10 +2383,6 @@ function ensureValidImageUrl(imageUrl) {
     return imageUrl;
 }
 
-// Then use it when displaying images:
-// In the realtime handler, before displaying:
-const imageUrl = payload.new.image_url ? ensureValidImageUrl(payload.new.image_url) : null;
-
 function displayMessage(message) {
     if (window.ChatModule) {
         window.ChatModule.displayMessage(message);
