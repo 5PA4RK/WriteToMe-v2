@@ -2361,6 +2361,32 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
     }
 }
 
+// Helper function to validate and fix image data URLs
+function ensureValidImageUrl(imageUrl) {
+    if (!imageUrl) return null;
+    
+    // Check if it's a valid data URL
+    if (imageUrl.startsWith('data:image/')) {
+        // Check if it's a PNG or GIF
+        if (imageUrl.includes('data:image/png') || imageUrl.includes('data:image/gif')) {
+            console.log('PNG/GIF image detected, validating...');
+            // Make sure the data URL is complete
+            if (imageUrl.length < 100) {
+                console.error('Image data URL seems too short, might be corrupted');
+                return null;
+            }
+        }
+        return imageUrl;
+    }
+    
+    // If it's a regular URL, return as is
+    return imageUrl;
+}
+
+// Then use it when displaying images:
+// In the realtime handler, before displaying:
+const imageUrl = payload.new.image_url ? ensureValidImageUrl(payload.new.image_url) : null;
+
 function displayMessage(message) {
     if (window.ChatModule) {
         window.ChatModule.displayMessage(message);
