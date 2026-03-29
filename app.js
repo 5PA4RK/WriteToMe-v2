@@ -1944,70 +1944,76 @@ function setupRealtimeSubscriptions() {
     }
     
     appState.realtimeSubscription = supabaseClient
-        .channel('messages_' + appState.currentSessionId)
-// In the INSERT handler, ensure images are displayed correctly
-.on(
-    'postgres_changes',
-    {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages'
-    },
-    async (payload) => {
-        console.log('📦 Realtime message received:', payload.new);
-        console.log('Has image:', !!payload.new.image_url);
-        
-        if (payload.new && payload.new.session_id === appState.currentSessionId) {
-            // Always display the message (both own and others)
-            // The realtime subscription will handle all messages
+    .channel('messages_' + appState.currentSessionId)
+    .on(
+        'postgres_changes',
+        {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages'
+        },
+        async (payload) => {
+            console.log('📦 Realtime message received:', payload.new);
+            console.log('Has image:', !!payload.new.image_url);
+            console.log('Image URL:', payload.new.image_url ? payload.new.image_url.substring(0, 100) : 'none');
             
-            // Check if message is cleared for guests
-            let shouldDisplay = true;
-            if (!appState.isHost && payload.new.sender_id !== appState.userId) {
-                const { data: cleared } = await supabaseClient
-                    .from('cleared_messages')
-                    .select('id')
-                    .eq('user_id', appState.userId)
-                    .eq('message_id', payload.new.id)
-                    .maybeSingle();
+            if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                // Check if message is cleared for guests
+                let shouldDisplay = true;
+                if (!appState.isHost && payload.new.sender_id !== appState.userId) {
+                    const { data: cleared } = await supabaseClient
+                        .from('cleared_messages')
+                        .select('id')
+                        .eq('user_id', appState.userId)
+                        .eq('message_id', payload.new.id)
+                        .maybeSingle();
+                    
+                    if (cleared) shouldDisplay = false;
+                }
                 
-                if (cleared) shouldDisplay = false;
-            }
-            
-            if (shouldDisplay) {
-                const messageType = payload.new.sender_id === appState.userId ? 'sent' : 'received';
-                
-                // Check if message already exists in DOM
-                const existingMsg = document.getElementById(`msg-${payload.new.id}`);
-                if (!existingMsg) {
-                    getMessageReactions(payload.new.id).then(reactions => {
-                        displayMessage({
+                if (shouldDisplay) {
+                    const messageType = payload.new.sender_id === appState.userId ? 'sent' : 'received';
+                    
+                    // Check if message already exists in DOM
+                    const existingMsg = document.getElementById(`msg-${payload.new.id}`);
+                    if (!existingMsg) {
+                        // Get reactions first
+                        const reactions = await getMessageReactions(payload.new.id);
+                        
+                        // Create message object with ALL data including image_url
+                        const messageObj = {
                             id: payload.new.id,
                             sender: payload.new.sender_name,
-                            text: payload.new.message,
-                            image: payload.new.image_url,
+                            text: payload.new.message || '',
+                            image: payload.new.image_url || null,  // Ensure image_url is included
                             time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                             type: messageType,
                             is_historical: false,
-                            reactions: reactions,
+                            reactions: reactions || [],
                             reply_to: payload.new.reply_to
-                        });
+                        };
+                        
+                        console.log('Displaying message with image:', !!messageObj.image);
+                        
+                        // Display the message
+                        displayMessage(messageObj);
                         
                         // Auto-scroll for new messages
                         forceScrollToBottom('smooth', 100);
-                    });
+                    } else {
+                        console.log('Message already exists, skipping:', payload.new.id);
+                    }
                 }
                 
                 // Play sound for received messages
-                if (messageType === 'received' && appState.soundEnabled && !payload.new.is_notification) {
+                if (payload.new.sender_id !== appState.userId && appState.soundEnabled && !payload.new.is_notification) {
                     if (window.playNotificationSound) {
                         window.playNotificationSound();
                     }
                 }
             }
         }
-    }
-)
+    )
         .on(
             'postgres_changes',
             {
@@ -2306,6 +2312,9 @@ function showSendError(originalText) {
 async function sendMessageToDB(text, imageUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
     console.log('Image URL present:', !!imageUrl);
+    if (imageUrl) {
+        console.log('Image type:', imageUrl.substring(0, 50));
+    }
     
     try {
         const finalReplyToId = replyToId || window.__tempReplyTo || appState.replyingTo;
@@ -2323,9 +2332,10 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
             reply_to: finalReplyToId
         };
         
-        if (imageUrl) {
+        // Always include image_url if present (even for PNG/GIF)
+        if (imageUrl && imageUrl.trim() !== '') {
             messageData.image_url = imageUrl;
-            console.log('📸 Adding image to message:', imageUrl.substring(0, 100));
+            console.log('📸 Adding image to message, length:', imageUrl.length);
         }
         
         const { data, error } = await supabaseClient
@@ -2340,11 +2350,9 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
         }
         
         console.log('✅ Message saved to DB. ID:', data.id);
-        console.log('Has image in response:', !!data.image_url);
+        console.log('Saved image_url in DB:', data.image_url ? 'YES' : 'NO');
         
-        // Don't display manually - let the realtime subscription handle it
-        // This prevents duplicate messages
-        
+        // The message will appear via realtime subscription
         return { success: true, data };
     } catch (error) {
         console.error("❌ Error in sendMessageToDB:", error);
