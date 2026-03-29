@@ -3,7 +3,6 @@ let isSendingMessage = false;
 let pendingImageUpload = null;
 let imageUploadTimeout = null;
 
-
 // Supabase Configuration
 const SUPABASE_URL = 'https://plqvqenoroacvzwtgoxq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_91IHQ5--y4tDIo8L9X2ZJQ_YeThfdu_';
@@ -40,27 +39,6 @@ const appState = {
     replyingTo: null,
     activeMessageActions: null
 };
-
-window.replyToMessage = function(messageId) {
-    const messageElement = document.getElementById(`msg-${messageId}`);
-    if (messageElement) {
-        const sender = messageElement.querySelector('.message-sender').textContent;
-        const text = messageElement.querySelector('.message-text').textContent;
-        messageInput.value = `Replying to ${sender}: ${text}\n`;
-        messageInput.focus();
-    }
-};
-
-// Make getMessageReactions available globally for loadChatHistory
-window.getMessageReactions = async function(messageId) {
-    if (window.ChatModule) {
-        return await window.ChatModule.getMessageReactions(messageId);
-    }
-    return [];
-};
-// Make sendMessage globally available
-window.sendMessage = sendMessage;
-
 
 // DOM Elements
 const connectionModal = document.getElementById('connectionModal');
@@ -168,7 +146,6 @@ const sendReplyBtn = document.getElementById('sendReplyBtn');
 
 // Initialize ChatModule with appState and supabaseClient
 document.addEventListener('DOMContentLoaded', () => {
-    // After DOM is loaded, initialize ChatModule
     setTimeout(() => {
         if (window.ChatModule) {
             window.ChatModule.init(appState, supabaseClient, {
@@ -187,10 +164,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             console.log('ChatModule initialized with appState and supabaseClient');
         }
-    }, 100); // Small delay to ensure DOM is ready
+    }, 100);
 });
-
-
 
 // ============================================
 // INITIALIZATION
@@ -204,24 +179,21 @@ async function initApp() {
         mainContainer.style.display = 'none';
     }
 
-    // Initialize audio on first user interaction
-function initAudio() {
-    if (!window.audioContext) {
-        window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        console.log('✅ Audio context initialized');
+    function initAudio() {
+        if (!window.audioContext) {
+            window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            console.log('✅ Audio context initialized');
+        }
+        if (window.audioContext.state === 'suspended') {
+            window.audioContext.resume();
+        }
     }
-    if (window.audioContext.state === 'suspended') {
-        window.audioContext.resume();
-    }
-}
 
-    // Setup mobile header scroll behavior
     setupMobileHeaderScroll();
 
-// Set up audio initialization listeners
-document.addEventListener('click', initAudio, { once: true });
-document.addEventListener('keydown', initAudio, { once: true });
-document.addEventListener('touchstart', initAudio, { once: true });
+    document.addEventListener('click', initAudio, { once: true });
+    document.addEventListener('keydown', initAudio, { once: true });
+    document.addEventListener('touchstart', initAudio, { once: true });
     
     document.body.classList.remove('host-mode');
     
@@ -269,9 +241,41 @@ document.addEventListener('touchstart', initAudio, { once: true });
         loadChatSessions();
     }
     
-    // Start subscription health check
     setInterval(checkAndReconnectSubscriptions, 15000);
 }
+
+// ============================================
+// SCROLL TO BOTTOM HELPER
+// ============================================
+
+function scrollToBottom(behavior = 'smooth', delay = 50) {
+    setTimeout(() => {
+        if (chatMessages && !appState.isViewingHistory) {
+            const isNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 200;
+            if (isNearBottom) {
+                chatMessages.scrollTo({
+                    top: chatMessages.scrollHeight,
+                    behavior: behavior
+                });
+            }
+        }
+    }, delay);
+}
+
+function forceScrollToBottom(behavior = 'smooth', delay = 50) {
+    setTimeout(() => {
+        if (chatMessages && !appState.isViewingHistory) {
+            chatMessages.scrollTo({
+                top: chatMessages.scrollHeight,
+                behavior: behavior
+            });
+        }
+    }, delay);
+}
+
+// Make scroll functions global
+window.forceScrollToBottom = forceScrollToBottom;
+window.scrollToBottom = scrollToBottom;
 
 // ============================================
 // MODAL FUNCTIONS
@@ -338,7 +342,6 @@ async function reconnectToSession() {
                 appState.currentSessionId = session.session_id;
                 setupRealtimeSubscriptions();
                 setupPendingGuestsSubscription();
-                // REMOVE THIS LINE: loadChatHistory();
                 loadPendingGuests();
                 return true;
             }
@@ -356,7 +359,6 @@ async function reconnectToSession() {
             if (guestStatus.status === 'approved') {
                 appState.currentSessionId = session.session_id;
                 setupRealtimeSubscriptions();
-                // REMOVE THIS LINE: loadChatHistory();
                 return true;
             } else if (guestStatus.status === 'pending') {
                 appState.currentSessionId = session.session_id;
@@ -407,24 +409,21 @@ function getStableRoomNumber(sessionId) {
 // ============================================
 
 function setupEventListeners() {
+    if (emojiBtn) {
+        emojiBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            toggleEmojiPicker();
+        });
+    }
 
-// Improve emoji picker for mobile
-if (emojiBtn) {
-    emojiBtn.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        toggleEmojiPicker();
-    });
-}
+    if (emojiPicker) {
+        document.addEventListener('touchmove', () => {
+            if (emojiPicker.classList.contains('show')) {
+                emojiPicker.classList.remove('show');
+            }
+        }, { passive: true });
+    }
 
-// Close emoji picker when scrolling on mobile
-if (emojiPicker) {
-    document.addEventListener('touchmove', () => {
-        if (emojiPicker.classList.contains('show')) {
-            emojiPicker.classList.remove('show');
-        }
-    }, { passive: true });
-}
-    // Connection modal
     if (usernameInput) {
         usernameInput.addEventListener('input', function() {
             if (passwordError) passwordError.style.display = 'none';
@@ -441,7 +440,6 @@ if (emojiPicker) {
         connectBtn.addEventListener('click', handleConnect);
     }
     
-    // Guest notification button
     if (guestNotifyBtn) {
         guestNotifyBtn.addEventListener('click', showGuestNotificationModal);
     }
@@ -456,12 +454,10 @@ if (emojiPicker) {
         sendGuestNotification.addEventListener('click', sendGuestNotificationToAdmin);
     }
     
-    // Logout
     if (logoutBtn) {
         logoutBtn.addEventListener('click', handleLogout);
     }
     
-    // Pending guests
     if (pendingGuestsBtn) {
         pendingGuestsBtn.addEventListener('click', showPendingGuests);
     }
@@ -472,59 +468,47 @@ if (emojiPicker) {
         });
     }
     
-    // Chat functionality
-// In the setupEventListeners function, update the messageInput keydown handler:
-if (messageInput) {
-    messageInput.addEventListener('keydown', (e) => {
-        // Enter + Ctrl/Cmd sends message
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !isSendingMessage) {
-            e.preventDefault();
-            e.stopPropagation();
-            sendMessage();
-            
-            // Force scroll after sending on mobile
-            setTimeout(() => {
-                if (chatMessages) {
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-            }, 200);
-        }
-    });
-    
-    // Handle focus to ensure proper scrolling
-    messageInput.addEventListener('focus', function() {
-        if (window.innerWidth <= 768) {
-            setTimeout(() => {
-                this.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                scrollChatToBottom(300);
-            }, 300);
-        }
-    });
-    
-    messageInput.addEventListener('input', handleTyping);
-}
-
-function fixMobileViewport() {
-    if (window.innerWidth <= 768) {
-        // Fix for iOS viewport issues
-        const setViewportHeight = () => {
-            let vh = window.innerHeight * 0.01;
-            document.documentElement.style.setProperty('--vh', `${vh}px`);
-            
-            const chatSection = document.querySelector('.chat-section');
-            if (chatSection) {
-                chatSection.style.height = `calc(var(--vh, 1vh) * 100 - 130px)`;
+    if (messageInput) {
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !isSendingMessage) {
+                e.preventDefault();
+                e.stopPropagation();
+                sendMessage();
+                forceScrollToBottom('smooth', 200);
             }
-        };
-        
-        setViewportHeight();
-        window.addEventListener('resize', setViewportHeight);
-        window.addEventListener('orientationchange', () => {
-            setTimeout(setViewportHeight, 100);
         });
+        
+        messageInput.addEventListener('focus', function() {
+            if (window.innerWidth <= 768) {
+                setTimeout(() => {
+                    this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    forceScrollToBottom('smooth', 300);
+                }, 300);
+            }
+        });
+        
+        messageInput.addEventListener('input', handleTyping);
     }
-}
 
+    function fixMobileViewport() {
+        if (window.innerWidth <= 768) {
+            const setViewportHeight = () => {
+                let vh = window.innerHeight * 0.01;
+                document.documentElement.style.setProperty('--vh', `${vh}px`);
+                
+                const chatSection = document.querySelector('.chat-section');
+                if (chatSection) {
+                    chatSection.style.height = `calc(var(--vh, 1vh) * 100 - 130px)`;
+                }
+            };
+            
+            setViewportHeight();
+            window.addEventListener('resize', setViewportHeight);
+            window.addEventListener('orientationchange', () => {
+                setTimeout(setViewportHeight, 100);
+            });
+        }
+    }
     
     if (sendMessageBtn) {
         sendMessageBtn.addEventListener('click', sendMessage);
@@ -534,22 +518,18 @@ function fixMobileViewport() {
         clearChatBtn.addEventListener('click', clearChat);
     }
     
-    // Image upload
     if (imageUpload) {
         imageUpload.addEventListener('change', handleImageUpload);
     }
     
-    // Emoji picker
     if (emojiBtn) {
         emojiBtn.addEventListener('click', toggleEmojiPicker);
     }
     
-    // Return to active chat
     if (returnToActiveBtn) {
         returnToActiveBtn.addEventListener('click', returnToActiveChat);
     }
     
-    // History
     if (refreshHistoryBtn) {
         refreshHistoryBtn.addEventListener('click', async () => {
             await loadAllSessions();
@@ -557,12 +537,10 @@ function fixMobileViewport() {
         });
     }
     
-    // Sound control
     if (soundControl) {
         soundControl.addEventListener('click', toggleSound);
     }
     
-    // Image modal
     if (imageModal) {
         imageModal.addEventListener('click', (e) => {
             if (e.target === imageModal || e.target.classList.contains('image-modal-overlay')) {
@@ -576,62 +554,25 @@ function fixMobileViewport() {
             }
         });
     }
-    // Add this function to handle playing sounds reliably
-// Alternative: Simple "pop" sound
-function playPopSound() {
-    if (!appState.soundEnabled) return;
     
-    try {
-        if (!audioContext) {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    document.addEventListener('click', (e) => {
+        if (emojiPicker && emojiPicker.classList.contains('show')) {
+            if (!emojiPicker.contains(e.target) && emojiBtn && !emojiBtn.contains(e.target)) {
+                emojiPicker.classList.remove('show');
+            }
         }
         
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.type = 'triangle';
-        oscillator.frequency.setValueAtTime(150, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-        
-        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-        
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.1);
-        
-        console.log('🔔 Pop sound played');
-    } catch (error) {
-        console.log('Could not play pop sound:', error);
-    }
-}
-    
-    // Click outside emoji picker to close
-// Click outside emoji picker to close
-document.addEventListener('click', (e) => {
-    // Close emoji picker when clicking outside
-    if (emojiPicker && emojiPicker.classList.contains('show')) {
-        if (!emojiPicker.contains(e.target) && emojiBtn && !emojiBtn.contains(e.target)) {
-            emojiPicker.classList.remove('show');
+        if (appState.activeMessageActions) {
+            const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
+            if (actionsMenu && !actionsMenu.contains(e.target) && 
+                !e.target.closest('.message-action-dots')) {
+                if (window.ChatModule) {
+                    window.ChatModule.closeMessageActions();
+                }
+            }
         }
-    }
+    });
     
-// Close message actions when clicking outside
-if (appState.activeMessageActions) {
-    const actionsMenu = document.getElementById(`actions-${appState.activeMessageActions}`);
-    if (actionsMenu && !actionsMenu.contains(e.target) && 
-        !e.target.closest('.message-action-dots')) {
-        // Call the ChatModule version
-        if (window.ChatModule) {
-            window.ChatModule.closeMessageActions();
-        }
-    }
-}
-});
-    
-    // Tab switching
     if (historyTabBtn) {
         historyTabBtn.addEventListener('click', () => switchAdminTab('history'));
     }
@@ -640,7 +581,6 @@ if (appState.activeMessageActions) {
         usersTabBtn.addEventListener('click', () => switchAdminTab('users'));
     }
     
-    // Notes panel
     if (notesBtn) {
         notesBtn.addEventListener('click', toggleNotesPanel);
     }
@@ -666,38 +606,34 @@ if (appState.activeMessageActions) {
         });
     }
     
-// Fix for mobile keyboard scrolling
-if (messageInput) {
-    messageInput.addEventListener('focus', function() {
-        if (window.innerWidth <= 768) {
-            document.body.classList.add('keyboard-open');
-            // Small delay to ensure keyboard is open
-            setTimeout(() => {
-                this.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 300);
-        }
-    });
-    
-    messageInput.addEventListener('blur', function() {
-        if (window.innerWidth <= 768) {
-            document.body.classList.remove('keyboard-open');
-        }
-    });
-}
+    if (messageInput) {
+        messageInput.addEventListener('focus', function() {
+            if (window.innerWidth <= 768) {
+                document.body.classList.add('keyboard-open');
+                setTimeout(() => {
+                    this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300);
+            }
+        });
+        
+        messageInput.addEventListener('blur', function() {
+            if (window.innerWidth <= 768) {
+                document.body.classList.remove('keyboard-open');
+            }
+        });
+    }
 
-// Also handle when user taps on any input field
-const allInputs = document.querySelectorAll('input, textarea');
-allInputs.forEach(input => {
-    input.addEventListener('focus', function() {
-        if (window.innerWidth <= 768) {
-            setTimeout(() => {
-                this.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 300);
-        }
+    const allInputs = document.querySelectorAll('input, textarea');
+    allInputs.forEach(input => {
+        input.addEventListener('focus', function() {
+            if (window.innerWidth <= 768) {
+                setTimeout(() => {
+                    this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300);
+            }
+        });
     });
-});
 
-    // Click outside to close notes panel
     document.addEventListener('click', (e) => {
         if (notesPanel && notesPanel.classList.contains('show') && 
             !notesPanel.contains(e.target) && 
@@ -707,30 +643,27 @@ allInputs.forEach(input => {
         }
     });
     
-    // Reply modal
-// Add this to your setupEventListeners in app.js for the reply modal close button
-if (closeReplyModal) {
-    const handleCloseModal = () => {
-        replyModal.style.display = 'none';
-        if (appState) appState.replyingTo = null;
-        document.body.classList.remove('modal-open');
-    };
-    
-    closeReplyModal.addEventListener('click', handleCloseModal);
-    closeReplyModal.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        handleCloseModal();
-    }, { passive: false });
-}
-
-if (sendReplyBtn) {
-    // Remove any existing listeners first
-    sendReplyBtn.replaceWith(sendReplyBtn.cloneNode(true));
-    const newSendReplyBtn = document.getElementById('sendReplyBtn');
-    if (newSendReplyBtn) {
-        newSendReplyBtn.addEventListener('click', sendReply);
+    if (closeReplyModal) {
+        const handleCloseModal = () => {
+            replyModal.style.display = 'none';
+            if (appState) appState.replyingTo = null;
+            document.body.classList.remove('modal-open');
+        };
+        
+        closeReplyModal.addEventListener('click', handleCloseModal);
+        closeReplyModal.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleCloseModal();
+        }, { passive: false });
     }
-}
+
+    if (sendReplyBtn) {
+        sendReplyBtn.replaceWith(sendReplyBtn.cloneNode(true));
+        const newSendReplyBtn = document.getElementById('sendReplyBtn');
+        if (newSendReplyBtn) {
+            newSendReplyBtn.addEventListener('click', sendReply);
+        }
+    }
     
     window.addEventListener('click', (e) => {
         if (e.target === replyModal) {
@@ -741,7 +674,8 @@ if (sendReplyBtn) {
             guestNotificationModal.style.display = 'none';
         }
     });
-    // Add this function to properly close the reply modal
+}
+
 window.closeReplyModal = function() {
     const replyModal = document.getElementById('replyModal');
     if (replyModal) {
@@ -749,7 +683,6 @@ window.closeReplyModal = function() {
     }
     appState.replyingTo = null;
 };
-}
 
 // ============================================
 // TAB SWITCHING
@@ -787,6 +720,7 @@ function switchAdminTab(tabName) {
 // ============================================
 // CLEAR CHAT
 // ============================================
+
 async function clearChat() {
     if (!appState.isConnected || !appState.currentSessionId) {
         alert("You must be connected to clear chat.");
@@ -799,7 +733,6 @@ async function clearChat() {
     
     try {
         if (appState.isHost) {
-            // HOST: Permanently delete all messages for everyone
             const { error } = await supabaseClient
                 .from('messages')
                 .update({
@@ -811,19 +744,12 @@ async function clearChat() {
             
             if (error) throw error;
             
-            // Clear local messages
             chatMessages.innerHTML = '';
             appState.messages = [];
             
-            // Add system message for host
             addSystemMessage(`[${appState.userName}] deleted chat messages`);
-            
-            // Also save system message to DB so guests see it
             await saveMessageToDB('System', `[${appState.userName}] deleted chat messages`);
-            
         } else {
-            // GUEST: Mark all current messages as cleared for this user
-            // Get all message IDs from the current session that are not already cleared
             const { data: messages, error: fetchError } = await supabaseClient
                 .from('messages')
                 .select('id')
@@ -835,7 +761,6 @@ async function clearChat() {
             let clearedCount = 0;
             
             if (messages && messages.length > 0) {
-                // Insert cleared messages records
                 const clearedRecords = messages.map(msg => ({
                     user_id: appState.userId,
                     message_id: msg.id,
@@ -843,7 +768,6 @@ async function clearChat() {
                     cleared_at: new Date().toISOString()
                 }));
                 
-                // Insert in batches to avoid payload size issues
                 const batchSize = 100;
                 for (let i = 0; i < clearedRecords.length; i += batchSize) {
                     const batch = clearedRecords.slice(i, i + batchSize);
@@ -860,14 +784,10 @@ async function clearChat() {
                 clearedCount = messages.length;
             }
             
-            // Clear local messages from UI
             const messageElements = document.querySelectorAll('.message');
             messageElements.forEach(msg => msg.remove());
             
-            // Add local system message for this guest only
             addSystemMessage(`Chat messages cleared`, true);
-            
-            // Notify host that guest cleared their chat
             await saveMessageToDB('System', `🔔 [${appState.userName}] cleared chat`);
             
             console.log(`✅ Cleared ${clearedCount} messages for user ${appState.userName}`);
@@ -878,33 +798,10 @@ async function clearChat() {
     }
 }
 
-// New function to save host notification
-async function saveHostNotification(messageText) {
-    try {
-        // Save to visitor_notes table (host-only)
-        const { error } = await supabaseClient
-            .from('visitor_notes')
-            .insert([{
-                guest_id: appState.userId,
-                guest_name: appState.userName,
-                session_id: appState.currentSessionId,
-                note_text: `🔔 CHAT CLEAR: ${messageText}`,
-                created_at: new Date().toISOString(),
-                read_by_host: false,
-                is_host_notification: true
-            }]);
-        
-        if (error) {
-            console.error("Error saving host notification:", error);
-        }
-    } catch (error) {
-        console.error("Error in saveHostNotification:", error);
-    }
-}
-
 // ============================================
 // SYSTEM MESSAGE HELPER
 // ============================================
+
 function addSystemMessage(text, isLocal = false) {
     const systemMsg = document.createElement('div');
     systemMsg.className = 'message received';
@@ -919,7 +816,7 @@ function addSystemMessage(text, isLocal = false) {
         </div>
     `;
     chatMessages.appendChild(systemMsg);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    forceScrollToBottom('smooth', 100);
 }
 
 // ============================================
@@ -967,7 +864,6 @@ async function handleConnect() {
         
         console.log("👤 User found:", userData.username, "Role:", userData.role);
         
-        // Authenticate
         let isAuthenticated = false;
         
         try {
@@ -1120,14 +1016,13 @@ async function connectAsHost(userIP) {
 }
 
 // ============================================
-// CONNECT AS GUEST - FIXED VERSION
+// CONNECT AS GUEST
 // ============================================
 
 async function connectAsGuest(userIP) {
     try {
         console.log("👤 Connecting as guest - checking for existing sessions...");
         
-        // First, check if the user has any previous approved session that's still active
         const { data: activeSessions, error: sessionError } = await supabaseClient
             .from('sessions')
             .select('session_id, host_name, host_id')
@@ -1140,7 +1035,6 @@ async function connectAsGuest(userIP) {
             return;
         }
         
-        // Check for each active session if the user has an approved status
         for (const targetSession of activeSessions) {
             console.log("Checking session:", targetSession.session_id);
             
@@ -1166,14 +1060,10 @@ async function connectAsGuest(userIP) {
                     updateUIForPendingGuest();
                     setupPendingApprovalSubscription(targetSession.session_id);
                     return;
-                } else if (existingRequest.status === 'left' || existingRequest.status === 'rejected' || existingRequest.status === 'kicked') {
-                    console.log(`Previous request was ${existingRequest.status}, can try to request again`);
-                    // Continue to next session or create new request for this one
                 }
             }
         }
         
-        // If no existing approved/pending session found, try to join the latest active session
         const targetSession = activeSessions[0];
         console.log("✅ Found active session, creating new request for:", targetSession.session_id);
         await createNewGuestRequest(targetSession, userIP);
@@ -1189,7 +1079,6 @@ async function createNewGuestRequest(session, userIP) {
     try {
         console.log("Creating new guest request for session:", session.session_id);
         
-        // Check if there's an existing left/rejected request we should update instead of insert
         const { data: existingRequest } = await supabaseClient
             .from('session_guests')
             .select('id, status')
@@ -1200,7 +1089,6 @@ async function createNewGuestRequest(session, userIP) {
         if (existingRequest) {
             console.log(`Updating existing ${existingRequest.status} request to pending`);
             
-            // Update the existing request
             const { error: updateError } = await supabaseClient
                 .from('session_guests')
                 .update({
@@ -1222,7 +1110,6 @@ async function createNewGuestRequest(session, userIP) {
             
             console.log("✅ Guest request updated successfully");
             
-            // IMPORTANT: Send a system message to notify the host
             try {
                 await supabaseClient
                     .from('messages')
@@ -1238,7 +1125,6 @@ async function createNewGuestRequest(session, userIP) {
             }
             
         } else {
-            // Insert new request
             const { data: newGuest, error: insertError } = await supabaseClient
                 .from('session_guests')
                 .insert([{
@@ -1266,7 +1152,6 @@ async function createNewGuestRequest(session, userIP) {
             
             console.log("✅ Guest added to pending list successfully:", newGuest);
             
-            // Send system message for new request
             try {
                 await supabaseClient
                     .from('messages')
@@ -1292,7 +1177,6 @@ async function createNewGuestRequest(session, userIP) {
         updateUIForPendingGuest();
         setupPendingApprovalSubscription(session.session_id);
         
-        // Force the host to refresh their pending list
         if (appState.isHost) {
             loadPendingGuests();
         }
@@ -1319,7 +1203,6 @@ function completeGuestConnection(sessionId) {
     saveMessageToDB('System', `${appState.userName} has rejoined the chat.`);
 }
 
-
 async function saveVisitorNote(sessionId, noteText, userIP) {
     try {
         const { error } = await supabaseClient
@@ -1344,7 +1227,6 @@ async function saveVisitorNote(sessionId, noteText, userIP) {
     }
 }
 
-
 function saveSessionToStorage() {
     localStorage.setItem('writeToMe_session', JSON.stringify({
         isHost: appState.isHost,
@@ -1358,6 +1240,7 @@ function saveSessionToStorage() {
 // ============================================
 // PENDING GUESTS SYSTEM
 // ============================================
+
 function setupPendingGuestsSubscription() {
     console.log("🔄 Setting up pending guests subscription...");
     
@@ -1402,15 +1285,12 @@ function setupPendingGuestsSubscription() {
             (payload) => {
                 console.log('🔄 PENDING GUEST UPDATED:', payload.new);
                 
-                // If a guest's status changes to pending, treat it as a new pending request
                 if (payload.new && payload.new.status === 'pending') {
-                    // Check if this guest was previously in a different state
                     const wasPending = appState.pendingGuests.some(g => g.id === payload.new.id);
                     if (!wasPending) {
                         console.log('Guest changed to pending status, adding to list');
                         handleNewPendingGuest(payload.new);
                     } else {
-                        // Just update the existing record
                         const index = appState.pendingGuests.findIndex(g => g.id === payload.new.id);
                         if (index !== -1) {
                             appState.pendingGuests[index] = payload.new;
@@ -1421,7 +1301,6 @@ function setupPendingGuestsSubscription() {
                         }
                     }
                 } else if (payload.new && payload.new.status !== 'pending') {
-                    // Remove from pending list if status changed to something else
                     appState.pendingGuests = appState.pendingGuests.filter(g => g.id !== payload.new.id);
                     updatePendingButtonUI();
                     if (pendingGuestsModal.style.display === 'flex') {
@@ -1442,7 +1321,6 @@ function setupPendingGuestsSubscription() {
         });
 }
 
-// Helper function to handle new pending guests
 function handleNewPendingGuest(guest) {
     const exists = appState.pendingGuests.some(g => g.id === guest.id);
     if (!exists) {
@@ -1592,14 +1470,14 @@ function renderPendingGuestsList() {
             <div class="guest-info">
                 <div class="guest-name">
                     <i class="fas fa-user"></i>
-                    <strong>${guest.guest_name}</strong>
+                    <strong>${escapeHtml(guest.guest_name)}</strong>
                 </div>
                 <div class="guest-details">
                     <small><i class="fas fa-calendar"></i> ${new Date(guest.requested_at).toLocaleString()}</small>
                     <small><i class="fas fa-network-wired"></i> IP: ${guest.guest_ip || 'Unknown'}</small>
                     ${guest.guest_note ? `
                         <div class="guest-note">
-                            <i class="fas fa-sticky-note"></i> ${guest.guest_note}
+                            <i class="fas fa-sticky-note"></i> ${escapeHtml(guest.guest_note)}
                         </div>
                     ` : ''}
                 </div>
@@ -2045,181 +1923,162 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-// In setupRealtimeSubscriptions function, update the INSERT handler:
-appState.realtimeSubscription = supabaseClient
-    .channel('messages_' + appState.currentSessionId)
-    .on(
-        'postgres_changes',
-        {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'messages'
-        },
-        async (payload) => {
-            console.log('📦 Realtime message received:', payload.new);
-            
-            if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                // Check if this message is from someone else and we're not viewing history
-                if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                    
-                    // For guests, check if this message is cleared
-                    if (!appState.isHost) {
-                        const { data: cleared } = await supabaseClient
-                            .from('cleared_messages')
-                            .select('id')
-                            .eq('user_id', appState.userId)
-                            .eq('message_id', payload.new.id)
-                            .maybeSingle();
-                        
-                        if (cleared) {
-                            console.log('Message is cleared for this user, not displaying');
-                            return; // Don't show cleared messages
-                        }
-                    }
-                    
-                    // Get reactions for this message
-                    getMessageReactions(payload.new.id).then(reactions => {
-                        displayMessage({
-                            id: payload.new.id,
-                            sender: payload.new.sender_name,
-                            text: payload.new.message,
-                            image: payload.new.image_url,
-                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                            type: 'received',
-                            is_historical: false,
-                            reactions: reactions,
-                            reply_to: payload.new.reply_to
-                        });
-                    });
-                    
-                    // Play notification sound for new messages
-                    if (appState.soundEnabled && !payload.new.is_notification) {
-                        if (window.playNotificationSound) {
-                            window.playNotificationSound();
-                        }
-                    }
-                } else if (payload.new.sender_id === appState.userId) {
-                    // Always show user's own messages, even if they cleared before
-                    getMessageReactions(payload.new.id).then(reactions => {
-                        displayMessage({
-                            id: payload.new.id,
-                            sender: payload.new.sender_name,
-                            text: payload.new.message,
-                            image: payload.new.image_url,
-                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                            type: 'sent',
-                            is_historical: false,
-                            reactions: reactions,
-                            reply_to: payload.new.reply_to
-                        });
-                    });
-                }
-            }
-        }
-    )
-    .on(
-        'postgres_changes',
-        {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'messages',
-            filter: `session_id=eq.${appState.currentSessionId}`
-        },
-        (payload) => {
-            console.log('📝 Message updated:', payload.new?.id);
-            
-            const messageElement = document.getElementById(`msg-${payload.new.id}`);
-            if (messageElement) {
-                if (payload.new.is_deleted) {
-                    // Handle deleted message
-                    messageElement.innerHTML = `
-                        <div class="message-sender">${escapeHtml(payload.new.sender_name)}</div>
-                        <div class="message-content">
-                            <div class="message-text"><i>Message deleted</i></div>
-                            <div class="message-footer">
-                                <div class="message-time">${new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                            </div>
-                        </div>
-                    `;
-                    // Remove actions menu
-                    const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
-                    if (actionsMenu) actionsMenu.remove();
-                } else {
-                    // Handle edited message
-                    const textElement = messageElement.querySelector('.message-text');
-                    if (textElement && !textElement.innerHTML.includes('Message deleted')) {
-                        textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
-                    }
-                }
+    appState.realtimeSubscription = supabaseClient
+        .channel('messages_' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages'
+            },
+            async (payload) => {
+                console.log('📦 Realtime message received:', payload.new);
                 
-                // Update reactions
-                getMessageReactions(payload.new.id).then(reactions => {
-                    const reactionsContainer = messageElement.querySelector('.message-reactions');
-                    if (reactionsContainer && window.ChatModule) {
-                        window.ChatModule.renderReactions(reactionsContainer, reactions);
-                    }
-                });
-            }
-        }
-    )
-    .subscribe((status, err) => {
-        console.log('📡 MESSAGES Subscription status:', status);
-        if (err) {
-            console.error('❌ Messages subscription error:', err);
-        }
-    });
-
-    // Helper function to escape HTML
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-    
-appState.typingSubscription = supabaseClient
-    .channel('typing_' + appState.currentSessionId)
-    .on(
-        'postgres_changes',
-        {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'sessions',
-            filter: `session_id=eq.${appState.currentSessionId}`
-        },
-        (payload) => {
-            console.log('📨 Typing update received:', payload.new?.typing_user);
-            
-            if (payload.new && payload.new.typing_user) {
-                // Don't show if it's our own typing
-                if (payload.new.typing_user !== appState.userName) {
-                    console.log('👀 Showing typing indicator for:', payload.new.typing_user);
-                    typingUser.textContent = payload.new.typing_user;
-                    typingIndicator.classList.add('show');
-                    
-                    // Clear any existing timeout
-                    if (window.typingHideTimeout) {
-                        clearTimeout(window.typingHideTimeout);
-                    }
-                    
-                    // Hide after 3 seconds of no updates
-                    window.typingHideTimeout = setTimeout(() => {
-                        if (typingUser.textContent === payload.new.typing_user) {
-                            console.log('⏹️ Hiding typing indicator');
-                            typingIndicator.classList.remove('show');
+                if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                    if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
+                        
+                        if (!appState.isHost) {
+                            const { data: cleared } = await supabaseClient
+                                .from('cleared_messages')
+                                .select('id')
+                                .eq('user_id', appState.userId)
+                                .eq('message_id', payload.new.id)
+                                .maybeSingle();
+                            
+                            if (cleared) return;
                         }
-                    }, 3000);
+                        
+                        getMessageReactions(payload.new.id).then(reactions => {
+                            displayMessage({
+                                id: payload.new.id,
+                                sender: payload.new.sender_name,
+                                text: payload.new.message,
+                                image: payload.new.image_url,
+                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                                type: 'received',
+                                is_historical: false,
+                                reactions: reactions,
+                                reply_to: payload.new.reply_to
+                            });
+                            
+                            // Auto-scroll for received messages
+                            forceScrollToBottom('smooth', 100);
+                        });
+                        
+                        if (appState.soundEnabled && !payload.new.is_notification) {
+                            if (window.playNotificationSound) {
+                                window.playNotificationSound();
+                            }
+                        }
+                    } else if (payload.new.sender_id === appState.userId) {
+                        getMessageReactions(payload.new.id).then(reactions => {
+                            displayMessage({
+                                id: payload.new.id,
+                                sender: payload.new.sender_name,
+                                text: payload.new.message,
+                                image: payload.new.image_url,
+                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                                type: 'sent',
+                                is_historical: false,
+                                reactions: reactions,
+                                reply_to: payload.new.reply_to
+                            });
+                            
+                            // Auto-scroll for own messages
+                            forceScrollToBottom('smooth', 100);
+                        });
+                    }
                 }
-            } else {
-                // No one is typing
-                console.log('⏹️ No one typing');
-                typingIndicator.classList.remove('show');
             }
-        }
-    )
-    .subscribe((status) => {
-        console.log('📡 Typing subscription status:', status);
-    });
+        )
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'messages',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                console.log('📝 Message updated:', payload.new?.id);
+                
+                const messageElement = document.getElementById(`msg-${payload.new.id}`);
+                if (messageElement) {
+                    if (payload.new.is_deleted) {
+                        messageElement.innerHTML = `
+                            <div class="message-sender">${escapeHtml(payload.new.sender_name)}</div>
+                            <div class="message-content">
+                                <div class="message-text"><i>Message deleted</i></div>
+                                <div class="message-footer">
+                                    <div class="message-time">${new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                </div>
+                            </div>
+                        `;
+                        const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
+                        if (actionsMenu) actionsMenu.remove();
+                    } else {
+                        const textElement = messageElement.querySelector('.message-text');
+                        if (textElement && !textElement.innerHTML.includes('Message deleted')) {
+                            textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
+                        }
+                    }
+                    
+                    getMessageReactions(payload.new.id).then(reactions => {
+                        const reactionsContainer = messageElement.querySelector('.message-reactions');
+                        if (reactionsContainer && window.ChatModule) {
+                            window.ChatModule.renderReactions(reactionsContainer, reactions);
+                        }
+                    });
+                }
+            }
+        )
+        .subscribe((status, err) => {
+            console.log('📡 MESSAGES Subscription status:', status);
+            if (err) {
+                console.error('❌ Messages subscription error:', err);
+            }
+        });
+    
+    appState.typingSubscription = supabaseClient
+        .channel('typing_' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'sessions',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                console.log('📨 Typing update received:', payload.new?.typing_user);
+                
+                if (payload.new && payload.new.typing_user) {
+                    if (payload.new.typing_user !== appState.userName) {
+                        console.log('👀 Showing typing indicator for:', payload.new.typing_user);
+                        typingUser.textContent = payload.new.typing_user;
+                        typingIndicator.classList.add('show');
+                        
+                        if (window.typingHideTimeout) {
+                            clearTimeout(window.typingHideTimeout);
+                        }
+                        
+                        window.typingHideTimeout = setTimeout(() => {
+                            if (typingUser.textContent === payload.new.typing_user) {
+                                console.log('⏹️ Hiding typing indicator');
+                                typingIndicator.classList.remove('show');
+                            }
+                        }, 3000);
+                    }
+                } else {
+                    console.log('⏹️ No one typing');
+                    typingIndicator.classList.remove('show');
+                }
+            }
+        )
+        .subscribe((status) => {
+            console.log('📡 Typing subscription status:', status);
+        });
 }
 
 function checkAndReconnectSubscriptions() {
@@ -2280,14 +2139,12 @@ async function handleTyping() {
                 })
                 .eq('session_id', appState.currentSessionId)
                 .catch(e => console.log("Error clearing typing:", e));
-        }, 2000); // Increased to 2 seconds for better UX
+        }, 2000);
     } catch (error) {
         console.log("Typing indicator error:", error);
     }
 }
 
-// Update the sendMessage function
-// Replace the entire sendMessage function with this improved version
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
     
@@ -2308,23 +2165,19 @@ async function sendMessage() {
     
     isSendingMessage = true;
     
-    // Disable send button immediately to prevent double clicks
     if (sendMessageBtn) {
         sendMessageBtn.disabled = true;
         sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
     }
     
-    // Store the reply information
     const replyToId = window.__tempReplyTo || appState.replyingTo;
     
-    // Clear reply state immediately
     appState.replyingTo = null;
     window.__tempReplyTo = null;
     
     let imageUrl = null;
     
     if (imageFile) {
-        // Read the image file
         const reader = new FileReader();
         
         reader.onload = async function(e) {
@@ -2332,10 +2185,8 @@ async function sendMessage() {
             
             console.log('📸 Image loaded, displaying optimistic message with image');
             
-            // Create a unique temporary ID
             const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
             
-            // Show optimistic message with image preview
             const optimisticMessage = {
                 id: tempId,
                 sender: appState.userName,
@@ -2349,30 +2200,24 @@ async function sendMessage() {
                 is_optimistic: true
             };
             
-            // Display optimistic message immediately
             if (window.ChatModule) {
                 window.ChatModule.displayMessage(optimisticMessage);
             }
             
-            // Clear the file input and message input
             imageUpload.value = '';
             messageInput.value = '';
             messageInput.style.height = 'auto';
             
-            // Send to database
             const result = await sendMessageToDB(messageText, imageUrl, replyToId);
             
-            // Remove optimistic message
             const tempElement = document.getElementById(`msg-${tempId}`);
             if (tempElement) {
                 tempElement.remove();
             }
             
-            // If successful, display the real message
             if (result && result.success && result.data) {
                 console.log('✅ Image message saved to DB, ID:', result.data.id);
                 
-                // Display the real message with the same content
                 if (window.ChatModule) {
                     window.ChatModule.displayMessage({
                         id: result.data.id,
@@ -2387,7 +2232,6 @@ async function sendMessage() {
                     });
                 }
             } else {
-                // Show error message if failed
                 console.error('Failed to send image message');
                 const errorMsg = document.createElement('div');
                 errorMsg.className = 'message received';
@@ -2400,9 +2244,8 @@ async function sendMessage() {
                     </div>
                 `;
                 chatMessages.appendChild(errorMsg);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+                forceScrollToBottom('smooth', 100);
                 
-                // Also restore the message text to input
                 if (messageText) {
                     messageInput.value = messageText;
                 }
@@ -2414,12 +2257,7 @@ async function sendMessage() {
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
             
-            // Scroll to bottom
-            setTimeout(() => {
-                if (chatMessages) {
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-            }, 100);
+            forceScrollToBottom('smooth', 100);
         };
         
         reader.onerror = function(e) {
@@ -2435,7 +2273,6 @@ async function sendMessage() {
         
         reader.readAsDataURL(imageFile);
     } else {
-        // Text-only message - send immediately
         const result = await sendMessageToDB(messageText, null, replyToId);
         
         isSendingMessage = false;
@@ -2444,40 +2281,20 @@ async function sendMessage() {
             sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
         }
         
-        // Clear message input
         messageInput.value = '';
         messageInput.style.height = 'auto';
         
-        // Scroll to bottom after sending
-        setTimeout(() => {
-            if (chatMessages) {
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-            }
-        }, 100);
+        forceScrollToBottom('smooth', 100);
     }
-}
-
-// Add this function to handle scroll after keyboard closes
-function scrollChatToBottom(delay = 300) {
-    setTimeout(() => {
-        if (chatMessages && !appState.isViewingHistory) {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-    }, delay);
 }
 
 async function sendMessageToDB(text, imageUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
-    console.log('replyToId parameter:', replyToId);
-    console.log('appState.replyingTo:', appState.replyingTo);
-    console.log('window.__tempReplyTo:', window.__tempReplyTo);
     
     try {
-        // Use the passed replyToId, or check temp variable, or fall back to appState.replyingTo
         const finalReplyToId = replyToId || window.__tempReplyTo || appState.replyingTo;
         console.log('FINAL reply_to:', finalReplyToId);
         
-        // Clear all sources
         appState.replyingTo = null;
         window.__tempReplyTo = null;
         
@@ -2506,7 +2323,6 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
         }
         
         console.log('✅ Message saved to DB. ID:', data.id);
-        console.log('Reply_to in DB:', data.reply_to);
         
         displayMessage({
             id: data.id,
@@ -2535,9 +2351,8 @@ function displayMessage(message) {
         console.warn('ChatModule not available, message not displayed');
     }
 }
-// Add this function to handle header hide/show on scroll for mobile
+
 function setupMobileHeaderScroll() {
-    // Only apply on mobile devices
     if (window.innerWidth <= 768) {
         let lastScrollTop = 0;
         let ticking = false;
@@ -2545,22 +2360,17 @@ function setupMobileHeaderScroll() {
         
         if (!header) return;
         
-        // Get the chat messages container
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
         
-        // Listen for scroll on the chat messages container
         chatMessages.addEventListener('scroll', function() {
             if (!ticking) {
                 requestAnimationFrame(() => {
                     const scrollTop = chatMessages.scrollTop;
                     
-                    // Determine scroll direction
                     if (scrollTop > lastScrollTop && scrollTop > 50) {
-                        // Scrolling down - hide header
                         header.classList.add('header-hidden');
                     } else if (scrollTop < lastScrollTop || scrollTop <= 10) {
-                        // Scrolling up or at top - show header
                         header.classList.remove('header-hidden');
                     }
                     
@@ -2571,20 +2381,15 @@ function setupMobileHeaderScroll() {
             }
         });
         
-        // Also handle when user taps on status bar to scroll to top
-        // Show header when user scrolls to top
         chatMessages.addEventListener('scroll', function() {
             if (chatMessages.scrollTop <= 10) {
                 header.classList.remove('header-hidden');
             }
         });
         
-        // Show header when user taps on the chat area (to make it reappear easily)
         chatMessages.addEventListener('touchstart', function(e) {
-            // If header is hidden and user taps near the top, show it
             if (header.classList.contains('header-hidden') && e.touches[0].clientY < 100) {
                 header.classList.remove('header-hidden');
-                // Auto-hide again after 2 seconds if no interaction
                 setTimeout(() => {
                     if (chatMessages.scrollTop > 50) {
                         header.classList.add('header-hidden');
@@ -2595,12 +2400,10 @@ function setupMobileHeaderScroll() {
     }
 }
 
-// Also handle window resize (if user rotates device)
 window.addEventListener('resize', function() {
     if (window.innerWidth <= 768) {
         setupMobileHeaderScroll();
     } else {
-        // On desktop, make sure header is visible
         const header = document.querySelector('header');
         if (header) {
             header.classList.remove('header-hidden');
@@ -2611,6 +2414,7 @@ window.addEventListener('resize', function() {
 // ============================================
 // LOAD CHAT HISTORY
 // ============================================
+
 async function loadChatHistory(sessionId = null) {
     const targetSessionId = sessionId || appState.currentSessionId;
     if (!targetSessionId) {
@@ -2621,16 +2425,13 @@ async function loadChatHistory(sessionId = null) {
     console.log('Loading chat history for session:', targetSessionId);
     
     try {
-        // Base query for messages
         let query = supabaseClient
             .from('messages')
             .select('*')
             .eq('session_id', targetSessionId)
             .eq('is_deleted', false);
         
-        // If not host and not viewing history, filter out cleared messages
         if (!appState.isHost && !sessionId) {
-            // First, get all messages the user has cleared
             const { data: clearedMessages } = await supabaseClient
                 .from('cleared_messages')
                 .select('message_id')
@@ -2639,7 +2440,6 @@ async function loadChatHistory(sessionId = null) {
             
             if (clearedMessages && clearedMessages.length > 0) {
                 const clearedIds = clearedMessages.map(cm => cm.message_id);
-                // Filter out cleared messages
                 query = query.not('id', 'in', `(${clearedIds.join(',')})`);
             }
         }
@@ -2653,13 +2453,11 @@ async function loadChatHistory(sessionId = null) {
         
         console.log(`Loaded ${messages?.length || 0} messages from database`);
         
-        // Clear chat messages container
         if (chatMessages) {
             chatMessages.innerHTML = '';
         }
         appState.messages = [];
         
-        // Add history header if viewing a past session
         if (sessionId) {
             const { data: session } = await supabaseClient
                 .from('sessions')
@@ -2677,7 +2475,7 @@ async function loadChatHistory(sessionId = null) {
                     <div class="message-content">
                         <div class="message-text">
                             <i class="fas fa-door-open"></i> Chat History - Room ${roomNumber}
-                            <br><small>Host: ${session.host_name} | Date: ${new Date(session.created_at).toLocaleDateString()}</small>
+                            <br><small>Host: ${escapeHtml(session.host_name)} | Date: ${new Date(session.created_at).toLocaleDateString()}</small>
                         </div>
                     </div>
                 `;
@@ -2685,7 +2483,6 @@ async function loadChatHistory(sessionId = null) {
             }
         }
         
-        // If no messages, show a system message
         if (!messages || messages.length === 0) {
             const emptyMessage = document.createElement('div');
             emptyMessage.className = 'message received';
@@ -2699,13 +2496,11 @@ async function loadChatHistory(sessionId = null) {
             return;
         }
         
-        // Load all reactions first (more efficient)
         const reactionPromises = messages.map(msg => 
             window.ChatModule?.getMessageReactions(msg.id) || []
         );
         const allReactions = await Promise.all(reactionPromises);
         
-        // Display all messages
         messages.forEach((msg, index) => {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
             
@@ -2724,15 +2519,16 @@ async function loadChatHistory(sessionId = null) {
             }
         });
         
-        if (chatMessages) {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+        if (chatMessages && !sessionId) {
+            forceScrollToBottom('auto', 100);
+        } else if (chatMessages) {
+            chatMessages.scrollTop = 0;
         }
         
         console.log('Chat history loaded successfully');
     } catch (error) {
         console.error("Error loading chat history:", error);
         
-        // Show error message in chat
         if (chatMessages) {
             const errorMsg = document.createElement('div');
             errorMsg.className = 'message received';
@@ -2792,7 +2588,6 @@ function updateUIAfterConnection() {
     
     if (sendMessageBtn) sendMessageBtn.disabled = false;
     
-    // Re-initialize ChatModule with updated appState
     if (window.ChatModule) {
         window.ChatModule.init(appState, supabaseClient, {
             chatMessages: document.getElementById('chatMessages'),
@@ -2809,9 +2604,7 @@ function updateUIAfterConnection() {
             closeReplyModal: document.getElementById('closeReplyModal')
         });
         console.log('ChatModule re-initialized after connection');
-
-                
-        // Load chat history after a short delay to ensure ChatModule is ready
+        
         setTimeout(() => {
             loadChatHistory();
         }, 500);
@@ -2854,14 +2647,12 @@ function updateUIAfterConnection() {
     }
     
     if (appState.isViewingHistory) returnToActiveChat();
-    // Enable audio after user interaction
-document.addEventListener('click', function enableAudio() {
-    // Create and play a silent sound to unlock audio
-    const silentSound = new Audio();
-    silentSound.play().catch(() => {});
-    document.removeEventListener('click', enableAudio);
-}, { once: true });
-
+    
+    document.addEventListener('click', function enableAudio() {
+        const silentSound = new Audio();
+        silentSound.play().catch(() => {});
+        document.removeEventListener('click', enableAudio);
+    }, { once: true });
 }
 
 // ============================================
@@ -2994,7 +2785,6 @@ async function handleImageUpload(e) {
     
     reader.onload = async function(e) {
         try {
-            // Pass the current replyingTo value
             const result = await sendMessageToDB('', e.target.result, appState.replyingTo);
             
             if (result && result.success) {
@@ -3058,7 +2848,6 @@ function toggleSound() {
     appState.soundEnabled = !appState.soundEnabled;
     updateSoundControl();
     
-    // Resume audio context if it was suspended
     if (appState.soundEnabled && audioContext && audioContext.state === 'suspended') {
         audioContext.resume();
     }
@@ -3083,7 +2872,6 @@ function updateSoundControl() {
     }
 }
 
-// Update the saveMessageToDB function to handle silent notifications
 async function saveMessageToDB(senderName, messageText, isSilent = false) {
     try {
         const messageData = {
@@ -3094,8 +2882,6 @@ async function saveMessageToDB(senderName, messageText, isSilent = false) {
             created_at: new Date().toISOString()
         };
         
-        // If isSilent, we might want to mark it differently but still save
-        // This ensures the host sees guest's clear action
         const { error } = await supabaseClient
             .from('messages')
             .insert([messageData]);
@@ -3208,7 +2994,7 @@ async function loadChatSessions() {
                         <div class="guest-info-rows">
                             <div class="guest-info-row">
                                 <span class="guest-info-label"><i class="fas fa-user-crown"></i> Host:</span>
-                                <span class="guest-info-value">${session.host_name}</span>
+                                <span class="guest-info-value">${escapeHtml(session.host_name)}</span>
                             </div>
                             <div class="guest-info-row">
                                 <span class="guest-info-label"><i class="fas fa-calendar-alt"></i> Created:</span>
@@ -3234,7 +3020,7 @@ async function loadChatSessions() {
                                         <div class="guest-item-info">
                                             <div class="guest-name">
                                                 <i class="fas fa-user"></i>
-                                                ${guest.guest_name}
+                                                ${escapeHtml(guest.guest_name)}
                                             </div>
                                             <div class="guest-meta">
                                                 <span title="Status: ${guest.status}">
@@ -3247,12 +3033,12 @@ async function loadChatSessions() {
                                             </div>
                                             ${guest.guest_note ? `
                                             <div class="guest-note small">
-                                                <i class="fas fa-sticky-note"></i> ${guest.guest_note}
+                                                <i class="fas fa-sticky-note"></i> ${escapeHtml(guest.guest_note)}
                                             </div>
                                             ` : ''}
                                         </div>
                                         ${isActive && guest.status === 'approved' && guest.guest_id !== appState.userId ? `
-                                            <button class="btn btn-danger btn-small" onclick="kickGuest('${guest.id}', '${guest.guest_name}')">
+                                            <button class="btn btn-danger btn-small" onclick="kickGuest('${guest.id}', '${escapeHtml(guest.guest_name)}')">
                                                 <i class="fas fa-user-slash"></i> Kick
                                             </button>
                                         ` : ''}
@@ -3329,6 +3115,7 @@ function returnToActiveChat() {
     if (sendMessageBtn) sendMessageBtn.disabled = false;
     
     loadChatHistory();
+    forceScrollToBottom('auto', 200);
 }
 
 async function deleteSession(sessionId) {
@@ -3369,9 +3156,6 @@ async function deleteSession(sessionId) {
             }
         }
 
-        // IMPORTANT: Delete in the correct order to avoid foreign key violations
-        
-        // 1. First delete message_reactions (they reference messages)
         try {
             await supabaseClient
                 .from('message_reactions')
@@ -3386,7 +3170,6 @@ async function deleteSession(sessionId) {
             console.log("Message reactions deletion error:", e.message);
         }
 
-        // 2. Delete cleared_messages (they reference messages)
         try {
             await supabaseClient
                 .from('cleared_messages')
@@ -3397,7 +3180,6 @@ async function deleteSession(sessionId) {
             console.log("Cleared messages deletion error:", e.message);
         }
 
-        // 3. Delete visitor notes
         try {
             await supabaseClient
                 .from('visitor_notes')
@@ -3408,7 +3190,6 @@ async function deleteSession(sessionId) {
             console.log("Visitor notes deletion skipped:", e.message);
         }
 
-        // 4. Delete messages
         try {
             const { error: messagesError } = await supabaseClient
                 .from('messages')
@@ -3421,7 +3202,6 @@ async function deleteSession(sessionId) {
             console.log("Messages deletion error:", e.message);
         }
 
-        // 5. Delete session guests
         try {
             const { error: guestsError } = await supabaseClient
                 .from('session_guests')
@@ -3434,7 +3214,6 @@ async function deleteSession(sessionId) {
             console.log("Session guests deletion error:", e.message);
         }
 
-        // 6. Finally delete the session
         try {
             const { error: sessionError } = await supabaseClient
                 .from('sessions')
@@ -3602,7 +3381,7 @@ function renderUsers(users) {
             <div class="user-header">
                 <div class="user-name">
                     <i class="fas fa-user"></i>
-                    <h3>${user.display_name}</h3>
+                    <h3>${escapeHtml(user.display_name)}</h3>
                 </div>
                 <div class="user-badges">
                     <span class="user-badge badge-${user.role}">${user.role}</span>
@@ -3612,7 +3391,7 @@ function renderUsers(users) {
             <div class="user-details">
                 <div class="user-detail">
                     <span class="user-detail-label">Username:</span>
-                    <span class="user-detail-value">${user.username}</span>
+                    <span class="user-detail-value">${escapeHtml(user.username)}</span>
                 </div>
                 <div class="user-detail">
                     <span class="user-detail-label">Created:</span>
@@ -3870,7 +3649,7 @@ function renderVisitorNotes(notes) {
                 displayName = lines.find(l => l.startsWith('From:'))?.replace('From:', '').trim() || displayName;
                 const emailLine = lines.find(l => l.startsWith('Email:'));
                 if (emailLine) {
-                    emailInfo = `<div class="note-email"><i class="fas fa-envelope"></i> ${emailLine.replace('Email:', '').trim()}</div>`;
+                    emailInfo = `<div class="note-email"><i class="fas fa-envelope"></i> ${escapeHtml(emailLine.replace('Email:', '').trim())}</div>`;
                 }
                 const msgLine = lines.find(l => l.startsWith('Message:'));
                 if (msgLine) {
@@ -3882,7 +3661,7 @@ function renderVisitorNotes(notes) {
                 <div class="note-header">
                     <div class="note-guest-info">
                         <i class="fas ${isGuestNotification ? 'fa-bell' : 'fa-user'}"></i>
-                        <strong>${isGuestNotification ? '📬 Guest Message' : (displayName || 'Anonymous')}</strong>
+                        <strong>${isGuestNotification ? '📬 Guest Message' : (escapeHtml(displayName) || 'Anonymous')}</strong>
                         ${!note.read_by_host ? '<span class="unread-badge">New</span>' : ''}
                     </div>
                     <div class="note-time">
@@ -3890,11 +3669,11 @@ function renderVisitorNotes(notes) {
                     </div>
                 </div>
                 <div class="note-content">
-                    <div class="note-from"><i class="fas fa-user"></i> From: ${displayName}</div>
+                    <div class="note-from"><i class="fas fa-user"></i> From: ${escapeHtml(displayName)}</div>
                     ${emailInfo}
                     <div class="note-text">${escapeHtml(displayMessage)}</div>
-                    ${note.guest_ip ? `<div class="note-ip"><i class="fas fa-network-wired"></i> IP: ${note.guest_ip}</div>` : ''}
-                    ${note.guest_email ? `<div class="note-email"><i class="fas fa-envelope"></i> Email: ${note.guest_email}</div>` : ''}
+                    ${note.guest_ip ? `<div class="note-ip"><i class="fas fa-network-wired"></i> IP: ${escapeHtml(note.guest_ip)}</div>` : ''}
+                    ${note.guest_email ? `<div class="note-email"><i class="fas fa-envelope"></i> Email: ${escapeHtml(note.guest_email)}</div>` : ''}
                 </div>
                 <div class="note-actions">
                     <button class="btn btn-small btn-success" onclick="markNoteAsRead('${note.id}')" ${note.read_by_host ? 'disabled' : ''}>
@@ -3916,6 +3695,7 @@ function renderVisitorNotes(notes) {
 }
 
 function escapeHtml(text) {
+    if (text === undefined || text === null) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
@@ -4061,20 +3841,16 @@ async function markAllNotesAsRead() {
 // GLOBAL FUNCTIONS
 // ============================================
 
-
-// Make playNotificationSound globally available for testing
 window.playNotificationSound = function() {
     if (!appState.soundEnabled) return;
     
     try {
-        // Create audio context if needed
         if (!window.audioContext) {
             window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
         
         const audioContext = window.audioContext;
         
-        // First beep
         const osc1 = audioContext.createOscillator();
         const gain1 = audioContext.createGain();
         osc1.connect(gain1);
@@ -4087,7 +3863,6 @@ window.playNotificationSound = function() {
         osc1.start(audioContext.currentTime);
         osc1.stop(audioContext.currentTime + 0.1);
         
-        // Second beep (slightly higher)
         const osc2 = audioContext.createOscillator();
         const gain2 = audioContext.createGain();
         osc2.connect(gain2);
@@ -4106,7 +3881,6 @@ window.playNotificationSound = function() {
     }
 };
 
-// Also add a simpler test function
 window.testSound = function() {
     window.playNotificationSound();
     console.log('Test sound triggered');
@@ -4145,11 +3919,11 @@ window.showSessionGuests = async function(sessionId) {
                     <h4><i class="fas fa-check-circle" style="color: var(--success-green);"></i> Approved Guests (${approvedGuests.length})</h4>
                     ${approvedGuests.length > 0 ? approvedGuests.map(g => `
                         <div class="guest-detail">
-                            <strong>${g.guest_name}</strong>
+                            <strong>${escapeHtml(g.guest_name)}</strong>
                             <div class="guest-meta">
                                 <small>Joined: ${new Date(g.approved_at).toLocaleString()}</small>
                                 <small>IP: ${g.guest_ip || 'Not recorded'}</small>
-                                ${g.guest_note ? `<small>Note: ${g.guest_note}</small>` : ''}
+                                ${g.guest_note ? `<small>Note: ${escapeHtml(g.guest_note)}</small>` : ''}
                             </div>
                         </div>
                     `).join('') : '<p>No approved guests</p>'}
@@ -4160,11 +3934,11 @@ window.showSessionGuests = async function(sessionId) {
                     <h4><i class="fas fa-clock" style="color: var(--warning-yellow);"></i> Pending Guests (${pendingGuests.length})</h4>
                     ${pendingGuests.map(g => `
                         <div class="guest-detail">
-                            <strong>${g.guest_name}</strong>
+                            <strong>${escapeHtml(g.guest_name)}</strong>
                             <div class="guest-meta">
                                 <small>Requested: ${new Date(g.requested_at).toLocaleString()}</small>
                                 <small>IP: ${g.guest_ip || 'Not recorded'}</small>
-                                ${g.guest_note ? `<small>Note: ${g.guest_note}</small>` : ''}
+                                ${g.guest_note ? `<small>Note: ${escapeHtml(g.guest_note)}</small>` : ''}
                             </div>
                         </div>
                     `).join('')}
@@ -4176,7 +3950,7 @@ window.showSessionGuests = async function(sessionId) {
                     <h4><i class="fas fa-user-slash" style="color: var(--danger-red);"></i> Kicked Guests (${kickedGuests.length})</h4>
                     ${kickedGuests.map(g => `
                         <div class="guest-detail">
-                            <strong>${g.guest_name}</strong>
+                            <strong>${escapeHtml(g.guest_name)}</strong>
                             <div class="guest-meta">
                                 <small>Kicked: ${new Date(g.left_at).toLocaleString()}</small>
                                 <small>IP: ${g.guest_ip || 'Not recorded'}</small>
@@ -4220,15 +3994,21 @@ window.showSessionGuests = async function(sessionId) {
     }
 };
 
-// Make functions global (these will call ChatModule)
+// Make functions global
 window.approveGuest = approveGuest;
 window.denyGuest = denyGuest;
 window.kickGuest = kickGuest;
 window.viewSessionHistory = viewSessionHistory;
 window.deleteSession = deleteSession;
 window.editUserModalOpen = editUserModalOpen;
+window.sendMessage = sendMessage;
+window.getMessageReactions = async function(messageId) {
+    if (window.ChatModule) {
+        return await window.ChatModule.getMessageReactions(messageId);
+    }
+    return [];
+};
 
-// These are now handled by ChatModule, but keep them as references
 window.editMessage = function(messageId) {
     if (window.ChatModule) window.ChatModule.editMessage(messageId);
 };
