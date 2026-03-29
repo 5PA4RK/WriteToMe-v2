@@ -2178,3 +2178,17 @@ body.modal-open {
         }
     }
 }
+/* Image error styling */
+.image-error {
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-sm);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-top: 8px;
+}
+
+.image-error i {
+    margin-right: 6px;
+}
