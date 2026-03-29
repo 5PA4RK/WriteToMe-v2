@@ -1971,39 +1971,45 @@ function setupRealtimeSubscriptions() {
                     if (cleared) shouldDisplay = false;
                 }
                 
-                if (shouldDisplay) {
-                    const messageType = payload.new.sender_id === appState.userId ? 'sent' : 'received';
-                    
-                    // Check if message already exists in DOM
-                    const existingMsg = document.getElementById(`msg-${payload.new.id}`);
-                    if (!existingMsg) {
-                        // Get reactions first
-                        const reactions = await getMessageReactions(payload.new.id);
-                        
-                        // Create message object with ALL data including image_url
-                        const messageObj = {
-                            id: payload.new.id,
-                            sender: payload.new.sender_name,
-                            text: payload.new.message || '',
-                            image: payload.new.image_url || null,  // Ensure image_url is included
-                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                            type: messageType,
-                            is_historical: false,
-                            reactions: reactions || [],
-                            reply_to: payload.new.reply_to
-                        };
-                        
-                        console.log('Displaying message with image:', !!messageObj.image);
-                        
-                        // Display the message
-                        displayMessage(messageObj);
-                        
-                        // Auto-scroll for new messages
-                        forceScrollToBottom('smooth', 100);
-                    } else {
-                        console.log('Message already exists, skipping:', payload.new.id);
-                    }
-                }
+// In the INSERT handler, replace the image handling section
+if (shouldDisplay) {
+    const messageType = payload.new.sender_id === appState.userId ? 'sent' : 'received';
+    
+    // Check if message already exists in DOM
+    const existingMsg = document.getElementById(`msg-${payload.new.id}`);
+    if (!existingMsg) {
+        // Get reactions first
+        const reactions = await getMessageReactions(payload.new.id);
+        
+        // FIX: Properly handle image URL - don't use ensureValidImageUrl as it's not defined properly
+        let imageUrl = null;
+        if (payload.new.image_url && payload.new.image_url.trim() !== '') {
+            imageUrl = payload.new.image_url;
+            console.log('Processing image URL, type:', imageUrl.substring(0, 50));
+        }
+        
+        // Create message object with ALL data including image_url
+        const messageObj = {
+            id: payload.new.id,
+            sender: payload.new.sender_name,
+            text: payload.new.message || '',
+            image: imageUrl,
+            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            type: messageType,
+            is_historical: false,
+            reactions: reactions || [],
+            reply_to: payload.new.reply_to
+        };
+        
+        console.log('Displaying message with image:', !!messageObj.image);
+        
+        // Display the message
+        displayMessage(messageObj);
+        
+        // Auto-scroll for new messages
+        forceScrollToBottom('smooth', 100);
+    }
+}
                 
                 // Play sound for received messages
                 if (payload.new.sender_id !== appState.userId && appState.soundEnabled && !payload.new.is_notification) {
@@ -2313,12 +2319,11 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
     console.log('Image URL present:', !!imageUrl);
     if (imageUrl) {
-        console.log('Image type:', imageUrl.substring(0, 50));
+        console.log('Image type detected:', imageUrl.substring(0, 100));
     }
     
     try {
         const finalReplyToId = replyToId || window.__tempReplyTo || appState.replyingTo;
-        console.log('FINAL reply_to:', finalReplyToId);
         
         appState.replyingTo = null;
         window.__tempReplyTo = null;
@@ -2332,10 +2337,18 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
             reply_to: finalReplyToId
         };
         
-        // Always include image_url if present (even for PNG/GIF)
+        // IMPORTANT: For PNG and GIF, ensure the entire data URL is saved
         if (imageUrl && imageUrl.trim() !== '') {
+            // Verify it's a complete data URL
+            if (imageUrl.startsWith('data:image/')) {
+                console.log('Data URL detected, length:', imageUrl.length);
+                // Make sure it's not truncated
+                if (imageUrl.length < 100) {
+                    console.error('Image data URL too short, might be corrupted');
+                }
+            }
             messageData.image_url = imageUrl;
-            console.log('📸 Adding image to message, length:', imageUrl.length);
+            console.log('📸 Adding image to message');
         }
         
         const { data, error } = await supabaseClient
@@ -2350,9 +2363,8 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
         }
         
         console.log('✅ Message saved to DB. ID:', data.id);
-        console.log('Saved image_url in DB:', data.image_url ? 'YES' : 'NO');
+        console.log('Image URL in response:', data.image_url ? 'YES (length: ' + data.image_url.length + ')' : 'NO');
         
-        // The message will appear via realtime subscription
         return { success: true, data };
     } catch (error) {
         console.error("❌ Error in sendMessageToDB:", error);
