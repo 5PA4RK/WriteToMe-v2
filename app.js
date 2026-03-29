@@ -1925,73 +1925,69 @@ function setupRealtimeSubscriptions() {
     
     appState.realtimeSubscription = supabaseClient
         .channel('messages_' + appState.currentSessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages'
-            },
-            async (payload) => {
-                console.log('📦 Realtime message received:', payload.new);
+// In the INSERT handler, ensure images are displayed correctly
+.on(
+    'postgres_changes',
+    {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages'
+    },
+    async (payload) => {
+        console.log('📦 Realtime message received:', payload.new);
+        console.log('Has image:', !!payload.new.image_url);
+        
+        if (payload.new && payload.new.session_id === appState.currentSessionId) {
+            // Always display the message (both own and others)
+            // The realtime subscription will handle all messages
+            
+            // Check if message is cleared for guests
+            let shouldDisplay = true;
+            if (!appState.isHost && payload.new.sender_id !== appState.userId) {
+                const { data: cleared } = await supabaseClient
+                    .from('cleared_messages')
+                    .select('id')
+                    .eq('user_id', appState.userId)
+                    .eq('message_id', payload.new.id)
+                    .maybeSingle();
                 
-                if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                    if (payload.new.sender_id !== appState.userId && !appState.isViewingHistory) {
-                        
-                        if (!appState.isHost) {
-                            const { data: cleared } = await supabaseClient
-                                .from('cleared_messages')
-                                .select('id')
-                                .eq('user_id', appState.userId)
-                                .eq('message_id', payload.new.id)
-                                .maybeSingle();
-                            
-                            if (cleared) return;
-                        }
-                        
-                        getMessageReactions(payload.new.id).then(reactions => {
-                            displayMessage({
-                                id: payload.new.id,
-                                sender: payload.new.sender_name,
-                                text: payload.new.message,
-                                image: payload.new.image_url,
-                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                                type: 'received',
-                                is_historical: false,
-                                reactions: reactions,
-                                reply_to: payload.new.reply_to
-                            });
-                            
-                            // Auto-scroll for received messages
-                            forceScrollToBottom('smooth', 100);
+                if (cleared) shouldDisplay = false;
+            }
+            
+            if (shouldDisplay) {
+                const messageType = payload.new.sender_id === appState.userId ? 'sent' : 'received';
+                
+                // Check if message already exists in DOM
+                const existingMsg = document.getElementById(`msg-${payload.new.id}`);
+                if (!existingMsg) {
+                    getMessageReactions(payload.new.id).then(reactions => {
+                        displayMessage({
+                            id: payload.new.id,
+                            sender: payload.new.sender_name,
+                            text: payload.new.message,
+                            image: payload.new.image_url,
+                            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                            type: messageType,
+                            is_historical: false,
+                            reactions: reactions,
+                            reply_to: payload.new.reply_to
                         });
                         
-                        if (appState.soundEnabled && !payload.new.is_notification) {
-                            if (window.playNotificationSound) {
-                                window.playNotificationSound();
-                            }
-                        }
-                    } else if (payload.new.sender_id === appState.userId) {
-                        getMessageReactions(payload.new.id).then(reactions => {
-                            displayMessage({
-                                id: payload.new.id,
-                                sender: payload.new.sender_name,
-                                text: payload.new.message,
-                                image: payload.new.image_url,
-                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                                type: 'sent',
-                                is_historical: false,
-                                reactions: reactions,
-                                reply_to: payload.new.reply_to
-                            });
-                            
-                            // Auto-scroll for own messages
-                            forceScrollToBottom('smooth', 100);
-                        });
+                        // Auto-scroll for new messages
+                        forceScrollToBottom('smooth', 100);
+                    });
+                }
+                
+                // Play sound for received messages
+                if (messageType === 'received' && appState.soundEnabled && !payload.new.is_notification) {
+                    if (window.playNotificationSound) {
+                        window.playNotificationSound();
                     }
                 }
             }
-        )
+        }
+    }
+)
         .on(
             'postgres_changes',
             {
@@ -2175,62 +2171,30 @@ async function sendMessage() {
     appState.replyingTo = null;
     window.__tempReplyTo = null;
     
-    let imageUrl = null;
+    // Store the original message text and image for retry
+    const originalMessageText = messageText;
+    const originalImageFile = imageFile;
     
     if (imageFile) {
+        // For images, we need to upload first
         const reader = new FileReader();
         
         reader.onload = async function(e) {
-            imageUrl = e.target.result;
+            const imageUrl = e.target.result;
             
-            console.log('📸 Image loaded, displaying optimistic message with image');
+            console.log('📸 Image loaded, sending to database...');
             
-            const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-            
-            const optimisticMessage = {
-                id: tempId,
-                sender: appState.userName,
-                text: messageText,
-                image: imageUrl,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_historical: false,
-                reactions: [],
-                reply_to: replyToId,
-                is_optimistic: true
-            };
-            
-            if (window.ChatModule) {
-                window.ChatModule.displayMessage(optimisticMessage);
-            }
-            
+            // Clear inputs immediately for better UX
             imageUpload.value = '';
             messageInput.value = '';
             messageInput.style.height = 'auto';
             
-            const result = await sendMessageToDB(messageText, imageUrl, replyToId);
-            
-            const tempElement = document.getElementById(`msg-${tempId}`);
-            if (tempElement) {
-                tempElement.remove();
-            }
+            // Send to database
+            const result = await sendMessageToDB(originalMessageText, imageUrl, replyToId);
             
             if (result && result.success && result.data) {
                 console.log('✅ Image message saved to DB, ID:', result.data.id);
-                
-                if (window.ChatModule) {
-                    window.ChatModule.displayMessage({
-                        id: result.data.id,
-                        sender: appState.userName,
-                        text: messageText,
-                        image: imageUrl,
-                        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                        type: 'sent',
-                        is_historical: false,
-                        reactions: [],
-                        reply_to: replyToId
-                    });
-                }
+                // Message will appear via realtime subscription
             } else {
                 console.error('Failed to send image message');
                 const errorMsg = document.createElement('div');
@@ -2246,8 +2210,9 @@ async function sendMessage() {
                 chatMessages.appendChild(errorMsg);
                 forceScrollToBottom('smooth', 100);
                 
-                if (messageText) {
-                    messageInput.value = messageText;
+                // Restore the message text to input
+                if (originalMessageText) {
+                    messageInput.value = originalMessageText;
                 }
             }
             
@@ -2256,8 +2221,6 @@ async function sendMessage() {
                 sendMessageBtn.disabled = false;
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
-            
-            forceScrollToBottom('smooth', 100);
         };
         
         reader.onerror = function(e) {
@@ -2273,7 +2236,8 @@ async function sendMessage() {
         
         reader.readAsDataURL(imageFile);
     } else {
-        const result = await sendMessageToDB(messageText, null, replyToId);
+        // Text-only message
+        const result = await sendMessageToDB(originalMessageText, null, replyToId);
         
         isSendingMessage = false;
         if (sendMessageBtn) {
@@ -2284,12 +2248,32 @@ async function sendMessage() {
         messageInput.value = '';
         messageInput.style.height = 'auto';
         
-        forceScrollToBottom('smooth', 100);
+        if (!result || !result.success) {
+            // Show error if failed
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'message received';
+            errorMsg.innerHTML = `
+                <div class="message-sender">System</div>
+                <div class="message-content">
+                    <div class="message-text" style="color: var(--danger);">
+                        <i class="fas fa-exclamation-triangle"></i> Failed to send message. Please try again.
+                    </div>
+                </div>
+            `;
+            chatMessages.appendChild(errorMsg);
+            forceScrollToBottom('smooth', 100);
+            
+            // Restore text
+            if (originalMessageText) {
+                messageInput.value = originalMessageText;
+            }
+        }
     }
 }
 
 async function sendMessageToDB(text, imageUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
+    console.log('Image URL present:', !!imageUrl);
     
     try {
         const finalReplyToId = replyToId || window.__tempReplyTo || appState.replyingTo;
@@ -2309,6 +2293,7 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
         
         if (imageUrl) {
             messageData.image_url = imageUrl;
+            console.log('📸 Adding image to message:', imageUrl.substring(0, 100));
         }
         
         const { data, error } = await supabaseClient
@@ -2323,18 +2308,10 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
         }
         
         console.log('✅ Message saved to DB. ID:', data.id);
+        console.log('Has image in response:', !!data.image_url);
         
-        displayMessage({
-            id: data.id,
-            sender: appState.userName,
-            text: text,
-            image: imageUrl,
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-            type: 'sent',
-            is_historical: false,
-            reactions: [],
-            reply_to: finalReplyToId
-        });
+        // Don't display manually - let the realtime subscription handle it
+        // This prevents duplicate messages
         
         return { success: true, data };
     } catch (error) {
