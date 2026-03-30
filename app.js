@@ -1043,12 +1043,14 @@ async function connectAsGuest(userIP) {
     try {
         console.log("👤 Connecting as guest - checking for existing sessions...");
         
+        // CHANGE THIS - use chat_sessions instead of sessions
         const { data: activeSessions, error: sessionError } = await supabaseClient
-        .from('chat_sessions')  // <-- Use chat_sessions
-        .select('session_id, host_name, host_id')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+            .from('chat_sessions')  // <-- MUST be chat_sessions
+            .select('session_id, host_name, host_id')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false });
         
+        // Rest of the function remains the same...
         if (sessionError || !activeSessions || activeSessions.length === 0) {
             alert("No active rooms available. Please try again later or contact a host.");
             resetConnectButton();
@@ -2950,8 +2952,8 @@ async function handleLogout() {
         try {
             if (appState.isHost) {
                 await supabaseClient
-                .from('sessions')  // <-- Change to chat_sessions
-                .update({ 
+                    .from('chat_sessions')  // <-- CHANGE from 'sessions'
+                    .update({ 
                         is_active: false,
                         ended_at: new Date().toISOString()
                     })
@@ -3362,18 +3364,28 @@ async function viewSessionHistory(sessionId) {
 }
 
 function returnToActiveChat() {
+    console.log('🔄 Returning to active chat...');
+    
     appState.isViewingHistory = false;
     appState.viewingSessionId = null;
     
     if (chatModeIndicator) chatModeIndicator.style.display = 'none';
     if (chatTitle) chatTitle.innerHTML = '<i class="fas fa-comments"></i> Active Chat';
+    
     if (messageInput) {
         messageInput.disabled = false;
         messageInput.placeholder = "Type your message here...";
         messageInput.focus();
     }
+    
     if (sendMessageBtn) sendMessageBtn.disabled = false;
     
+    // Clear the chat messages container
+    if (chatMessages) {
+        chatMessages.innerHTML = '';
+    }
+    
+    // Load the active chat history
     loadChatHistory();
     forceScrollToBottom('auto', 200);
 }
