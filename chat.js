@@ -278,9 +278,11 @@ if (message.image && message.image.trim() !== '') {
                                 let hasText = data.message && data.message.trim() !== '';
                                 
                                 if (hasImage && !hasText) {
-                                    displayText = '<i class="fas fa-image"></i> [Image]';
+                                    // Just show image icon without text
+                                    displayText = '<i class="fas fa-image"></i>';
                                 } else if (hasImage && hasText) {
-                                    displayText = `${escapeHtml(data.message.substring(0, 100))} <i class="fas fa-image"></i>`;
+                                    // Show text with small image icon
+                                    displayText = `${escapeHtml(data.message.substring(0, 100))} <i class="fas fa-image" style="font-size: 0.8rem;"></i>`;
                                     if (data.message.length > 100) displayText += '...';
                                 } else {
                                     displayText = escapeHtml(data.message.substring(0, 100));
