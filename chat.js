@@ -795,32 +795,39 @@ async function addReaction(messageId, emoji) {
 
     // Handle typing indicator
     async function handleTyping() {
-        if (!appState || !appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) return;
-        if (!supabaseClient) return;
+        if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) {
+            console.log('Typing ignored - not in active session');
+            return;
+        }
+        
+        console.log('👆 User typing detected:', appState.userName);
         
         try {
-            await supabaseClient
-                .from('sessions')
-                .update({ 
-                    typing_user: appState.userName,
-                    updated_at: new Date().toISOString()
-                })
+            // Only update typing_user in chat_sessions table
+            const { error } = await supabaseClient
+                .from('chat_sessions')
+                .update({ typing_user: appState.userName })
                 .eq('session_id', appState.currentSessionId);
+            
+            if (error) {
+                console.error('Error updating typing status:', error);
+                return;
+            }
+            
+            console.log('✅ Typing status updated');
             
             if (appState.typingTimeout) {
                 clearTimeout(appState.typingTimeout);
             }
             
             appState.typingTimeout = setTimeout(() => {
+                console.log('⏱️ Clearing typing status');
                 supabaseClient
-                    .from('sessions')
-                    .update({ 
-                        typing_user: null,
-                        updated_at: new Date().toISOString()
-                    })
+                    .from('chat_sessions')
+                    .update({ typing_user: null })
                     .eq('session_id', appState.currentSessionId)
                     .catch(e => console.log("Error clearing typing:", e));
-            }, 1000);
+            }, 2000);
         } catch (error) {
             console.log("Typing indicator error:", error);
         }
