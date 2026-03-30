@@ -326,7 +326,7 @@ async function reconnectToSession() {
         if (!appState.sessionId) return false;
         
         const { data: session, error } = await supabaseClient
-            .from('sessions')
+            .from('chat_sessions')  // Changed from 'sessions'
             .select('*')
             .eq('session_id', appState.sessionId)
             .single();
@@ -383,7 +383,7 @@ async function reconnectToSession() {
 async function loadAllSessions() {
     try {
         const { data: sessions, error } = await supabaseClient
-            .from('sessions')
+            .from('chat_sessions')  // Changed from 'sessions'
             .select('*')
             .order('created_at', { ascending: true });
         
@@ -970,7 +970,6 @@ function resetConnectButton() {
 // ============================================
 // CONNECT AS HOST
 // ============================================
-
 async function connectAsHost(userIP) {
     try {
         console.log("👑 Connecting as host...");
@@ -978,7 +977,7 @@ async function connectAsHost(userIP) {
         const sessionId = 'room_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
         
         const { data, error } = await supabaseClient
-            .from('sessions')
+            .from('chat_sessions')  // Changed from 'sessions'
             .insert([
                 {
                     session_id: sessionId,
@@ -2064,43 +2063,43 @@ function setupRealtimeSubscriptions() {
             }
         });
     
-    // Typing subscription
-    appState.typingSubscription = supabaseClient
-        .channel('typing_' + appState.currentSessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'sessions',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            (payload) => {
-                console.log('📨 Typing update received:', payload.new?.typing_user);
-                
-                if (payload.new && payload.new.typing_user) {
-                    if (payload.new.typing_user !== appState.userName) {
-                        typingUser.textContent = payload.new.typing_user;
-                        typingIndicator.classList.add('show');
-                        
-                        if (window.typingHideTimeout) {
-                            clearTimeout(window.typingHideTimeout);
-                        }
-                        
-                        window.typingHideTimeout = setTimeout(() => {
-                            if (typingUser.textContent === payload.new.typing_user) {
-                                typingIndicator.classList.remove('show');
-                            }
-                        }, 3000);
+// Typing subscription - now listening to chat_sessions
+appState.typingSubscription = supabaseClient
+    .channel('typing_' + appState.currentSessionId)
+    .on(
+        'postgres_changes',
+        {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'chat_sessions',  // Changed from 'sessions'
+            filter: `session_id=eq.${appState.currentSessionId}`
+        },
+        (payload) => {
+            console.log('📨 Typing update received:', payload.new?.typing_user);
+            
+            if (payload.new && payload.new.typing_user) {
+                if (payload.new.typing_user !== appState.userName) {
+                    typingUser.textContent = payload.new.typing_user;
+                    typingIndicator.classList.add('show');
+                    
+                    if (window.typingHideTimeout) {
+                        clearTimeout(window.typingHideTimeout);
                     }
-                } else {
-                    typingIndicator.classList.remove('show');
+                    
+                    window.typingHideTimeout = setTimeout(() => {
+                        if (typingUser.textContent === payload.new.typing_user) {
+                            typingIndicator.classList.remove('show');
+                        }
+                    }, 3000);
                 }
+            } else {
+                typingIndicator.classList.remove('show');
             }
-        )
-        .subscribe((status) => {
-            console.log('📡 Typing subscription status:', status);
-        });
+        }
+    )
+    .subscribe((status) => {
+        console.log('📡 Typing subscription status:', status);
+    });
     
     // REACTIONS SUBSCRIPTION - CRITICAL FOR REAL-TIME EMOJIS
     appState.reactionsSubscription = supabaseClient
@@ -2689,7 +2688,7 @@ async function loadChatHistory(sessionId = null, limit = 50) {
         
         if (sessionId) {
             const { data: session } = await supabaseClient
-                .from('sessions')
+                .from('chat_sessions')  // Changed from 'sessions'
                 .select('created_at, host_name')
                 .eq('session_id', sessionId)
                 .single();
@@ -3216,7 +3215,7 @@ async function loadChatSessions() {
         }
         
         const { data: sessions, error } = await supabaseClient
-            .from('sessions')
+            .from('chat_sessions')  // Changed from 'sessions'
             .select('*')
             .order('created_at', { ascending: false });
         
@@ -3516,7 +3515,7 @@ async function deleteSession(sessionId) {
 
         try {
             const { error: sessionError } = await supabaseClient
-                .from('sessions')
+                .from('chat_sessions')  // Changed from 'sessions'
                 .delete()
                 .eq('session_id', sessionId);
             
@@ -3529,7 +3528,7 @@ async function deleteSession(sessionId) {
                     console.log("🔄 RLS blocking, trying admin bypass...");
                     
                     const { error: adminError } = await supabaseClient
-                        .from('sessions')
+                        .from('chat_sessions')  // Changed from 'sessions'
                         .delete()
                         .eq('session_id', sessionId)
                         .select();
