@@ -279,7 +279,7 @@ if (message.image && message.image.trim() !== '') {
                                 
                                 if (hasImage && !hasText) {
                                     // Just show image icon without text
-                                    displayText = '';
+                                    displayText = '<i class="fas fa-image"></i>';
                                 } else if (hasImage && hasText) {
                                     // Show text with small image icon
                                     displayText = `${escapeHtml(data.message.substring(0, 100))} <i class="fas fa-image" style="font-size: 0.8rem;"></i>`;
@@ -316,7 +316,7 @@ if (message.image && message.image.trim() !== '') {
         
         let displayText = quotedText;
         if (isImageOnly) {
-            displayText = '<i class="fas fa-image"></i> [Image]';
+            displayText = '';
         } else if (quotedImage && !quotedText.includes('[Image]') && !quotedText.includes('fa-image')) {
             displayText = `${quotedText} <i class="fas fa-image"></i>`;
         }
