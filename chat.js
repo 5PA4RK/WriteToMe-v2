@@ -101,7 +101,12 @@ const ChatModule = (function() {
 if (message.image && message.image.trim() !== '') {
     console.log('Rendering image in message:', message.id);
     console.log('Image type:', message.image.substring(0, 50));
-
+    
+    if (!message.text || !message.text.trim()) {
+        messageContent += `<div class="message-text" style="color: var(--text-muted); font-style: italic; margin-bottom: 8px;">
+            <i class="fas fa-image"></i> Image
+        </div>`;
+    }
     
     // Properly escape the image URL for HTML
     const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -278,11 +283,9 @@ if (message.image && message.image.trim() !== '') {
                                 let hasText = data.message && data.message.trim() !== '';
                                 
                                 if (hasImage && !hasText) {
-                                    // Just show image icon without text
-                                    displayText = '<i class="fas fa-image"></i>';
+                                    displayText = '<i class="fas fa-image"></i> [Image]';
                                 } else if (hasImage && hasText) {
-                                    // Show text with small image icon
-                                    displayText = `${escapeHtml(data.message.substring(0, 100))} <i class="fas fa-image" style="font-size: 0.8rem;"></i>`;
+                                    displayText = `${escapeHtml(data.message.substring(0, 100))} <i class="fas fa-image"></i>`;
                                     if (data.message.length > 100) displayText += '...';
                                 } else {
                                     displayText = escapeHtml(data.message.substring(0, 100));
@@ -316,7 +319,7 @@ if (message.image && message.image.trim() !== '') {
         
         let displayText = quotedText;
         if (isImageOnly) {
-            displayText = '';
+            displayText = '<i class="fas fa-image"></i> [Image]';
         } else if (quotedImage && !quotedText.includes('[Image]') && !quotedText.includes('fa-image')) {
             displayText = `${quotedText} <i class="fas fa-image"></i>`;
         }
@@ -429,66 +432,57 @@ if (message.image && message.image.trim() !== '') {
         }
     }
 
-// Add or remove reaction
-async function addReaction(messageId, emoji) {
-    console.log('🔵 addReaction called with:', { messageId, emoji });
-    
-    // Close the actions menu
-    if (typeof closeMessageActions === 'function') {
+    // Add or remove reaction
+    async function addReaction(messageId, emoji) {
+        console.log('Adding reaction:', emoji, 'to message:', messageId);
         closeMessageActions();
-    }
-    
-    if (!supabaseClient) {
-        console.error('Supabase client not initialized');
-        alert('Cannot add reaction: Database connection not initialized');
-        return;
-    }
-    
-    if (!appState || !appState.userId) {
-        console.error('User not logged in');
-        alert('You must be logged in to add reactions');
-        return;
-    }
-    
-    if (!messageId) {
-        console.error('No message ID provided');
-        return;
-    }
-    
-    try {
-        const messageElement = document.getElementById(`msg-${messageId}`);
-        if (!messageElement) {
-            console.error('Message element not found for ID:', messageId);
+        
+        if (!supabaseClient) {
+            console.error('Supabase client not initialized');
+            alert('Cannot add reaction: Database connection not initialized');
             return;
         }
         
-        // Get current reactions from the database
-        const { data: reactions, error: fetchError } = await supabaseClient
-            .from('message_reactions')
-            .select('*')
-            .eq('message_id', messageId);
-        
-        if (fetchError) {
-            console.error('Error fetching reactions:', fetchError);
+        if (!appState || !appState.userId) {
+            console.error('User not logged in');
+            alert('You must be logged in to add reactions');
+            return;
         }
         
-        const userReaction = (reactions || []).find(r => r.user_id === appState.userId);
-        
-        if (userReaction) {
-            if (userReaction.emoji !== emoji) {
-                // Change existing reaction - delete old, add new
-                console.log('Changing reaction from', userReaction.emoji, 'to', emoji);
-                
-                const { error: deleteError } = await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
-                
-                if (deleteError) {
-                    console.error('Error deleting reaction:', deleteError);
+        try {
+            const messageElement = document.getElementById(`msg-${messageId}`);
+            if (!messageElement) {
+                console.error('Message element not found');
+                return;
+            }
+            
+            const reactions = await getMessageReactions(messageId);
+            const userReaction = reactions.find(r => r.user_id === appState.userId);
+            
+            if (userReaction) {
+                if (userReaction.emoji !== emoji) {
+                    await supabaseClient
+                        .from('message_reactions')
+                        .delete()
+                        .eq('id', userReaction.id);
+                    
+                    await supabaseClient
+                        .from('message_reactions')
+                        .insert([{
+                            message_id: messageId,
+                            user_id: appState.userId,
+                            user_name: appState.userName,
+                            emoji: emoji,
+                            created_at: new Date().toISOString()
+                        }]);
+                } else {
+                    await supabaseClient
+                        .from('message_reactions')
+                        .delete()
+                        .eq('id', userReaction.id);
                 }
-                
-                const { error: insertError } = await supabaseClient
+            } else {
+                await supabaseClient
                     .from('message_reactions')
                     .insert([{
                         message_id: messageId,
@@ -497,58 +491,20 @@ async function addReaction(messageId, emoji) {
                         emoji: emoji,
                         created_at: new Date().toISOString()
                     }]);
-                
-                if (insertError) {
-                    console.error('Error inserting new reaction:', insertError);
-                    throw insertError;
-                }
-                
-                console.log('✅ Reaction changed successfully');
-            } else {
-                // Remove existing reaction
-                console.log('Removing reaction:', userReaction.emoji);
-                
-                const { error: deleteError } = await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
-                
-                if (deleteError) {
-                    console.error('Error deleting reaction:', deleteError);
-                    throw deleteError;
-                }
-                
-                console.log('✅ Reaction removed successfully');
-            }
-        } else {
-            // Add new reaction
-            console.log('Adding new reaction:', emoji);
-            
-            const { error: insertError } = await supabaseClient
-                .from('message_reactions')
-                .insert([{
-                    message_id: messageId,
-                    user_id: appState.userId,
-                    user_name: appState.userName,
-                    emoji: emoji,
-                    created_at: new Date().toISOString()
-                }]);
-            
-            if (insertError) {
-                console.error('Error inserting reaction:', insertError);
-                throw insertError;
             }
             
-            console.log('✅ New reaction added successfully');
+            const updatedReactions = await getMessageReactions(messageId);
+            const reactionsContainer = messageElement.querySelector('.message-reactions');
+            if (reactionsContainer) {
+                renderReactions(reactionsContainer, updatedReactions);
+            }
+            
+            console.log('Reaction added successfully');
+        } catch (error) {
+            console.error("Error adding reaction:", error);
+            alert("Failed to add reaction: " + error.message);
         }
-        
-        // The realtime subscription will handle updating the UI
-        
-    } catch (error) {
-        console.error("❌ Error adding reaction:", error);
-        alert("Failed to add reaction: " + (error.message || 'Unknown error'));
     }
-}
 
     // Toggle reaction
     async function toggleReaction(messageId, emoji) {
@@ -795,39 +751,32 @@ async function addReaction(messageId, emoji) {
 
     // Handle typing indicator
     async function handleTyping() {
-        if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) {
-            console.log('Typing ignored - not in active session');
-            return;
-        }
-        
-        console.log('👆 User typing detected:', appState.userName);
+        if (!appState || !appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) return;
+        if (!supabaseClient) return;
         
         try {
-            // Only update typing_user in chat_sessions table
-            const { error } = await supabaseClient
-                .from('chat_sessions')
-                .update({ typing_user: appState.userName })
+            await supabaseClient
+                .from('sessions')
+                .update({ 
+                    typing_user: appState.userName,
+                    updated_at: new Date().toISOString()
+                })
                 .eq('session_id', appState.currentSessionId);
-            
-            if (error) {
-                console.error('Error updating typing status:', error);
-                return;
-            }
-            
-            console.log('✅ Typing status updated');
             
             if (appState.typingTimeout) {
                 clearTimeout(appState.typingTimeout);
             }
             
             appState.typingTimeout = setTimeout(() => {
-                console.log('⏱️ Clearing typing status');
                 supabaseClient
-                    .from('chat_sessions')
-                    .update({ typing_user: null })
+                    .from('sessions')
+                    .update({ 
+                        typing_user: null,
+                        updated_at: new Date().toISOString()
+                    })
                     .eq('session_id', appState.currentSessionId)
                     .catch(e => console.log("Error clearing typing:", e));
-            }, 2000);
+            }, 1000);
         } catch (error) {
             console.log("Typing indicator error:", error);
         }
