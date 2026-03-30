@@ -2447,14 +2447,19 @@ async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
             }
         }
         
+        // Create message data - DON'T include reply_to if it's null or empty
         const messageData = {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
             sender_name: appState.userName,
             message: text || '',
-            created_at: new Date().toISOString(),
-            reply_to: finalReplyToId
+            created_at: new Date().toISOString()
         };
+        
+        // Only add reply_to if it exists and is valid
+        if (finalReplyToId && finalReplyToId !== 'null' && finalReplyToId !== 'undefined') {
+            messageData.reply_to = finalReplyToId;
+        }
         
         if (finalImageUrl && finalImageUrl.trim() !== '') {
             messageData.image_url = finalImageUrl;
@@ -2481,7 +2486,6 @@ async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
         return null;
     }
 }
-
 
 // Helper function to validate and fix image data URLs
 function ensureValidImageUrl(imageUrl) {
