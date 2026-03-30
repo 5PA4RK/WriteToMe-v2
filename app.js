@@ -22,6 +22,7 @@ const appState = {
     typingTimeout: null,
     realtimeSubscription: null,
     typingSubscription: null,
+    reactionsSubscription: null,  // ADD THIS LINE
     pendingSubscription: null,
     soundEnabled: true,
     isViewingHistory: false,
@@ -1923,7 +1924,6 @@ function loadBackupNotifications() {
 // ============================================
 // REALTIME SUBSCRIPTIONS
 // ============================================
-
 function setupRealtimeSubscriptions() {
     if (!appState.currentSessionId) {
         console.log("⚠️ No session ID for subscriptions");
@@ -1943,77 +1943,73 @@ function setupRealtimeSubscriptions() {
         appState.typingSubscription = null;
     }
     
-    appState.realtimeSubscription = supabaseClient
-    .channel('messages_' + appState.currentSessionId)
-    .on(
-        'postgres_changes',
-        {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'messages'
-        },
-        async (payload) => {
-            console.log('📦 Realtime message received:', payload.new);
-            console.log('Has image:', !!payload.new.image_url);
-            console.log('Image URL:', payload.new.image_url ? payload.new.image_url.substring(0, 100) : 'none');
-            
-            if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                // Check if message is cleared for guests
-                let shouldDisplay = true;
-                if (!appState.isHost && payload.new.sender_id !== appState.userId) {
-                    const { data: cleared } = await supabaseClient
-                        .from('cleared_messages')
-                        .select('id')
-                        .eq('user_id', appState.userId)
-                        .eq('message_id', payload.new.id)
-                        .maybeSingle();
-                    
-                    if (cleared) shouldDisplay = false;
-                }
-                
-// In the INSERT handler, ensure image is processed
-if (shouldDisplay) {
-    const messageType = payload.new.sender_id === appState.userId ? 'sent' : 'received';
-    
-    const existingMsg = document.getElementById(`msg-${payload.new.id}`);
-    if (!existingMsg) {
-        const reactions = await getMessageReactions(payload.new.id);
-        
-        // Ensure image URL is valid
-        let imageUrl = null;
-        if (payload.new.image_url && payload.new.image_url.trim() !== '') {
-            imageUrl = payload.new.image_url;
-            console.log('Processing image for display, length:', imageUrl.length);
-        }
-        
-        const messageObj = {
-            id: payload.new.id,
-            sender: payload.new.sender_name,
-            text: payload.new.message || '',
-            image: imageUrl,
-            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-            type: messageType,
-            is_historical: false,
-            reactions: reactions || [],
-            reply_to: payload.new.reply_to
-        };
-        
-        console.log('Displaying message with image:', !!messageObj.image);
-        
-        displayMessage(messageObj);
-        forceScrollToBottom('smooth', 100);
+    if (appState.reactionsSubscription) {
+        supabaseClient.removeChannel(appState.reactionsSubscription);
+        appState.reactionsSubscription = null;
     }
-}
-                
-                // Play sound for received messages
-                if (payload.new.sender_id !== appState.userId && appState.soundEnabled && !payload.new.is_notification) {
-                    if (window.playNotificationSound) {
-                        window.playNotificationSound();
+    
+    // Messages subscription (existing)
+    appState.realtimeSubscription = supabaseClient
+        .channel('messages_' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages'
+            },
+            async (payload) => {
+                // ... existing INSERT handler code ...
+                if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                    let shouldDisplay = true;
+                    if (!appState.isHost && payload.new.sender_id !== appState.userId) {
+                        const { data: cleared } = await supabaseClient
+                            .from('cleared_messages')
+                            .select('id')
+                            .eq('user_id', appState.userId)
+                            .eq('message_id', payload.new.id)
+                            .maybeSingle();
+                        
+                        if (cleared) shouldDisplay = false;
+                    }
+                    
+                    if (shouldDisplay) {
+                        const messageType = payload.new.sender_id === appState.userId ? 'sent' : 'received';
+                        
+                        const existingMsg = document.getElementById(`msg-${payload.new.id}`);
+                        if (!existingMsg) {
+                            const reactions = await getMessageReactions(payload.new.id);
+                            
+                            let imageUrl = null;
+                            if (payload.new.image_url && payload.new.image_url.trim() !== '') {
+                                imageUrl = payload.new.image_url;
+                            }
+                            
+                            const messageObj = {
+                                id: payload.new.id,
+                                sender: payload.new.sender_name,
+                                text: payload.new.message || '',
+                                image: imageUrl,
+                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                                type: messageType,
+                                is_historical: false,
+                                reactions: reactions || [],
+                                reply_to: payload.new.reply_to
+                            };
+                            
+                            displayMessage(messageObj);
+                            forceScrollToBottom('smooth', 100);
+                        }
+                    }
+                    
+                    if (payload.new.sender_id !== appState.userId && appState.soundEnabled && !payload.new.is_notification) {
+                        if (window.playNotificationSound) {
+                            window.playNotificationSound();
+                        }
                     }
                 }
             }
-        }
-    )
+        )
         .on(
             'postgres_changes',
             {
@@ -2023,8 +2019,7 @@ if (shouldDisplay) {
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
             (payload) => {
-                console.log('📝 Message updated:', payload.new?.id);
-                
+                // ... existing UPDATE handler code ...
                 const messageElement = document.getElementById(`msg-${payload.new.id}`);
                 if (messageElement) {
                     if (payload.new.is_deleted) {
@@ -2061,6 +2056,93 @@ if (shouldDisplay) {
                 console.error('❌ Messages subscription error:', err);
             }
         });
+    
+    // Typing subscription (existing)
+    appState.typingSubscription = supabaseClient
+        .channel('typing_' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'sessions',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                console.log('📨 Typing update received:', payload.new?.typing_user);
+                
+                if (payload.new && payload.new.typing_user) {
+                    if (payload.new.typing_user !== appState.userName) {
+                        typingUser.textContent = payload.new.typing_user;
+                        typingIndicator.classList.add('show');
+                        
+                        if (window.typingHideTimeout) {
+                            clearTimeout(window.typingHideTimeout);
+                        }
+                        
+                        window.typingHideTimeout = setTimeout(() => {
+                            if (typingUser.textContent === payload.new.typing_user) {
+                                typingIndicator.classList.remove('show');
+                            }
+                        }, 3000);
+                    }
+                } else {
+                    typingIndicator.classList.remove('show');
+                }
+            }
+        )
+        .subscribe((status) => {
+            console.log('📡 Typing subscription status:', status);
+        });
+    
+    // ADD THIS NEW REACTIONS SUBSCRIPTION
+    appState.reactionsSubscription = supabaseClient
+        .channel('reactions_' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: '*',  // Listen to all events (INSERT, UPDATE, DELETE)
+                schema: 'public',
+                table: 'message_reactions'
+            },
+            async (payload) => {
+                console.log('🎯 Reaction change detected:', payload.event, payload.new?.message_id || payload.old?.message_id);
+                
+                const messageId = payload.new?.message_id || payload.old?.message_id;
+                if (!messageId) return;
+                
+                // Get the message element
+                const messageElement = document.getElementById(`msg-${messageId}`);
+                if (!messageElement) {
+                    console.log('Message element not found for reactions update:', messageId);
+                    return;
+                }
+                
+                // Fetch updated reactions for this message
+                const updatedReactions = await getMessageReactions(messageId);
+                
+                // Update the reactions display
+                const reactionsContainer = messageElement.querySelector('.message-reactions');
+                if (reactionsContainer && window.ChatModule) {
+                    window.ChatModule.renderReactions(reactionsContainer, updatedReactions);
+                }
+                
+                // Also update in appState.messages if present
+                if (appState.messages) {
+                    const messageIndex = appState.messages.findIndex(m => m.id === messageId);
+                    if (messageIndex !== -1) {
+                        appState.messages[messageIndex].reactions = updatedReactions;
+                    }
+                }
+            }
+        )
+        .subscribe((status, err) => {
+            console.log('📡 Reactions subscription status:', status);
+            if (err) {
+                console.error('❌ Reactions subscription error:', err);
+            }
+        });
+
     
     appState.typingSubscription = supabaseClient
         .channel('typing_' + appState.currentSessionId)
@@ -2968,6 +3050,11 @@ async function handleLogout() {
     if (appState.pendingSubscription) {
         supabaseClient.removeChannel(appState.pendingSubscription);
         appState.pendingSubscription = null;
+    }
+
+    if (appState.reactionsSubscription) {
+        supabaseClient.removeChannel(appState.reactionsSubscription);
+        appState.reactionsSubscription = null;
     }
     
     localStorage.removeItem('writeToMe_session');
