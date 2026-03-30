@@ -1044,10 +1044,10 @@ async function connectAsGuest(userIP) {
         console.log("👤 Connecting as guest - checking for existing sessions...");
         
         const { data: activeSessions, error: sessionError } = await supabaseClient
-            .from('sessions')
-            .select('session_id, host_name, host_id')
-            .eq('is_active', true)
-            .order('created_at', { ascending: false });
+        .from('chat_sessions')  // <-- Use chat_sessions
+        .select('session_id, host_name, host_id')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
         
         if (sessionError || !activeSessions || activeSessions.length === 0) {
             alert("No active rooms available. Please try again later or contact a host.");
@@ -2176,49 +2176,6 @@ function checkAndReconnectSubscriptions() {
 // ENHANCED CHAT FUNCTIONS
 // ============================================
 
-async function handleTyping() {
-    if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) {
-        console.log('Typing ignored - not in active session');
-        return;
-    }
-    
-    console.log('👆 User typing detected:', appState.userName);
-    
-    try {
-        const { error } = await supabaseClient
-            .from('sessions')
-            .update({ 
-                typing_user: appState.userName,
-                updated_at: new Date().toISOString()
-            })
-            .eq('session_id', appState.currentSessionId);
-        
-        if (error) {
-            console.error('Error updating typing status:', error);
-            return;
-        }
-        
-        console.log('✅ Typing status updated');
-        
-        if (appState.typingTimeout) {
-            clearTimeout(appState.typingTimeout);
-        }
-        
-        appState.typingTimeout = setTimeout(() => {
-            console.log('⏱️ Clearing typing status');
-            supabaseClient
-                .from('sessions')
-                .update({ 
-                    typing_user: null,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('session_id', appState.currentSessionId)
-                .catch(e => console.log("Error clearing typing:", e));
-        }, 2000);
-    } catch (error) {
-        console.log("Typing indicator error:", error);
-    }
-}
 
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
@@ -2989,8 +2946,8 @@ async function handleLogout() {
         try {
             if (appState.isHost) {
                 await supabaseClient
-                    .from('sessions')
-                    .update({ 
+                .from('sessions')  // <-- Change to chat_sessions
+                .update({ 
                         is_active: false,
                         ended_at: new Date().toISOString()
                     })
