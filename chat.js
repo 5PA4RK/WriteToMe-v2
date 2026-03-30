@@ -433,6 +433,7 @@ if (message.image && message.image.trim() !== '') {
     }
 
 // Add or remove reaction
+// Add or remove reaction
 async function addReaction(messageId, emoji) {
     console.log('Adding reaction:', emoji, 'to message:', messageId);
     closeMessageActions();
@@ -500,8 +501,7 @@ async function addReaction(messageId, emoji) {
             console.log('New reaction added');
         }
         
-        // Note: The realtime subscription will handle updating the UI
-        // No need to manually update here
+        // The realtime subscription will handle updating the UI automatically
         
     } catch (error) {
         console.error("Error adding reaction:", error);
