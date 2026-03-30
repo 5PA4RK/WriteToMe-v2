@@ -279,7 +279,7 @@ if (message.image && message.image.trim() !== '') {
                                 
                                 if (hasImage && !hasText) {
                                     // Just show image icon without text
-                                    displayText = '<i class="fas fa-image"></i>';
+                                    displayText = '';
                                 } else if (hasImage && hasText) {
                                     // Show text with small image icon
                                     displayText = `${escapeHtml(data.message.substring(0, 100))} <i class="fas fa-image" style="font-size: 0.8rem;"></i>`;
