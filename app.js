@@ -22,7 +22,6 @@ const appState = {
     typingTimeout: null,
     realtimeSubscription: null,
     typingSubscription: null,
-    reactionsSubscription: null,  // ADD THIS LINE
     pendingSubscription: null,
     soundEnabled: true,
     isViewingHistory: false,
@@ -326,7 +325,7 @@ async function reconnectToSession() {
         if (!appState.sessionId) return false;
         
         const { data: session, error } = await supabaseClient
-            .from('chat_sessions')  // Changed from 'sessions'
+            .from('sessions')
             .select('*')
             .eq('session_id', appState.sessionId)
             .single();
@@ -383,7 +382,7 @@ async function reconnectToSession() {
 async function loadAllSessions() {
     try {
         const { data: sessions, error } = await supabaseClient
-            .from('chat_sessions')  // Changed from 'sessions'
+            .from('sessions')
             .select('*')
             .order('created_at', { ascending: true });
         
@@ -970,6 +969,7 @@ function resetConnectButton() {
 // ============================================
 // CONNECT AS HOST
 // ============================================
+
 async function connectAsHost(userIP) {
     try {
         console.log("👑 Connecting as host...");
@@ -977,7 +977,7 @@ async function connectAsHost(userIP) {
         const sessionId = 'room_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
         
         const { data, error } = await supabaseClient
-            .from('chat_sessions')  // Changed from 'sessions'
+            .from('sessions')
             .insert([
                 {
                     session_id: sessionId,
@@ -1044,10 +1044,10 @@ async function connectAsGuest(userIP) {
         console.log("👤 Connecting as guest - checking for existing sessions...");
         
         const { data: activeSessions, error: sessionError } = await supabaseClient
-        .from('chat_sessions')  // <-- Use chat_sessions
-        .select('session_id, host_name, host_id')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+            .from('sessions')
+            .select('session_id, host_name, host_id')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false });
         
         if (sessionError || !activeSessions || activeSessions.length === 0) {
             alert("No active rooms available. Please try again later or contact a host.");
@@ -1923,6 +1923,7 @@ function loadBackupNotifications() {
 // ============================================
 // REALTIME SUBSCRIPTIONS
 // ============================================
+
 function setupRealtimeSubscriptions() {
     if (!appState.currentSessionId) {
         console.log("⚠️ No session ID for subscriptions");
@@ -1931,90 +1932,88 @@ function setupRealtimeSubscriptions() {
     
     console.log("📡 Setting up real-time subscriptions for session:", appState.currentSessionId);
     
-    // Clean up existing subscriptions
     if (appState.realtimeSubscription) {
-        console.log("Removing old messages subscription");
+        console.log("Removing old subscription");
         supabaseClient.removeChannel(appState.realtimeSubscription);
         appState.realtimeSubscription = null;
     }
     
     if (appState.typingSubscription) {
-        console.log("Removing old typing subscription");
         supabaseClient.removeChannel(appState.typingSubscription);
         appState.typingSubscription = null;
     }
     
-    if (appState.reactionsSubscription) {
-        console.log("Removing old reactions subscription");
-        supabaseClient.removeChannel(appState.reactionsSubscription);
-        appState.reactionsSubscription = null;
-    }
-    
-    // Messages subscription
     appState.realtimeSubscription = supabaseClient
-        .channel('messages_' + appState.currentSessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages'
-            },
-            async (payload) => {
-                console.log('📦 Realtime message received:', payload.new?.id);
+    .channel('messages_' + appState.currentSessionId)
+    .on(
+        'postgres_changes',
+        {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages'
+        },
+        async (payload) => {
+            console.log('📦 Realtime message received:', payload.new);
+            console.log('Has image:', !!payload.new.image_url);
+            console.log('Image URL:', payload.new.image_url ? payload.new.image_url.substring(0, 100) : 'none');
+            
+            if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                // Check if message is cleared for guests
+                let shouldDisplay = true;
+                if (!appState.isHost && payload.new.sender_id !== appState.userId) {
+                    const { data: cleared } = await supabaseClient
+                        .from('cleared_messages')
+                        .select('id')
+                        .eq('user_id', appState.userId)
+                        .eq('message_id', payload.new.id)
+                        .maybeSingle();
+                    
+                    if (cleared) shouldDisplay = false;
+                }
                 
-                if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                    // Check if message is cleared for guests
-                    let shouldDisplay = true;
-                    if (!appState.isHost && payload.new.sender_id !== appState.userId) {
-                        const { data: cleared } = await supabaseClient
-                            .from('cleared_messages')
-                            .select('id')
-                            .eq('user_id', appState.userId)
-                            .eq('message_id', payload.new.id)
-                            .maybeSingle();
-                        
-                        if (cleared) shouldDisplay = false;
-                    }
-                    
-                    if (shouldDisplay) {
-                        const messageType = payload.new.sender_id === appState.userId ? 'sent' : 'received';
-                        
-                        const existingMsg = document.getElementById(`msg-${payload.new.id}`);
-                        if (!existingMsg) {
-                            const reactions = await getMessageReactions(payload.new.id);
-                            
-                            let imageUrl = null;
-                            if (payload.new.image_url && payload.new.image_url.trim() !== '') {
-                                imageUrl = payload.new.image_url;
-                            }
-                            
-                            const messageObj = {
-                                id: payload.new.id,
-                                sender: payload.new.sender_name,
-                                text: payload.new.message || '',
-                                image: imageUrl,
-                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                                type: messageType,
-                                is_historical: false,
-                                reactions: reactions || [],
-                                reply_to: payload.new.reply_to
-                            };
-                            
-                            displayMessage(messageObj);
-                            forceScrollToBottom('smooth', 100);
-                        }
-                    }
-                    
-                    // Play sound for received messages
-                    if (payload.new.sender_id !== appState.userId && appState.soundEnabled && !payload.new.is_notification) {
-                        if (window.playNotificationSound) {
-                            window.playNotificationSound();
-                        }
+// In the INSERT handler, ensure image is processed
+if (shouldDisplay) {
+    const messageType = payload.new.sender_id === appState.userId ? 'sent' : 'received';
+    
+    const existingMsg = document.getElementById(`msg-${payload.new.id}`);
+    if (!existingMsg) {
+        const reactions = await getMessageReactions(payload.new.id);
+        
+        // Ensure image URL is valid
+        let imageUrl = null;
+        if (payload.new.image_url && payload.new.image_url.trim() !== '') {
+            imageUrl = payload.new.image_url;
+            console.log('Processing image for display, length:', imageUrl.length);
+        }
+        
+        const messageObj = {
+            id: payload.new.id,
+            sender: payload.new.sender_name,
+            text: payload.new.message || '',
+            image: imageUrl,
+            time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            type: messageType,
+            is_historical: false,
+            reactions: reactions || [],
+            reply_to: payload.new.reply_to
+        };
+        
+        console.log('Displaying message with image:', !!messageObj.image);
+        
+        displayMessage(messageObj);
+        forceScrollToBottom('smooth', 100);
+    }
+}
+                
+                // Play sound for received messages
+                if (payload.new.sender_id !== appState.userId && appState.soundEnabled && !payload.new.is_notification) {
+                    if (window.playNotificationSound) {
+                        window.playNotificationSound();
                     }
                 }
             }
-        )
+        }
+    )
         .on(
             'postgres_changes',
             {
@@ -2063,96 +2062,44 @@ function setupRealtimeSubscriptions() {
             }
         });
     
-// Typing subscription - now listening to chat_sessions
-appState.typingSubscription = supabaseClient
-    .channel('typing_' + appState.currentSessionId)
-    .on(
-        'postgres_changes',
-        {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'chat_sessions',  // Changed from 'sessions'
-            filter: `session_id=eq.${appState.currentSessionId}`
-        },
-        (payload) => {
-            console.log('📨 Typing update received:', payload.new?.typing_user);
-            
-            if (payload.new && payload.new.typing_user) {
-                if (payload.new.typing_user !== appState.userName) {
-                    typingUser.textContent = payload.new.typing_user;
-                    typingIndicator.classList.add('show');
-                    
-                    if (window.typingHideTimeout) {
-                        clearTimeout(window.typingHideTimeout);
-                    }
-                    
-                    window.typingHideTimeout = setTimeout(() => {
-                        if (typingUser.textContent === payload.new.typing_user) {
-                            typingIndicator.classList.remove('show');
-                        }
-                    }, 3000);
-                }
-            } else {
-                typingIndicator.classList.remove('show');
-            }
-        }
-    )
-    .subscribe((status) => {
-        console.log('📡 Typing subscription status:', status);
-    });
-    
-    // REACTIONS SUBSCRIPTION - CRITICAL FOR REAL-TIME EMOJIS
-    appState.reactionsSubscription = supabaseClient
-        .channel('reactions_' + appState.currentSessionId)
+    appState.typingSubscription = supabaseClient
+        .channel('typing_' + appState.currentSessionId)
         .on(
             'postgres_changes',
             {
-                event: '*',  // Listen to INSERT, UPDATE, DELETE
+                event: 'UPDATE',
                 schema: 'public',
-                table: 'message_reactions'
+                table: 'sessions',
+                filter: `session_id=eq.${appState.currentSessionId}`
             },
-            async (payload) => {
-                console.log('🎯 REACTION CHANGE DETECTED:', payload.event, payload.new?.message_id || payload.old?.message_id);
+            (payload) => {
+                console.log('📨 Typing update received:', payload.new?.typing_user);
                 
-                const messageId = payload.new?.message_id || payload.old?.message_id;
-                if (!messageId) {
-                    console.log('No message ID in reaction payload');
-                    return;
-                }
-                
-                // Find the message element
-                const messageElement = document.getElementById(`msg-${messageId}`);
-                if (!messageElement) {
-                    console.log('Message element not found for reactions update:', messageId);
-                    return;
-                }
-                
-                // Fetch updated reactions for this message
-                const updatedReactions = await getMessageReactions(messageId);
-                console.log(`Updated reactions for message ${messageId}:`, updatedReactions.length);
-                
-                // Update the reactions display
-                const reactionsContainer = messageElement.querySelector('.message-reactions');
-                if (reactionsContainer && window.ChatModule) {
-                    window.ChatModule.renderReactions(reactionsContainer, updatedReactions);
-                }
-                
-                // Also update in appState.messages if present
-                if (appState.messages) {
-                    const messageIndex = appState.messages.findIndex(m => m.id === messageId);
-                    if (messageIndex !== -1) {
-                        appState.messages[messageIndex].reactions = updatedReactions;
+                if (payload.new && payload.new.typing_user) {
+                    if (payload.new.typing_user !== appState.userName) {
+                        console.log('👀 Showing typing indicator for:', payload.new.typing_user);
+                        typingUser.textContent = payload.new.typing_user;
+                        typingIndicator.classList.add('show');
+                        
+                        if (window.typingHideTimeout) {
+                            clearTimeout(window.typingHideTimeout);
+                        }
+                        
+                        window.typingHideTimeout = setTimeout(() => {
+                            if (typingUser.textContent === payload.new.typing_user) {
+                                console.log('⏹️ Hiding typing indicator');
+                                typingIndicator.classList.remove('show');
+                            }
+                        }, 3000);
                     }
+                } else {
+                    console.log('⏹️ No one typing');
+                    typingIndicator.classList.remove('show');
                 }
             }
         )
-        .subscribe((status, err) => {
-            console.log('📡 REACTIONS Subscription status:', status);
-            if (err) {
-                console.error('❌ Reactions subscription error:', err);
-            } else if (status === 'SUBSCRIBED') {
-                console.log('✅ Successfully subscribed to message_reactions!');
-            }
+        .subscribe((status) => {
+            console.log('📡 Typing subscription status:', status);
         });
 }
 
@@ -2176,6 +2123,49 @@ function checkAndReconnectSubscriptions() {
 // ENHANCED CHAT FUNCTIONS
 // ============================================
 
+async function handleTyping() {
+    if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) {
+        console.log('Typing ignored - not in active session');
+        return;
+    }
+    
+    console.log('👆 User typing detected:', appState.userName);
+    
+    try {
+        const { error } = await supabaseClient
+            .from('sessions')
+            .update({ 
+                typing_user: appState.userName,
+                updated_at: new Date().toISOString()
+            })
+            .eq('session_id', appState.currentSessionId);
+        
+        if (error) {
+            console.error('Error updating typing status:', error);
+            return;
+        }
+        
+        console.log('✅ Typing status updated');
+        
+        if (appState.typingTimeout) {
+            clearTimeout(appState.typingTimeout);
+        }
+        
+        appState.typingTimeout = setTimeout(() => {
+            console.log('⏱️ Clearing typing status');
+            supabaseClient
+                .from('sessions')
+                .update({ 
+                    typing_user: null,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('session_id', appState.currentSessionId)
+                .catch(e => console.log("Error clearing typing:", e));
+        }, 2000);
+    } catch (error) {
+        console.log("Typing indicator error:", error);
+    }
+}
 
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
@@ -2447,19 +2437,14 @@ async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
             }
         }
         
-        // Create message data - DON'T include reply_to if it's null or empty
         const messageData = {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
             sender_name: appState.userName,
             message: text || '',
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            reply_to: finalReplyToId
         };
-        
-        // Only add reply_to if it exists and is valid
-        if (finalReplyToId && finalReplyToId !== 'null' && finalReplyToId !== 'undefined') {
-            messageData.reply_to = finalReplyToId;
-        }
         
         if (finalImageUrl && finalImageUrl.trim() !== '') {
             messageData.image_url = finalImageUrl;
@@ -2486,6 +2471,7 @@ async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
         return null;
     }
 }
+
 
 // Helper function to validate and fix image data URLs
 function ensureValidImageUrl(imageUrl) {
@@ -2649,7 +2635,7 @@ async function loadChatHistory(sessionId = null, limit = 50) {
         
         if (sessionId) {
             const { data: session } = await supabaseClient
-                .from('chat_sessions')  // Changed from 'sessions'
+                .from('sessions')
                 .select('created_at, host_name')
                 .eq('session_id', sessionId)
                 .single();
@@ -2950,8 +2936,8 @@ async function handleLogout() {
         try {
             if (appState.isHost) {
                 await supabaseClient
-                .from('sessions')  // <-- Change to chat_sessions
-                .update({ 
+                    .from('sessions')
+                    .update({ 
                         is_active: false,
                         ended_at: new Date().toISOString()
                     })
@@ -2982,11 +2968,6 @@ async function handleLogout() {
     if (appState.pendingSubscription) {
         supabaseClient.removeChannel(appState.pendingSubscription);
         appState.pendingSubscription = null;
-    }
-
-    if (appState.reactionsSubscription) {
-        supabaseClient.removeChannel(appState.reactionsSubscription);
-        appState.reactionsSubscription = null;
     }
     
     localStorage.removeItem('writeToMe_session');
@@ -3176,7 +3157,7 @@ async function loadChatSessions() {
         }
         
         const { data: sessions, error } = await supabaseClient
-            .from('chat_sessions')  // Changed from 'sessions'
+            .from('sessions')
             .select('*')
             .order('created_at', { ascending: false });
         
@@ -3476,7 +3457,7 @@ async function deleteSession(sessionId) {
 
         try {
             const { error: sessionError } = await supabaseClient
-                .from('chat_sessions')  // Changed from 'sessions'
+                .from('sessions')
                 .delete()
                 .eq('session_id', sessionId);
             
@@ -3489,7 +3470,7 @@ async function deleteSession(sessionId) {
                     console.log("🔄 RLS blocking, trying admin bypass...");
                     
                     const { error: adminError } = await supabaseClient
-                        .from('chat_sessions')  // Changed from 'sessions'
+                        .from('sessions')
                         .delete()
                         .eq('session_id', sessionId)
                         .select();
