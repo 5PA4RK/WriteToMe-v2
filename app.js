@@ -2217,62 +2217,26 @@ async function sendMessage() {
         imageUpload.value = '';
     }
     
-    if (imageFile) {
-        const reader = new FileReader();
+    try {
+        let result;
         
-        reader.onload = async function(e) {
-            const imageUrl = e.target.result;
-            console.log('📸 Image loaded, sending to database...');
-            
-            const result = await sendMessageToDB(originalMessageText, imageUrl, replyToId);
-            
-            if (!result || !result.success) {
-                console.error('Failed to send image message');
-                showSendError(originalMessageText);
-            }
-            
-            // Re-enable send button
-            isSendingMessage = false;
-            if (sendMessageBtn) {
-                sendMessageBtn.disabled = false;
-                if (window.innerWidth <= 768) {
-                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
-                    sendMessageBtn.style.opacity = '1';
-                } else {
-                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
-                }
-            }
-        };
-        
-        reader.onerror = function(e) {
-            console.error('❌ Error reading image:', e);
-            alert("Error reading image file.");
-            imageUpload.value = '';
-            isSendingMessage = false;
-            if (sendMessageBtn) {
-                sendMessageBtn.disabled = false;
-                if (window.innerWidth <= 768) {
-                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
-                    sendMessageBtn.style.opacity = '1';
-                } else {
-                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
-                }
-            }
-            if (originalMessageText) {
-                messageInput.value = originalMessageText;
-            }
-        };
-        
-        reader.readAsDataURL(imageFile);
-    } else {
-        // Text-only message
-        const result = await sendMessageToDB(originalMessageText, null, replyToId);
+        if (imageFile) {
+            // Send image with optional text
+            result = await sendMessageToDB(originalMessageText, imageFile, replyToId);
+        } else {
+            // Send text-only message
+            result = await sendMessageToDB(originalMessageText, null, replyToId);
+        }
         
         if (!result || !result.success) {
-            console.error('Failed to send text message');
+            console.error('Failed to send message');
             showSendError(originalMessageText);
         }
         
+    } catch (error) {
+        console.error('Error in sendMessage:', error);
+        showSendError(originalMessageText);
+    } finally {
         // Re-enable send button
         isSendingMessage = false;
         if (sendMessageBtn) {
@@ -2302,16 +2266,151 @@ function showSendError(originalText) {
     chatMessages.appendChild(errorMsg);
     forceScrollToBottom('smooth', 100);
     
-    // Restore the message text to input
-    if (originalText) {
+    // Restore the message text to input if it was text
+    if (originalText && originalText.trim()) {
         messageInput.value = originalText;
         messageInput.focus();
     }
 }
+// Add this after getRealIP() function, around line 800-900
+async function getRealIP() {
+    try {
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        return data.ip || "Unknown";
+    } catch (error) {
+        console.error("Error getting IP:", error);
+        return "Unknown";
+    }
+}
 
-async function sendMessageToDB(text, imageUrl, replyToId = null) {
+// ADD THIS NEW FUNCTION HERE
+// Add this near the top of your helper functions section
+async function uploadImageToStorage(file) {
+    try {
+        // Create a unique filename
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        const extension = file.name.split('.').pop().toLowerCase();
+        const fileName = `${timestamp}_${random}.${extension}`;
+        const filePath = `chat_images/${fileName}`;
+        
+        console.log('📤 Uploading image to storage:', filePath);
+        
+        // Upload to Supabase Storage
+        const { data, error } = await supabaseClient.storage
+            .from('chat-images')
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: file.type
+            });
+        
+        if (error) {
+            console.error('Storage upload error:', error);
+            throw error;
+        }
+        
+        // Get public URL
+        const { data: { publicUrl } } = supabaseClient.storage
+            .from('chat-images')
+            .getPublicUrl(filePath);
+        
+        console.log('✅ Image uploaded successfully:', publicUrl);
+        return publicUrl;
+    } catch (error) {
+        console.error("❌ Error uploading to storage:", error);
+        // Fall back to base64 if storage fails
+        console.log('Falling back to base64...');
+        return await convertImageToBase64(file);
+    }
+}
+
+// Helper function to convert image to compressed base64 (fallback)
+function convertImageToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                const maxSize = 800;
+                
+                // Calculate new dimensions while maintaining aspect ratio
+                if (width > height && width > maxSize) {
+                    height = (height * maxSize) / width;
+                    width = maxSize;
+                } else if (height > maxSize) {
+                    width = (width * maxSize) / height;
+                    height = maxSize;
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Compress as JPEG for better size
+                const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                resolve(compressedDataUrl);
+            };
+            img.onerror = () => {
+                console.error('Failed to compress image, using original');
+                resolve(e.target.result);
+            };
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+// Keep your existing compressImage function for base64 strings
+async function compressImage(dataUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            
+            // Max dimensions for compressed image
+            const maxWidth = 800;
+            const maxHeight = 800;
+            
+            if (width > height) {
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+            } else {
+                if (height > maxHeight) {
+                    width = Math.round((width * maxHeight) / height);
+                    height = maxHeight;
+                }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Compress as JPEG for better compatibility
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            resolve(compressedDataUrl);
+        };
+        img.onerror = () => {
+            console.error('Failed to compress image, using original');
+            resolve(dataUrl);
+        };
+        img.src = dataUrl;
+    });
+}
+// REPLACE the existing sendMessageToDB function with this one
+async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
-    console.log('Image URL present:', !!imageUrl);
+    console.log('Image type:', imageFileOrUrl instanceof File ? 'File object' : typeof imageFileOrUrl);
     
     try {
         const finalReplyToId = replyToId || window.__tempReplyTo || appState.replyingTo;
@@ -2319,13 +2418,23 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
         appState.replyingTo = null;
         window.__tempReplyTo = null;
         
-        let finalImageUrl = imageUrl;
+        let finalImageUrl = null;
         
-        // Compress PNG and GIF images to prevent database size issues
-        if (imageUrl && (imageUrl.startsWith('data:image/png') || imageUrl.startsWith('data:image/gif'))) {
-            console.log('Compressing PNG/GIF image...');
-            finalImageUrl = await compressImage(imageUrl);
-            console.log('Compressed image length:', finalImageUrl.length);
+        // Handle image - could be File object, base64 string, URL, or null
+        if (imageFileOrUrl) {
+            if (imageFileOrUrl instanceof File) {
+                // It's a file object - upload to storage
+                console.log('📸 Uploading image file to storage...');
+                finalImageUrl = await uploadImageToStorage(imageFileOrUrl);
+            } else if (typeof imageFileOrUrl === 'string' && imageFileOrUrl.startsWith('data:image')) {
+                // It's a base64 string - compress and use
+                console.log('📸 Compressing base64 image...');
+                finalImageUrl = await compressImage(imageFileOrUrl);
+            } else if (typeof imageFileOrUrl === 'string' && imageFileOrUrl.startsWith('http')) {
+                // It's already a URL
+                console.log('📸 Using existing URL...');
+                finalImageUrl = imageFileOrUrl;
+            }
         }
         
         const messageData = {
@@ -2339,7 +2448,7 @@ async function sendMessageToDB(text, imageUrl, replyToId = null) {
         
         if (finalImageUrl && finalImageUrl.trim() !== '') {
             messageData.image_url = finalImageUrl;
-            console.log('📸 Adding image to message');
+            console.log('📸 Added image URL to message');
         }
         
         const { data, error } = await supabaseClient
@@ -2498,7 +2607,7 @@ window.addEventListener('resize', function() {
 // LOAD CHAT HISTORY
 // ============================================
 
-async function loadChatHistory(sessionId = null) {
+async function loadChatHistory(sessionId = null, limit = 50) {
     const targetSessionId = sessionId || appState.currentSessionId;
     if (!targetSessionId) {
         console.log('No target session ID for loading chat history');
@@ -2508,12 +2617,22 @@ async function loadChatHistory(sessionId = null) {
     console.log('Loading chat history for session:', targetSessionId);
     
     try {
+        // First, check if we already have messages in memory
+        if (!sessionId && appState.messages.length > 0) {
+            console.log('Using cached messages');
+            return;
+        }
+        
+        // Build the query with pagination
         let query = supabaseClient
             .from('messages')
             .select('*')
             .eq('session_id', targetSessionId)
-            .eq('is_deleted', false);
+            .eq('is_deleted', false)
+            .order('created_at', { ascending: false })
+            .limit(limit); // Only load last 50 messages initially
         
+        // For guests, filter out cleared messages
         if (!appState.isHost && !sessionId) {
             const { data: clearedMessages } = await supabaseClient
                 .from('cleared_messages')
@@ -2527,19 +2646,33 @@ async function loadChatHistory(sessionId = null) {
             }
         }
         
-        const { data: messages, error } = await query.order('created_at', { ascending: true });
+        const { data: messages, error } = await query;
         
         if (error) {
             console.error('Error loading messages:', error);
-            throw error;
+            // Retry with smaller limit if timeout occurs
+            if (error.message.includes('timeout')) {
+                console.log('Retrying with smaller limit...');
+                const { data: retryMessages, error: retryError } = await query.limit(30);
+                if (!retryError) {
+                    messages = retryMessages;
+                } else {
+                    throw retryError;
+                }
+            } else {
+                throw error;
+            }
         }
         
-        console.log(`Loaded ${messages?.length || 0} messages from database`);
+        // Reverse to get chronological order for display
+        const orderedMessages = (messages || []).reverse();
         
+        console.log(`Loaded ${orderedMessages.length} messages from database`);
+        
+        // Clear existing messages and display new ones
         if (chatMessages) {
             chatMessages.innerHTML = '';
         }
-        appState.messages = [];
         
         if (sessionId) {
             const { data: session } = await supabaseClient
@@ -2550,7 +2683,6 @@ async function loadChatHistory(sessionId = null) {
             
             if (session) {
                 const roomNumber = getStableRoomNumber(sessionId);
-                
                 const historyHeader = document.createElement('div');
                 historyHeader.className = 'message received historical';
                 historyHeader.innerHTML = `
@@ -2559,6 +2691,7 @@ async function loadChatHistory(sessionId = null) {
                         <div class="message-text">
                             <i class="fas fa-door-open"></i> Chat History - Room ${roomNumber}
                             <br><small>Host: ${escapeHtml(session.host_name)} | Date: ${new Date(session.created_at).toLocaleDateString()}</small>
+                            ${orderedMessages.length === limit ? '<br><small>Showing last ' + limit + ' messages. <button onclick="loadMoreMessages()">Load more...</button></small>' : ''}
                         </div>
                     </div>
                 `;
@@ -2566,7 +2699,7 @@ async function loadChatHistory(sessionId = null) {
             }
         }
         
-        if (!messages || messages.length === 0) {
+        if (orderedMessages.length === 0) {
             const emptyMessage = document.createElement('div');
             emptyMessage.className = 'message received';
             emptyMessage.innerHTML = `
@@ -2579,12 +2712,23 @@ async function loadChatHistory(sessionId = null) {
             return;
         }
         
-        const reactionPromises = messages.map(msg => 
-            window.ChatModule?.getMessageReactions(msg.id) || []
-        );
-        const allReactions = await Promise.all(reactionPromises);
+        // Load reactions in batches to avoid too many requests
+        const messageIds = orderedMessages.map(msg => msg.id);
+        const { data: allReactions } = await supabaseClient
+            .from('message_reactions')
+            .select('*')
+            .in('message_id', messageIds);
         
-        messages.forEach((msg, index) => {
+        const reactionsMap = new Map();
+        (allReactions || []).forEach(reaction => {
+            if (!reactionsMap.has(reaction.message_id)) {
+                reactionsMap.set(reaction.message_id, []);
+            }
+            reactionsMap.get(reaction.message_id).push(reaction);
+        });
+        
+        // Display messages
+        orderedMessages.forEach((msg) => {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
             
             if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
@@ -2596,11 +2740,14 @@ async function loadChatHistory(sessionId = null) {
                     time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                     type: messageType,
                     is_historical: !!sessionId,
-                    reactions: allReactions[index] || [],
+                    reactions: reactionsMap.get(msg.id) || [],
                     reply_to: msg.reply_to
                 });
             }
         });
+        
+        // Store loaded messages
+        appState.messages = orderedMessages;
         
         if (chatMessages && !sessionId) {
             forceScrollToBottom('auto', 100);
@@ -2625,6 +2772,60 @@ async function loadChatHistory(sessionId = null) {
         }
     }
 }
+
+// Add function to load more messages
+window.loadMoreMessages = async function() {
+    if (!appState.currentSessionId) return;
+    
+    const currentCount = appState.messages.length;
+    const limit = 50;
+    
+    try {
+        let query = supabaseClient
+            .from('messages')
+            .select('*')
+            .eq('session_id', appState.currentSessionId)
+            .eq('is_deleted', false)
+            .order('created_at', { ascending: false })
+            .range(currentCount, currentCount + limit - 1);
+        
+        const { data: olderMessages, error } = await query;
+        
+        if (error) throw error;
+        
+        if (olderMessages && olderMessages.length > 0) {
+            const orderedOlder = olderMessages.reverse();
+            
+            // Prepend older messages to the top
+            const firstMessage = document.querySelector('.message:not(.historical)');
+            orderedOlder.forEach(msg => {
+                const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${messageType}`;
+                messageDiv.id = `msg-${msg.id}`;
+                messageDiv.innerHTML = `
+                    <div class="message-sender">${escapeHtml(msg.sender_name)}</div>
+                    <div class="message-content">
+                        <div class="message-text">${escapeHtml(msg.message)}</div>
+                        <div class="message-footer">
+                            <div class="message-time">${new Date(msg.created_at).toLocaleTimeString()}</div>
+                        </div>
+                    </div>
+                `;
+                
+                if (firstMessage) {
+                    chatMessages.insertBefore(messageDiv, firstMessage);
+                } else {
+                    chatMessages.appendChild(messageDiv);
+                }
+            });
+            
+            appState.messages = [...orderedOlder, ...appState.messages];
+        }
+    } catch (error) {
+        console.error("Error loading more messages:", error);
+    }
+};
 
 // ============================================
 // UI FUNCTIONS
@@ -2843,6 +3044,7 @@ async function getRealIP() {
     }
 }
 
+// REPLACE the existing handleImageUpload function
 async function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -2859,51 +3061,48 @@ async function handleImageUpload(e) {
         return;
     }
     
+    // Disable send button during upload
     if (sendMessageBtn) {
         sendMessageBtn.disabled = true;
-        sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+        if (window.innerWidth <= 768) {
+            sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        } else {
+            sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+        }
     }
     
-    const reader = new FileReader();
-    
-    reader.onload = async function(e) {
-        try {
-            const result = await sendMessageToDB('', e.target.result, appState.replyingTo);
+    try {
+        // Pass the File object directly - the upload function will handle it
+        const result = await sendMessageToDB('', file, appState.replyingTo);
+        
+        if (result && result.success) {
+            console.log('✅ Image sent successfully');
+            imageUpload.value = '';
             
-            if (result && result.success) {
-                console.log('✅ Image sent successfully');
-                imageUpload.value = '';
-                
-                if (sendMessageBtn) {
-                    sendMessageBtn.disabled = false;
-                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+            // Clear reply if any
+            if (appState.replyingTo) {
+                appState.replyingTo = null;
+                if (window.ChatModule && window.ChatModule.closeMessageActions) {
+                    window.ChatModule.closeMessageActions();
                 }
-            } else {
-                throw new Error("Failed to send image");
             }
-        } catch (error) {
-            console.error("❌ Error sending image:", error);
-            alert("Failed to send image: " + error.message);
-            
-            if (sendMessageBtn) {
-                sendMessageBtn.disabled = false;
+        } else {
+            throw new Error("Failed to send image");
+        }
+    } catch (error) {
+        console.error("❌ Error sending image:", error);
+        alert("Failed to send image: " + error.message);
+    } finally {
+        // Re-enable send button
+        if (sendMessageBtn) {
+            sendMessageBtn.disabled = false;
+            if (window.innerWidth <= 768) {
+                sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+            } else {
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
         }
-    };
-    
-    reader.onerror = function(e) {
-        console.error('❌ Error reading image:', e);
-        alert("Error reading image file.");
-        imageUpload.value = '';
-        
-        if (sendMessageBtn) {
-            sendMessageBtn.disabled = false;
-            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
-        }
-    };
-    
-    reader.readAsDataURL(file);
+    }
 }
 
 function toggleEmojiPicker() {
