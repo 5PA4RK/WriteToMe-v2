@@ -101,12 +101,7 @@ const ChatModule = (function() {
 if (message.image && message.image.trim() !== '') {
     console.log('Rendering image in message:', message.id);
     console.log('Image type:', message.image.substring(0, 50));
-    
-    if (!message.text || !message.text.trim()) {
-        messageContent += `<div class="message-text" style="color: var(--text-muted); font-style: italic; margin-bottom: 8px;">
-            <i class="fas fa-image"></i> Image
-        </div>`;
-    }
+
     
     // Properly escape the image URL for HTML
     const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
