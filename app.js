@@ -1971,6 +1971,30 @@ function setupRealtimeSubscriptions() {
                 if (payload.new && payload.new.session_id === appState.currentSessionId) {
                     // Skip if it's the current user's message (already displayed)
                     if (payload.new.sender_id === appState.userId) {
+                        console.log('Skipping own message (already displayed optimistically)');
+                        
+                        // Find and replace any temporary optimistic message with this real one
+                        const tempMessages = document.querySelectorAll('.message.optimistic');
+                        tempMessages.forEach(tempMsg => {
+                            const tempId = tempMsg.id;
+                            if (tempId && tempId.startsWith('temp_')) {
+                                // Replace with real message
+                                const realMsgElement = createMessageElement({
+                                    id: payload.new.id,
+                                    sender: payload.new.sender_name,
+                                    text: payload.new.message || '',
+                                    image: payload.new.image_url,
+                                    time: new Date(payload.new.created_at).toLocaleTimeString(),
+                                    type: 'sent',
+                                    reactions: [],
+                                    reply_to: payload.new.reply_to
+                                });
+                                tempMsg.replaceWith(realMsgElement);
+                            }
+                        });
+                        return;
+                    }
+                    if (payload.new.sender_id === appState.userId) {
                         console.log('Skipping own message (already displayed)');
                         return;
                     }
@@ -2174,8 +2198,7 @@ function checkAndReconnectSubscriptions() {
 // ============================================
 // ENHANCED CHAT FUNCTIONS
 // ============================================
-
-
+// REPLACE the existing sendMessage function in app.js with this
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
     
@@ -2221,58 +2244,84 @@ async function sendMessage() {
     messageInput.value = '';
     messageInput.style.height = 'auto';
     
+    // Generate a temporary ID for optimistic display
+    const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    
+    // Create optimistic message object
+    const optimisticMessage = {
+        id: tempId,
+        sender: appState.userName,
+        text: originalMessageText,
+        image: imageFile ? URL.createObjectURL(imageFile) : null,
+        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        type: 'sent',
+        is_optimistic: true,
+        reactions: [],
+        reply_to: replyToId,
+        is_uploading: !!imageFile
+    };
+    
+    // Display optimistic message immediately
+    displayMessage(optimisticMessage);
+    forceScrollToBottom('smooth', 50);
+    
     // Clear image upload if present
     if (imageFile) {
         imageUpload.value = '';
     }
     
     try {
-        let result;
+        let finalImageUrl = null;
         
+        // Upload image if present
         if (imageFile) {
-            result = await sendMessageToDB(originalMessageText, imageFile, replyToId);
-        } else {
-            result = await sendMessageToDB(originalMessageText, null, replyToId);
+            console.log('📸 Uploading image...');
+            finalImageUrl = await uploadImageToStorage(imageFile);
+            console.log('✅ Image uploaded:', finalImageUrl);
         }
+        
+        // Send message to database
+        const result = await sendMessageToDB(originalMessageText, finalImageUrl, replyToId);
         
         if (result && result.success) {
             console.log('✅ Message sent successfully, ID:', result.data.id);
             
-            // DISPLAY THE MESSAGE OPTIMISTICALLY
-            const messageObj = {
-                id: result.data.id,
-                sender: appState.userName,
-                text: originalMessageText,
-                image: imageFile ? URL.createObjectURL(imageFile) : null,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_optimistic: true,
-                reactions: [],
-                reply_to: replyToId
-            };
-            
-            // If it's an image, we need to handle the preview
-            if (imageFile) {
-                // For images, we'll show a preview while uploading
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    messageObj.image = e.target.result;
-                    displayMessage(messageObj);
-                    forceScrollToBottom('smooth', 100);
+            // Replace optimistic message with real one
+            const optimisticElement = document.getElementById(`msg-${tempId}`);
+            if (optimisticElement) {
+                // Create new message element with real data
+                const realMessage = {
+                    id: result.data.id,
+                    sender: appState.userName,
+                    text: originalMessageText,
+                    image: finalImageUrl,
+                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    type: 'sent',
+                    is_optimistic: false,
+                    reactions: [],
+                    reply_to: replyToId
                 };
-                reader.readAsDataURL(imageFile);
-            } else {
-                displayMessage(messageObj);
-                forceScrollToBottom('smooth', 100);
+                
+                // Replace the optimistic message
+                const newElement = createMessageElement(realMessage);
+                optimisticElement.replaceWith(newElement);
+                
+                // Update appState messages
+                const existingIndex = appState.messages.findIndex(m => m.id === tempId);
+                if (existingIndex !== -1) {
+                    appState.messages[existingIndex] = realMessage;
+                } else {
+                    appState.messages.push(realMessage);
+                }
             }
         } else {
             console.error('Failed to send message');
-            showSendError(originalMessageText);
+            showSendError(originalMessageText, optimisticMessage);
         }
         
     } catch (error) {
         console.error('Error in sendMessage:', error);
-        showSendError(originalMessageText);
+        showSendError(originalMessageText, optimisticMessage);
     } finally {
         // Re-enable send button
         isSendingMessage = false;
@@ -2286,6 +2335,67 @@ async function sendMessage() {
             }
         }
     }
+}
+
+// Helper function to create message element
+function createMessageElement(message) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${message.type}`;
+    if (message.is_optimistic) {
+        messageDiv.classList.add('optimistic');
+    }
+    messageDiv.id = `msg-${message.id}`;
+    
+    let messageContent = '';
+    
+    // Add reply reference if this is a reply
+    if (message.reply_to && window.ChatModule) {
+        messageContent += window.ChatModule.getReplyQuoteHtml(message.reply_to, message);
+    }
+    
+    // Process message text
+    if (message.text && message.text.trim()) {
+        const escapedText = escapeHtml(message.text);
+        const textWithBreaks = escapedText.replace(/\n/g, '<br>');
+        messageContent += `<div class="message-text">${textWithBreaks}</div>`;
+    }
+    
+    // Add image if present
+    if (message.image && message.image.trim() !== '') {
+        console.log('Rendering image in message:', message.id);
+        const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        
+        messageContent += `<img src="${safeImageUrl}" 
+            class="message-image" 
+            onclick="window.showFullImage('${safeImageUrl}')" 
+            loading="lazy"
+            style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;"
+            onerror="this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load</div>');">`;
+    }
+    
+    // Add reactions section
+    const reactionsHtml = `<div class="message-reactions"></div>`;
+    
+    // Add action button (only for non-optimistic messages)
+    const actionButton = message.is_optimistic ? '' : `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
+    
+    // Actions menu (only for non-optimistic messages)
+    const actionsMenu = message.is_optimistic ? '' : getActionsMenuHtml(message);
+    
+    messageDiv.innerHTML = `
+        <div class="message-sender">${escapeHtml(message.sender)}</div>
+        <div class="message-content">
+            ${messageContent}
+            ${reactionsHtml}
+            <div class="message-footer">
+                <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
+                ${actionButton}
+            </div>
+        </div>
+        ${actionsMenu}
+    `;
+    
+    return messageDiv;
 }
 
 // Add this helper function right after sendMessage
