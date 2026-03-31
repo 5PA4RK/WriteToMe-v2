@@ -29,6 +29,37 @@ function getMessageElement(messageId) {
     return document.getElementById(`msg-${messageId}`);
 }
 
+// Add this function to ensure images display properly
+function ensureImageLoaded(imgElement, src) {
+    if (!imgElement) return;
+    
+    // Set the source and force a reload if needed
+    imgElement.src = src;
+    
+    // For data URLs and blob URLs, they should load immediately
+    if (src.startsWith('data:') || src.startsWith('blob:')) {
+        imgElement.onload = () => {
+            console.log('Image loaded successfully from data/blob URL');
+        };
+        imgElement.onerror = () => {
+            console.error('Failed to load image from data/blob URL');
+        };
+    } else {
+        // For external URLs, add cache-busting if needed
+        imgElement.onload = () => {
+            console.log('Image loaded successfully from URL');
+        };
+        imgElement.onerror = () => {
+            console.error('Failed to load image from URL:', src);
+            imgElement.style.display = 'none';
+            imgElement.insertAdjacentHTML('afterend', 
+                `<div class='image-error'><i class='fas fa-image-slash'></i> Image failed to load<br>
+                <small><a href='${src.replace(/'/g, "\\'")}' target='_blank'>Open in new tab</a></small></div>`
+            );
+        };
+    }
+}
+
     // Display a message in the chat
 // In chat.js, replace the displayMessage function with this updated version
 
@@ -103,21 +134,24 @@ function displayMessage(message) {
         }
     }
     
-    // Add image if present - FIXED: Better handling for images
-    if (message.image && message.image.trim() !== '') {
-        console.log('Rendering image in message:', message.id, 'Image URL:', message.image.substring(0, 100));
-        
-        // Properly escape the image URL for HTML
-        const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        
-        // Add image with better loading handling
-        messageContent += `<img src="${safeImageUrl}" 
-            class="message-image" 
-            onclick="window.showFullImage('${safeImageUrl}')" 
-            loading="lazy"
-            style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;"
-            onerror="this.onerror=null; console.error('Image failed to load:', this.src); this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load<br><small><a href=\\'' + this.src + '\\' target=\\'_blank\\'>Open in new tab</a></small></div>');">`;
-    }
+
+// Add image if present - with better loading handling
+if (message.image && message.image.trim() !== '') {
+    console.log('Rendering image in message:', message.id, 'Image URL:', message.image.substring(0, 100));
+    
+    // Properly escape the image URL for HTML
+    const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    
+    // Add image with a unique ID for later reference
+    const imageId = `img-${message.id}-${Date.now()}`;
+    
+    messageContent += `<img id="${imageId}" 
+        src="${safeImageUrl}" 
+        class="message-image" 
+        onclick="window.showFullImage('${safeImageUrl}')" 
+        loading="lazy"
+        style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;">`;
+}
     
     // Add reactions section
     const reactionsHtml = `<div class="message-reactions"></div>`;
@@ -143,6 +177,22 @@ function displayMessage(message) {
     
     elements.chatMessages.appendChild(messageDiv);
     
+// Ensure images load properly
+if (message.image && message.image.trim() !== '') {
+    const imgElement = messageDiv.querySelector('.message-image');
+    if (imgElement) {
+        // If the image is a blob URL, it should already be loaded from the optimistic preview
+        // For regular URLs, we'll let the browser handle it
+        if (imgElement.complete && imgElement.naturalWidth === 0) {
+            // Image failed to load, try to reload
+            console.log('Image failed to load, attempting reload:', message.image);
+            imgElement.onerror = null;
+            imgElement.src = message.image;
+        }
+    }
+}
+
+
     // Render existing reactions
     const reactionsContainer = messageDiv.querySelector('.message-reactions');
     if (message.reactions && message.reactions.length > 0) {
