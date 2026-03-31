@@ -2177,7 +2177,6 @@ function checkAndReconnectSubscriptions() {
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
     
-    // Prevent double sending
     if (isSendingMessage) {
         console.log('Message already sending, skipping...');
         return;
@@ -2193,10 +2192,8 @@ async function sendMessage() {
     
     if (!messageText && !imageFile) return;
     
-    // Set sending flag immediately
     isSendingMessage = true;
     
-    // Disable send button immediately
     if (sendMessageBtn) {
         sendMessageBtn.disabled = true;
         if (window.innerWidth <= 768) {
@@ -2215,22 +2212,17 @@ async function sendMessage() {
     const originalMessageText = messageText;
     const originalImageFile = imageFile;
     
-    // Clear input immediately for better UX
     messageInput.value = '';
     messageInput.style.height = 'auto';
     
-    // Clear image upload if present
     if (imageFile) {
         imageUpload.value = '';
     }
     
-    // ========== FIX: Create optimistic message with a temporary ID ==========
     const optimisticId = 'opt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
     
-    let optimisticImagePreview = null;
     let previewUrl = null;
     
-    // Create optimistic message object
     const optimisticMessage = {
         id: optimisticId,
         sender: appState.userName,
@@ -2242,22 +2234,18 @@ async function sendMessage() {
         reply_to: replyToId
     };
     
-    // Handle image preview - create object URL for immediate display
     if (originalImageFile) {
         previewUrl = URL.createObjectURL(originalImageFile);
         optimisticMessage.image = previewUrl;
         optimisticMessage._previewUrl = previewUrl;
-        
-        console.log('📸 Created optimistic image preview:', previewUrl.substring(0, 50) + '...');
+        console.log('📸 Created optimistic image preview:', previewUrl);
     }
     
-    // Display optimistic message immediately
     if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
         window.ChatModule.displayMessage(optimisticMessage);
         console.log('✅ Optimistic message displayed with ID:', optimisticId);
     }
     
-    // Force scroll to bottom
     forceScrollToBottom('smooth', 50);
     
     try {
@@ -2270,17 +2258,16 @@ async function sendMessage() {
         }
         
         if (result && result.success) {
-            console.log('✅ Message saved to DB successfully, ID:', result.data.id, 'Image URL:', result.data.image_url);
+            console.log('✅ Message saved to DB successfully');
+            console.log('📸 DB returned image_url:', result.data.image_url);
+            console.log('📸 Full result.data:', JSON.stringify(result.data, null, 2));
             
-            // ========== FIX: Remove optimistic message and add real one ==========
             const optimisticElement = document.getElementById(`msg-${optimisticId}`);
             
-            // Clean up object URL
             if (previewUrl) {
                 URL.revokeObjectURL(previewUrl);
             }
             
-            // Create the real message object with the correct image URL
             const finalImageUrl = result.data.image_url || null;
             
             const realMessageObj = {
@@ -2296,20 +2283,15 @@ async function sendMessage() {
             };
             
             if (optimisticElement) {
-                // Remove the optimistic element first
                 optimisticElement.remove();
                 console.log('Removed optimistic message');
             }
             
-            // Display the real message
             if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
                 window.ChatModule.displayMessage(realMessageObj);
-                console.log('✅ Real message displayed with ID:', result.data.id);
-            } else {
-                displayMessage(realMessageObj);
+                console.log('✅ Real message displayed with ID:', result.data.id, 'Image URL:', finalImageUrl);
             }
             
-            // Store in messages array
             if (appState.messages) {
                 appState.messages.push({
                     id: result.data.id,
@@ -2320,7 +2302,6 @@ async function sendMessage() {
                     type: 'sent',
                     reactions: []
                 });
-                // Keep messages array manageable
                 if (appState.messages.length > 200) {
                     appState.messages = appState.messages.slice(-200);
                 }
@@ -2329,7 +2310,6 @@ async function sendMessage() {
         } else {
             console.error('Failed to send message');
             
-            // Remove the optimistic message on failure
             const optimisticElement = document.getElementById(`msg-${optimisticId}`);
             if (optimisticElement) {
                 optimisticElement.remove();
@@ -2344,7 +2324,6 @@ async function sendMessage() {
     } catch (error) {
         console.error('Error in sendMessage:', error);
         
-        // Remove the optimistic message on error
         const optimisticElement = document.getElementById(`msg-${optimisticId}`);
         if (optimisticElement) {
             optimisticElement.remove();
@@ -2355,7 +2334,6 @@ async function sendMessage() {
         
         showSendError(originalMessageText);
     } finally {
-        // Re-enable send button
         isSendingMessage = false;
         if (sendMessageBtn) {
             sendMessageBtn.disabled = false;
@@ -2367,7 +2345,6 @@ async function sendMessage() {
             }
         }
         
-        // Focus the input
         setTimeout(() => {
             messageInput.focus();
         }, 100);
@@ -2534,6 +2511,8 @@ async function compressImage(dataUrl) {
 async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
     console.log('Image type:', imageFileOrUrl instanceof File ? 'File object' : typeof imageFileOrUrl);
+    console.log('📸 FINAL - Returning image URL:', finalImageUrl);
+console.log('📸 FINAL - Data object:', { success: true, data });
     
     try {
         const finalReplyToId = replyToId || window.__tempReplyTo || appState.replyingTo;
