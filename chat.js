@@ -1370,6 +1370,12 @@ window.loadTikTokVideo = function(container, videoId, url) {
         </div>
     `;
 };
+// Add this after the other global exposures
+window.handleTyping = function() {
+    if (ChatModule && typeof ChatModule.handleTyping === 'function') {
+        ChatModule.handleTyping();
+    }
+};
 
 // YouTube click handler
 document.addEventListener('click', function(e) {
