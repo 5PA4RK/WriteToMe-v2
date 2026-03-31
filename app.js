@@ -1954,20 +1954,27 @@ function setupRealtimeSubscriptions() {
         appState.reactionsSubscription = null;
     }
     
-    // Messages subscription
-    appState.realtimeSubscription = supabaseClient
+    // Create a new channel for messages
+    const messagesChannel = supabaseClient
         .channel('messages_' + appState.currentSessionId)
         .on(
             'postgres_changes',
             {
                 event: 'INSERT',
                 schema: 'public',
-                table: 'messages'
+                table: 'messages',
+                filter: `session_id=eq.${appState.currentSessionId}`
             },
             async (payload) => {
-                console.log('📦 Realtime message received:', payload.new?.id);
+                console.log('📦 Realtime message INSERT received:', payload.new?.id, 'from:', payload.new?.sender_name);
                 
                 if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                    // Skip if it's the current user's message (already displayed)
+                    if (payload.new.sender_id === appState.userId) {
+                        console.log('Skipping own message (already displayed)');
+                        return;
+                    }
+                    
                     // Check if message is cleared for guests
                     let shouldDisplay = true;
                     if (!appState.isHost && payload.new.sender_id !== appState.userId) {
@@ -1982,8 +1989,6 @@ function setupRealtimeSubscriptions() {
                     }
                     
                     if (shouldDisplay) {
-                        const messageType = payload.new.sender_id === appState.userId ? 'sent' : 'received';
-                        
                         const existingMsg = document.getElementById(`msg-${payload.new.id}`);
                         if (!existingMsg) {
                             const reactions = await getMessageReactions(payload.new.id);
@@ -1999,21 +2004,19 @@ function setupRealtimeSubscriptions() {
                                 text: payload.new.message || '',
                                 image: imageUrl,
                                 time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                                type: messageType,
+                                type: 'received',
                                 is_historical: false,
                                 reactions: reactions || [],
                                 reply_to: payload.new.reply_to
                             };
                             
+                            console.log('Displaying new message from:', messageObj.sender);
                             displayMessage(messageObj);
                             forceScrollToBottom('smooth', 100);
-                        }
-                    }
-                    
-                    // Play sound for received messages
-                    if (payload.new.sender_id !== appState.userId && appState.soundEnabled && !payload.new.is_notification) {
-                        if (window.playNotificationSound) {
-                            window.playNotificationSound();
+                            
+                            if (appState.soundEnabled && window.playNotificationSound) {
+                                window.playNotificationSound();
+                            }
                         }
                     }
                 }
@@ -2028,7 +2031,7 @@ function setupRealtimeSubscriptions() {
                 filter: `session_id=eq.${appState.currentSessionId}`
             },
             (payload) => {
-                console.log('📝 Message updated:', payload.new?.id);
+                console.log('📝 Message UPDATE received:', payload.new?.id);
                 
                 const messageElement = document.getElementById(`msg-${payload.new.id}`);
                 if (messageElement) {
@@ -2044,19 +2047,12 @@ function setupRealtimeSubscriptions() {
                         `;
                         const actionsMenu = document.getElementById(`actions-${payload.new.id}`);
                         if (actionsMenu) actionsMenu.remove();
-                    } else {
+                    } else if (payload.new.message) {
                         const textElement = messageElement.querySelector('.message-text');
                         if (textElement && !textElement.innerHTML.includes('Message deleted')) {
                             textElement.innerHTML = `${escapeHtml(payload.new.message)} <small class="edited-indicator">(edited)</small>`;
                         }
                     }
-                    
-                    getMessageReactions(payload.new.id).then(reactions => {
-                        const reactionsContainer = messageElement.querySelector('.message-reactions');
-                        if (reactionsContainer && window.ChatModule) {
-                            window.ChatModule.renderReactions(reactionsContainer, reactions);
-                        }
-                    });
                 }
             }
         )
@@ -2065,53 +2061,62 @@ function setupRealtimeSubscriptions() {
             if (err) {
                 console.error('❌ Messages subscription error:', err);
             }
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ Successfully subscribed to messages!');
+                appState.realtimeSubscription = messagesChannel;
+            }
         });
     
-// Typing subscription - now listening to chat_sessions
-appState.typingSubscription = supabaseClient
-    .channel('typing_' + appState.currentSessionId)
-    .on(
-        'postgres_changes',
-        {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'chat_sessions',  // Changed from 'sessions'
-            filter: `session_id=eq.${appState.currentSessionId}`
-        },
-        (payload) => {
-            console.log('📨 Typing update received:', payload.new?.typing_user);
-            
-            if (payload.new && payload.new.typing_user) {
-                if (payload.new.typing_user !== appState.userName) {
-                    typingUser.textContent = payload.new.typing_user;
-                    typingIndicator.classList.add('show');
-                    
-                    if (window.typingHideTimeout) {
-                        clearTimeout(window.typingHideTimeout);
-                    }
-                    
-                    window.typingHideTimeout = setTimeout(() => {
-                        if (typingUser.textContent === payload.new.typing_user) {
-                            typingIndicator.classList.remove('show');
-                        }
-                    }, 3000);
-                }
-            } else {
-                typingIndicator.classList.remove('show');
-            }
-        }
-    )
-    .subscribe((status) => {
-        console.log('📡 Typing subscription status:', status);
-    });
+    // Set the subscription
+    appState.realtimeSubscription = messagesChannel;
     
-    // REACTIONS SUBSCRIPTION - CRITICAL FOR REAL-TIME EMOJIS
-    appState.reactionsSubscription = supabaseClient
+    // Typing subscription
+    const typingChannel = supabaseClient
+        .channel('typing_' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'chat_sessions',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            (payload) => {
+                console.log('📨 Typing update received:', payload.new?.typing_user);
+                
+                if (payload.new && payload.new.typing_user) {
+                    if (payload.new.typing_user !== appState.userName) {
+                        typingUser.textContent = payload.new.typing_user;
+                        typingIndicator.classList.add('show');
+                        
+                        if (window.typingHideTimeout) {
+                            clearTimeout(window.typingHideTimeout);
+                        }
+                        
+                        window.typingHideTimeout = setTimeout(() => {
+                            if (typingUser.textContent === payload.new.typing_user) {
+                                typingIndicator.classList.remove('show');
+                            }
+                        }, 3000);
+                    }
+                } else {
+                    typingIndicator.classList.remove('show');
+                }
+            }
+        )
+        .subscribe((status) => {
+            console.log('📡 Typing subscription status:', status);
+        });
+    
+    appState.typingSubscription = typingChannel;
+    
+    // Reactions subscription
+    const reactionsChannel = supabaseClient
         .channel('reactions_' + appState.currentSessionId)
         .on(
             'postgres_changes',
             {
-                event: '*',  // Listen to INSERT, UPDATE, DELETE
+                event: '*',
                 schema: 'public',
                 table: 'message_reactions'
             },
@@ -2119,29 +2124,17 @@ appState.typingSubscription = supabaseClient
                 console.log('🎯 REACTION CHANGE DETECTED:', payload.event, payload.new?.message_id || payload.old?.message_id);
                 
                 const messageId = payload.new?.message_id || payload.old?.message_id;
-                if (!messageId) {
-                    console.log('No message ID in reaction payload');
-                    return;
-                }
+                if (!messageId) return;
                 
-                // Find the message element
                 const messageElement = document.getElementById(`msg-${messageId}`);
-                if (!messageElement) {
-                    console.log('Message element not found for reactions update:', messageId);
-                    return;
-                }
+                if (!messageElement) return;
                 
-                // Fetch updated reactions for this message
                 const updatedReactions = await getMessageReactions(messageId);
-                console.log(`Updated reactions for message ${messageId}:`, updatedReactions.length);
-                
-                // Update the reactions display
                 const reactionsContainer = messageElement.querySelector('.message-reactions');
                 if (reactionsContainer && window.ChatModule) {
                     window.ChatModule.renderReactions(reactionsContainer, updatedReactions);
                 }
                 
-                // Also update in appState.messages if present
                 if (appState.messages) {
                     const messageIndex = appState.messages.findIndex(m => m.id === messageId);
                     if (messageIndex !== -1) {
@@ -2158,6 +2151,8 @@ appState.typingSubscription = supabaseClient
                 console.log('✅ Successfully subscribed to message_reactions!');
             }
         });
+    
+    appState.reactionsSubscription = reactionsChannel;
 }
 
 function checkAndReconnectSubscriptions() {
