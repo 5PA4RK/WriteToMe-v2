@@ -24,161 +24,175 @@ const ChatModule = (function() {
         setupEventListeners();
         console.log("ChatModule initialized successfully");
     }
+    // Add this function inside ChatModule (before the return statement)
+function getMessageElement(messageId) {
+    return document.getElementById(`msg-${messageId}`);
+}
 
     // Display a message in the chat
-    function displayMessage(message) {
-        if (!elements.chatMessages) {
-            console.error('Chat messages container not found');
+// In chat.js, replace the displayMessage function with this updated version
+
+function displayMessage(message) {
+    if (!elements.chatMessages) {
+        console.error('Chat messages container not found');
+        return;
+    }
+    
+    // Don't display if viewing history and this is not a historical message
+    if (appState && appState.isViewingHistory && !message.is_historical) {
+        return;
+    }
+    
+    // Check if message already exists (except optimistic messages)
+    if (message.id && !message.is_optimistic) {
+        const existingMsg = document.getElementById(`msg-${message.id}`);
+        if (existingMsg) {
+            console.log('Message already exists, skipping display:', message.id);
             return;
         }
+    }
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${message.type}`;
+    if (message.is_historical) {
+        messageDiv.classList.add('historical');
+    }
+    if (message.is_optimistic) {
+        messageDiv.classList.add('optimistic');
+        messageDiv.style.opacity = '0.7';
+        messageDiv.style.transition = 'opacity 0.3s ease';
         
-        // Don't display if viewing history and this is not a historical message
-        if (appState && appState.isViewingHistory && !message.is_historical) {
-            return;
-        }
-        
-        // Check if message already exists (except optimistic messages)
-        if (message.id && !message.is_optimistic) {
-            const existingMsg = document.getElementById(`msg-${message.id}`);
-            if (existingMsg) {
-                console.log('Message already exists, skipping display:', message.id);
-                return;
+        setTimeout(() => {
+            if (messageDiv) {
+                messageDiv.style.opacity = '1';
             }
-        }
+        }, 100);
+    }
+    messageDiv.id = `msg-${message.id}`;
+    
+    let messageContent = '';
+    
+    // Add reply reference if this is a reply
+    if (message.reply_to) {
+        messageContent += getReplyQuoteHtml(message.reply_to, message);
+    }
+    
+    // Process message text for media embeds
+    if (message.text && message.text.trim()) {
+        const escapedText = escapeHtml(message.text);
+        const mediaEmbed = createMediaEmbed(message.text);
         
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${message.type}`;
-        if (message.is_historical) {
-            messageDiv.classList.add('historical');
-        }
-        if (message.is_optimistic) {
-            messageDiv.classList.add('optimistic');
-            messageDiv.style.opacity = '0.7';
-            messageDiv.style.transition = 'opacity 0.3s ease';
+        if (mediaEmbed) {
+            const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
+            const dirAttr = hasArabic ? ' dir="auto"' : '';
             
-            // Fade in the optimistic message
-            setTimeout(() => {
-                if (messageDiv) {
-                    messageDiv.style.opacity = '1';
-                }
-            }, 100);
-        }
-        messageDiv.id = `msg-${message.id}`;
-        
-        let messageContent = '';
-        
-        // Add reply reference if this is a reply
-        if (message.reply_to) {
-            messageContent += getReplyQuoteHtml(message.reply_to, message);
-        }
-        
-        // Process message text for media embeds
-        if (message.text && message.text.trim()) {
-            const escapedText = escapeHtml(message.text);
-            const mediaEmbed = createMediaEmbed(message.text);
+            const textWithoutUrl = message.text.replace(mediaEmbed.url, '').trim();
             
-            if (mediaEmbed) {
-                const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
-                const dirAttr = hasArabic ? ' dir="auto"' : '';
-                
-                const textWithoutUrl = message.text.replace(mediaEmbed.url, '').trim();
-                
-                if (textWithoutUrl) {
-                    const textWithBreaks = escapeHtml(textWithoutUrl).replace(/\n/g, '<br>');
-                    messageContent += `<div class="message-text"${dirAttr}>${textWithBreaks}</div>`;
-                }
-                
-                messageContent += mediaEmbed.embedHtml;
-                messageContent += `<div class="media-link-reference"><i class="fas fa-link"></i> <a href="${mediaEmbed.url}" target="_blank">${mediaEmbed.url.substring(0, 50)}${mediaEmbed.url.length > 50 ? '...' : ''}</a></div>`;
-            } else {
-                const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
-                const dirAttr = hasArabic ? ' dir="auto"' : '';
-                const textWithBreaks = escapedText.replace(/\n/g, '<br>');
+            if (textWithoutUrl) {
+                const textWithBreaks = escapeHtml(textWithoutUrl).replace(/\n/g, '<br>');
                 messageContent += `<div class="message-text"${dirAttr}>${textWithBreaks}</div>`;
             }
-        }
-        
-        // Add image if present
-        if (message.image && message.image.trim() !== '') {
-            console.log('Rendering image in message:', message.id);
             
-            // Properly escape the image URL for HTML
-            const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            
-            messageContent += `<img src="${safeImageUrl}" 
-                class="message-image" 
-                onclick="window.showFullImage('${safeImageUrl}')" 
-                loading="lazy"
-                style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;"
-                onerror="this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load</div>');">`;
+            messageContent += mediaEmbed.embedHtml;
+            messageContent += `<div class="media-link-reference"><i class="fas fa-link"></i> <a href="${mediaEmbed.url}" target="_blank">${mediaEmbed.url.substring(0, 50)}${mediaEmbed.url.length > 50 ? '...' : ''}</a></div>`;
+        } else {
+            const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
+            const dirAttr = hasArabic ? ' dir="auto"' : '';
+            const textWithBreaks = escapedText.replace(/\n/g, '<br>');
+            messageContent += `<div class="message-text"${dirAttr}>${textWithBreaks}</div>`;
         }
+    }
+    
+    // Add image if present - FIXED: Better handling for images
+    if (message.image && message.image.trim() !== '') {
+        console.log('Rendering image in message:', message.id, 'Image URL:', message.image.substring(0, 100));
         
-        // Add reactions section
-        const reactionsHtml = `<div class="message-reactions"></div>`;
+        // Properly escape the image URL for HTML
+        const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
         
-        // Add action button (only for non-optimistic messages)
-        const actionButton = message.is_optimistic ? '' : `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
-        
-        // Actions menu (only for non-optimistic messages)
-        const actionsMenu = message.is_optimistic ? '' : getActionsMenuHtml(message);
-        
-        messageDiv.innerHTML = `
-            <div class="message-sender">${escapeHtml(message.sender)}</div>
-            <div class="message-content">
-                ${messageContent}
-                ${reactionsHtml}
-                <div class="message-footer">
-                    <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
-                    ${actionButton}
-                </div>
+        // Add image with better loading handling
+        messageContent += `<img src="${safeImageUrl}" 
+            class="message-image" 
+            onclick="window.showFullImage('${safeImageUrl}')" 
+            loading="lazy"
+            style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;"
+            onerror="this.onerror=null; console.error('Image failed to load:', this.src); this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load<br><small><a href=\\'' + this.src + '\\' target=\\'_blank\\'>Open in new tab</a></small></div>');">`;
+    }
+    
+    // Add reactions section
+    const reactionsHtml = `<div class="message-reactions"></div>`;
+    
+    // Add action button (only for non-optimistic messages)
+    const actionButton = message.is_optimistic ? '' : `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
+    
+    // Actions menu (only for non-optimistic messages)
+    const actionsMenu = message.is_optimistic ? '' : getActionsMenuHtml(message);
+    
+    messageDiv.innerHTML = `
+        <div class="message-sender">${escapeHtml(message.sender)}</div>
+        <div class="message-content">
+            ${messageContent}
+            ${reactionsHtml}
+            <div class="message-footer">
+                <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
+                ${actionButton}
             </div>
-            ${actionsMenu}
-        `;
-        
-        elements.chatMessages.appendChild(messageDiv);
-        
-        // Render existing reactions
-        const reactionsContainer = messageDiv.querySelector('.message-reactions');
-        if (message.reactions && message.reactions.length > 0) {
-            renderReactions(reactionsContainer, message.reactions);
-        }
-        
-        // Store in appState.messages (skip optimistic messages)
-        if (appState && appState.messages && Array.isArray(appState.messages) && !message.is_optimistic) {
-            const exists = appState.messages.some(m => m.id === message.id);
-            if (!exists) {
-                appState.messages.push(message);
-                if (appState.messages.length > 100) {
-                    appState.messages = appState.messages.slice(-100);
-                }
+        </div>
+        ${actionsMenu}
+    `;
+    
+    elements.chatMessages.appendChild(messageDiv);
+    
+    // Render existing reactions
+    const reactionsContainer = messageDiv.querySelector('.message-reactions');
+    if (message.reactions && message.reactions.length > 0) {
+        renderReactions(reactionsContainer, message.reactions);
+    }
+    
+    // Store in appState.messages (skip optimistic messages)
+    if (appState && appState.messages && Array.isArray(appState.messages) && !message.is_optimistic) {
+        const exists = appState.messages.some(m => m.id === message.id);
+        if (!exists) {
+            appState.messages.push(message);
+            if (appState.messages.length > 100) {
+                appState.messages = appState.messages.slice(-100);
             }
         }
+    }
+    
+    // Smart scroll: only auto-scroll if user is near bottom
+    const isNearBottom = elements.chatMessages.scrollHeight - elements.chatMessages.scrollTop - elements.chatMessages.clientHeight < 100;
+    
+    // Always scroll for user's own messages
+    const isOwnMessage = message.type === 'sent';
+    
+    if (isOwnMessage || (isNearBottom && !appState.isViewingHistory)) {
+        setTimeout(() => {
+            elements.chatMessages.scrollTo({
+                top: elements.chatMessages.scrollHeight,
+                behavior: 'smooth'
+            });
+        }, 50);
         
-        // Smart scroll: only auto-scroll if user is near bottom
-        const isNearBottom = elements.chatMessages.scrollHeight - elements.chatMessages.scrollTop - elements.chatMessages.clientHeight < 100;
-        
-        // Always scroll for user's own messages
-        const isOwnMessage = message.type === 'sent';
-        
-        if (isOwnMessage || (isNearBottom && !appState.isViewingHistory)) {
+        // Second attempt for images that load slowly
+        if (message.image) {
             setTimeout(() => {
                 elements.chatMessages.scrollTo({
                     top: elements.chatMessages.scrollHeight,
                     behavior: 'smooth'
                 });
-            }, 50);
+            }, 300);
             
-            // Second attempt for images that load slowly
-            if (message.image) {
-                setTimeout(() => {
-                    elements.chatMessages.scrollTo({
-                        top: elements.chatMessages.scrollHeight,
-                        behavior: 'smooth'
-                    });
-                }, 300);
-            }
+            // Third attempt for large images
+            setTimeout(() => {
+                elements.chatMessages.scrollTo({
+                    top: elements.chatMessages.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }, 800);
         }
     }
+}
 
     // Get reply quote HTML
     function getReplyQuoteHtml(replyToId, currentMessage) {
@@ -1254,7 +1268,8 @@ async function addReaction(messageId, emoji) {
         deleteMessage,
         handleTyping,
         showFullImage,
-        escapeHtml
+        escapeHtml,
+        getMessageElement  // Add this line
     };
 })();
 
