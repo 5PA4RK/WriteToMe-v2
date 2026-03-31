@@ -2230,14 +2230,42 @@ async function sendMessage() {
         let result;
         
         if (imageFile) {
-            // Send image with optional text
             result = await sendMessageToDB(originalMessageText, imageFile, replyToId);
         } else {
-            // Send text-only message
             result = await sendMessageToDB(originalMessageText, null, replyToId);
         }
         
-        if (!result || !result.success) {
+        if (result && result.success) {
+            console.log('✅ Message sent successfully, ID:', result.data.id);
+            
+            // DISPLAY THE MESSAGE OPTIMISTICALLY
+            const messageObj = {
+                id: result.data.id,
+                sender: appState.userName,
+                text: originalMessageText,
+                image: imageFile ? URL.createObjectURL(imageFile) : null,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_optimistic: true,
+                reactions: [],
+                reply_to: replyToId
+            };
+            
+            // If it's an image, we need to handle the preview
+            if (imageFile) {
+                // For images, we'll show a preview while uploading
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    messageObj.image = e.target.result;
+                    displayMessage(messageObj);
+                    forceScrollToBottom('smooth', 100);
+                };
+                reader.readAsDataURL(imageFile);
+            } else {
+                displayMessage(messageObj);
+                forceScrollToBottom('smooth', 100);
+            }
+        } else {
             console.error('Failed to send message');
             showSendError(originalMessageText);
         }
