@@ -1969,15 +1969,10 @@ function setupRealtimeSubscriptions() {
                 console.log('📦 Realtime message INSERT received:', payload.new?.id, 'from:', payload.new?.sender_name);
                 
                 if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                    // Skip if it's the current user's message AND we already displayed it optimistically
-                    // But don't skip if we're replacing a temp message
+                    // Skip if it's the current user's message (already displayed)
                     if (payload.new.sender_id === appState.userId) {
-                        // Check if we already have this message displayed
-                        const existingMsg = document.getElementById(`msg-${payload.new.id}`);
-                        if (existingMsg) {
-                            console.log('Message already displayed, skipping real-time update');
-                            return;
-                        }
+                        console.log('Skipping own message (already displayed)');
+                        return;
                     }
                     
                     // Check if message is cleared for guests
@@ -2179,7 +2174,6 @@ function checkAndReconnectSubscriptions() {
 // ============================================
 // ENHANCED CHAT FUNCTIONS
 // ============================================
-
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
     
@@ -2221,49 +2215,6 @@ async function sendMessage() {
     const originalMessageText = messageText;
     const originalImageFile = imageFile;
     
-    // For images, show a preview immediately with a temporary ID
-    let tempId = null;
-    if (imageFile) {
-        tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        
-        // Create a temporary preview
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const tempMessageObj = {
-                id: tempId,
-                sender: appState.userName,
-                text: originalMessageText,
-                image: e.target.result,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_optimistic: true,
-                is_temp: true,
-                reactions: [],
-                reply_to: replyToId
-            };
-            displayMessage(tempMessageObj);
-            forceScrollToBottom('smooth', 100);
-        };
-        reader.readAsDataURL(imageFile);
-    } else {
-        // Text-only optimistic display
-        const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        const tempMessageObj = {
-            id: tempId,
-            sender: appState.userName,
-            text: originalMessageText,
-            image: null,
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-            type: 'sent',
-            is_optimistic: true,
-            is_temp: true,
-            reactions: [],
-            reply_to: replyToId
-        };
-        displayMessage(tempMessageObj);
-        forceScrollToBottom('smooth', 100);
-    }
-    
     // Clear input immediately for better UX
     messageInput.value = '';
     messageInput.style.height = 'auto';
@@ -2273,49 +2224,202 @@ async function sendMessage() {
         imageUpload.value = '';
     }
     
+    // ========== FIX: Create optimistic message FIRST ==========
+    // Create a temporary ID for the optimistic message
+    const optimisticId = 'opt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+    
+    // Create optimistic message object
+    const optimisticMessage = {
+        id: optimisticId,
+        sender: appState.userName,
+        text: originalMessageText,
+        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        type: 'sent',
+        is_optimistic: true,
+        reactions: [],
+        reply_to: replyToId
+    };
+    
+    // Handle image preview
+    if (originalImageFile) {
+        // Create object URL for immediate preview
+        const previewUrl = URL.createObjectURL(originalImageFile);
+        optimisticMessage.image = previewUrl;
+        optimisticMessage._previewUrl = previewUrl; // Store for cleanup
+        
+        console.log('📸 Created optimistic image preview:', previewUrl.substring(0, 50) + '...');
+    }
+    
+    // Display optimistic message immediately
+    if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
+        window.ChatModule.displayMessage(optimisticMessage);
+        console.log('✅ Optimistic message displayed with ID:', optimisticId);
+    } else {
+        // Fallback display
+        displayMessage(optimisticMessage);
+    }
+    
+    // Force scroll to bottom
+    forceScrollToBottom('smooth', 50);
+    
     try {
         let result;
         
-        if (imageFile) {
-            result = await sendMessageToDB(originalMessageText, imageFile, replyToId);
+        if (originalImageFile) {
+            result = await sendMessageToDB(originalMessageText, originalImageFile, replyToId);
         } else {
             result = await sendMessageToDB(originalMessageText, null, replyToId);
         }
         
         if (result && result.success) {
-            console.log('✅ Message sent successfully, ID:', result.data.id);
+            console.log('✅ Message saved to DB successfully, ID:', result.data.id);
             
-            // Remove the temporary message and replace with the real one
-            if (tempId) {
-                const tempElement = document.getElementById(`msg-${tempId}`);
-                if (tempElement) {
-                    tempElement.remove();
+            // ========== FIX: Replace optimistic message with real one ==========
+            const optimisticElement = document.getElementById(`msg-${optimisticId}`);
+            
+            if (optimisticElement) {
+                // Clean up object URL to prevent memory leaks
+                if (optimisticMessage._previewUrl) {
+                    URL.revokeObjectURL(optimisticMessage._previewUrl);
+                }
+                
+                // Create the real message element
+                const realMessageObj = {
+                    id: result.data.id,
+                    sender: appState.userName,
+                    text: originalMessageText,
+                    image: result.data.image_url || (originalImageFile ? optimisticMessage.image : null),
+                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    type: 'sent',
+                    is_historical: false,
+                    reactions: [],
+                    reply_to: replyToId
+                };
+                
+                // Replace the optimistic message with the real one
+                const realElement = document.createElement('div');
+                realElement.className = 'message sent';
+                realElement.id = `msg-${result.data.id}`;
+                
+                // Build the real message HTML
+                let messageContent = '';
+                
+                // Add reply reference if this is a reply
+                if (replyToId && window.ChatModule && typeof window.ChatModule.getReplyQuoteHtml === 'function') {
+                    messageContent += window.ChatModule.getReplyQuoteHtml(replyToId, realMessageObj);
+                } else if (replyToId) {
+                    // Fallback simple reply display
+                    messageContent += `<div class="message-reply-ref"><i class="fas fa-reply"></i> <div class="reply-content">Replying to message</div></div>`;
+                }
+                
+                // Add message text
+                if (originalMessageText && originalMessageText.trim()) {
+                    const escapedText = escapeHtml(originalMessageText);
+                    const textWithBreaks = escapedText.replace(/\n/g, '<br>');
+                    messageContent += `<div class="message-text">${textWithBreaks}</div>`;
+                }
+                
+                // Add image if present
+                const finalImageUrl = result.data.image_url || (originalImageFile ? optimisticMessage.image : null);
+                if (finalImageUrl && finalImageUrl.trim() !== '') {
+                    const safeImageUrl = finalImageUrl.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    messageContent += `<img src="${safeImageUrl}" 
+                        class="message-image" 
+                        onclick="window.showFullImage('${safeImageUrl}')" 
+                        loading="lazy"
+                        style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;"
+                        onerror="this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load</div>');">`;
+                }
+                
+                // Add reactions section
+                messageContent += `<div class="message-reactions"></div>`;
+                
+                // Add action button
+                messageContent += `<div class="message-footer">
+                    <div class="message-time">${realMessageObj.time}</div>
+                    <button class="message-action-dots" onclick="window.toggleMessageActions('${result.data.id}', this)"><i class="fas fa-ellipsis-v"></i></button>
+                </div>`;
+                
+                // Add actions menu
+                const actionsMenuHtml = window.ChatModule && typeof window.ChatModule.getActionsMenuHtml === 'function'
+                    ? window.ChatModule.getActionsMenuHtml(realMessageObj)
+                    : '';
+                
+                realElement.innerHTML = `
+                    <div class="message-sender">${escapeHtml(appState.userName)}</div>
+                    <div class="message-content">
+                        ${messageContent}
+                    </div>
+                    ${actionsMenuHtml}
+                `;
+                
+                // Replace the optimistic element
+                optimisticElement.parentNode.replaceChild(realElement, optimisticElement);
+                console.log('✅ Replaced optimistic message with real message ID:', result.data.id);
+            } else {
+                // Optimistic element not found, just display the real message
+                console.log('Optimistic element not found, displaying real message directly');
+                if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
+                    const finalMessageObj = {
+                        id: result.data.id,
+                        sender: appState.userName,
+                        text: originalMessageText,
+                        image: result.data.image_url,
+                        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                        type: 'sent',
+                        is_historical: false,
+                        reactions: [],
+                        reply_to: replyToId
+                    };
+                    window.ChatModule.displayMessage(finalMessageObj);
                 }
             }
             
-            // Display the real message
-            const realMessageObj = {
-                id: result.data.id,
-                sender: appState.userName,
-                text: originalMessageText,
-                image: result.data.image_url,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                is_optimistic: false,
-                reactions: [],
-                reply_to: replyToId
-            };
-            displayMessage(realMessageObj);
-            forceScrollToBottom('smooth', 100);
+            // Store in messages array (non-optimistic)
+            if (appState.messages) {
+                appState.messages.push({
+                    id: result.data.id,
+                    sender: appState.userName,
+                    text: originalMessageText,
+                    image: result.data.image_url,
+                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    type: 'sent',
+                    reactions: []
+                });
+                // Keep messages array manageable
+                if (appState.messages.length > 200) {
+                    appState.messages = appState.messages.slice(-200);
+                }
+            }
+            
         } else {
             console.error('Failed to send message');
+            
+            // Remove the optimistic message on failure
+            const optimisticElement = document.getElementById(`msg-${optimisticId}`);
+            if (optimisticElement) {
+                optimisticElement.remove();
+            }
+            
             showSendError(originalMessageText);
         }
         
     } catch (error) {
         console.error('Error in sendMessage:', error);
+        
+        // Remove the optimistic message on error
+        const optimisticElement = document.getElementById(`msg-${optimisticId}`);
+        if (optimisticElement) {
+            optimisticElement.remove();
+        }
+        
         showSendError(originalMessageText);
     } finally {
+        // Clean up object URL if it wasn't cleaned up
+        if (optimisticMessage._previewUrl) {
+            URL.revokeObjectURL(optimisticMessage._previewUrl);
+        }
+        
         // Re-enable send button
         isSendingMessage = false;
         if (sendMessageBtn) {
@@ -2327,6 +2431,11 @@ async function sendMessage() {
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
         }
+        
+        // Focus the input
+        setTimeout(() => {
+            messageInput.focus();
+        }, 100);
     }
 }
 
