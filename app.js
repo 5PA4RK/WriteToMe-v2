@@ -2174,9 +2174,12 @@ function checkAndReconnectSubscriptions() {
 // ============================================
 // ENHANCED CHAT FUNCTIONS
 // ============================================
+
+
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
     
+    // Prevent double sending
     if (isSendingMessage) {
         console.log('Message already sending, skipping...');
         return;
@@ -2192,8 +2195,10 @@ async function sendMessage() {
     
     if (!messageText && !imageFile) return;
     
+    // Set sending flag immediately
     isSendingMessage = true;
     
+    // Disable send button immediately
     if (sendMessageBtn) {
         sendMessageBtn.disabled = true;
         if (window.innerWidth <= 768) {
@@ -2212,128 +2217,64 @@ async function sendMessage() {
     const originalMessageText = messageText;
     const originalImageFile = imageFile;
     
+    // Clear input immediately for better UX
     messageInput.value = '';
     messageInput.style.height = 'auto';
     
+    // Clear image upload if present
     if (imageFile) {
         imageUpload.value = '';
     }
     
-    const optimisticId = 'opt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
-    
-    let previewUrl = null;
-    
-    const optimisticMessage = {
-        id: optimisticId,
-        sender: appState.userName,
-        text: originalMessageText,
-        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-        type: 'sent',
-        is_optimistic: true,
-        reactions: [],
-        reply_to: replyToId
-    };
-    
-    if (originalImageFile) {
-        previewUrl = URL.createObjectURL(originalImageFile);
-        optimisticMessage.image = previewUrl;
-        optimisticMessage._previewUrl = previewUrl;
-        console.log('📸 Created optimistic image preview:', previewUrl);
-    }
-    
-    if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-        window.ChatModule.displayMessage(optimisticMessage);
-        console.log('✅ Optimistic message displayed with ID:', optimisticId);
-    }
-    
-    forceScrollToBottom('smooth', 50);
-    
     try {
         let result;
         
-        if (originalImageFile) {
-            result = await sendMessageToDB(originalMessageText, originalImageFile, replyToId);
+        if (imageFile) {
+            result = await sendMessageToDB(originalMessageText, imageFile, replyToId);
         } else {
             result = await sendMessageToDB(originalMessageText, null, replyToId);
         }
         
         if (result && result.success) {
-            console.log('✅ Message saved to DB successfully');
-            console.log('📸 DB returned image_url:', result.data.image_url);
-            console.log('📸 Full result.data:', JSON.stringify(result.data, null, 2));
+            console.log('✅ Message sent successfully, ID:', result.data.id);
             
-            const optimisticElement = document.getElementById(`msg-${optimisticId}`);
-            
-            if (previewUrl) {
-                URL.revokeObjectURL(previewUrl);
-            }
-            
-            const finalImageUrl = result.data.image_url || null;
-            
-            const realMessageObj = {
+            // DISPLAY THE MESSAGE OPTIMISTICALLY
+            const messageObj = {
                 id: result.data.id,
                 sender: appState.userName,
                 text: originalMessageText,
-                image: finalImageUrl,
+                image: imageFile ? URL.createObjectURL(imageFile) : null,
                 time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                 type: 'sent',
-                is_historical: false,
+                is_optimistic: true,
                 reactions: [],
                 reply_to: replyToId
             };
             
-            if (optimisticElement) {
-                optimisticElement.remove();
-                console.log('Removed optimistic message');
+            // If it's an image, we need to handle the preview
+            if (imageFile) {
+                // For images, we'll show a preview while uploading
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    messageObj.image = e.target.result;
+                    displayMessage(messageObj);
+                    forceScrollToBottom('smooth', 100);
+                };
+                reader.readAsDataURL(imageFile);
+            } else {
+                displayMessage(messageObj);
+                forceScrollToBottom('smooth', 100);
             }
-            
-            if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-                window.ChatModule.displayMessage(realMessageObj);
-                console.log('✅ Real message displayed with ID:', result.data.id, 'Image URL:', finalImageUrl);
-            }
-            
-            if (appState.messages) {
-                appState.messages.push({
-                    id: result.data.id,
-                    sender: appState.userName,
-                    text: originalMessageText,
-                    image: finalImageUrl,
-                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    type: 'sent',
-                    reactions: []
-                });
-                if (appState.messages.length > 200) {
-                    appState.messages = appState.messages.slice(-200);
-                }
-            }
-            
         } else {
             console.error('Failed to send message');
-            
-            const optimisticElement = document.getElementById(`msg-${optimisticId}`);
-            if (optimisticElement) {
-                optimisticElement.remove();
-            }
-            if (previewUrl) {
-                URL.revokeObjectURL(previewUrl);
-            }
-            
             showSendError(originalMessageText);
         }
         
     } catch (error) {
         console.error('Error in sendMessage:', error);
-        
-        const optimisticElement = document.getElementById(`msg-${optimisticId}`);
-        if (optimisticElement) {
-            optimisticElement.remove();
-        }
-        if (previewUrl) {
-            URL.revokeObjectURL(previewUrl);
-        }
-        
         showSendError(originalMessageText);
     } finally {
+        // Re-enable send button
         isSendingMessage = false;
         if (sendMessageBtn) {
             sendMessageBtn.disabled = false;
@@ -2344,10 +2285,6 @@ async function sendMessage() {
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
         }
-        
-        setTimeout(() => {
-            messageInput.focus();
-        }, 100);
     }
 }
 
@@ -2553,7 +2490,7 @@ async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
         
         if (finalImageUrl && finalImageUrl.trim() !== '') {
             messageData.image_url = finalImageUrl;
-            console.log('📸 Added image URL to message:', finalImageUrl);
+            console.log('📸 Added image URL to message');
         }
         
         const { data, error } = await supabaseClient
@@ -2568,7 +2505,6 @@ async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
         }
         
         console.log('✅ Message saved to DB. ID:', data.id);
-        console.log('📸 FINAL - Returning image URL:', finalImageUrl);
         
         return { success: true, data };
     } catch (error) {
@@ -3114,7 +3050,6 @@ async function getRealIP() {
 }
 
 // REPLACE the existing handleImageUpload function
-// REPLACE the existing handleImageUpload function with this one
 async function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -3147,7 +3082,6 @@ async function handleImageUpload(e) {
         
         if (result && result.success) {
             console.log('✅ Image sent successfully');
-            console.log('📸 Image URL saved:', result.data.image_url);
             imageUpload.value = '';
             
             // Clear reply if any
