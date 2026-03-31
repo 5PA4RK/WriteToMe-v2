@@ -3115,6 +3115,7 @@ async function getRealIP() {
 }
 
 // REPLACE the existing handleImageUpload function
+// REPLACE the existing handleImageUpload function with this one
 async function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -3147,6 +3148,7 @@ async function handleImageUpload(e) {
         
         if (result && result.success) {
             console.log('✅ Image sent successfully');
+            console.log('📸 Image URL saved:', result.data.image_url);
             imageUpload.value = '';
             
             // Clear reply if any
