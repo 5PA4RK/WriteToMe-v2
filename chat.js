@@ -27,6 +27,12 @@ const ChatModule = (function() {
 
     // Display a message in the chat
     function displayMessage(message) {
+
+        // In displayMessage function, add class for temp messages
+if (message.is_temp) {
+    messageDiv.classList.add('temp-message');
+}
+
         if (!elements.chatMessages) {
             console.error('Chat messages container not found');
             return;
