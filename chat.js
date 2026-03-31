@@ -27,12 +27,6 @@ const ChatModule = (function() {
 
     // Display a message in the chat
     function displayMessage(message) {
-
-        // In displayMessage function, add class for temp messages
-if (message.is_temp) {
-    messageDiv.classList.add('temp-message');
-}
-
         if (!elements.chatMessages) {
             console.error('Chat messages container not found');
             return;
@@ -62,6 +56,7 @@ if (message.is_temp) {
             messageDiv.style.opacity = '0.7';
             messageDiv.style.transition = 'opacity 0.3s ease';
             
+            // Fade in the optimistic message
             setTimeout(() => {
                 if (messageDiv) {
                     messageDiv.style.opacity = '1';
@@ -103,23 +98,20 @@ if (message.is_temp) {
             }
         }
         
-// Add image if present (uploaded file)
-if (message.image && message.image.trim() !== '') {
-    console.log('Rendering image in message:', message.id);
-    console.log('Image type:', message.image.substring(0, 50));
-
-    
-    // Properly escape the image URL for HTML
-    const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    
-    // Simplified image rendering without the loading indicator that causes issues
-    messageContent += `<img src="${safeImageUrl}" 
-        class="message-image" 
-        onclick="window.showFullImage('${safeImageUrl}')" 
-        loading="lazy"
-        style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;"
-        onerror="this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load</div>');">`;
-}
+        // Add image if present
+        if (message.image && message.image.trim() !== '') {
+            console.log('Rendering image in message:', message.id);
+            
+            // Properly escape the image URL for HTML
+            const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            
+            messageContent += `<img src="${safeImageUrl}" 
+                class="message-image" 
+                onclick="window.showFullImage('${safeImageUrl}')" 
+                loading="lazy"
+                style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;"
+                onerror="this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load</div>');">`;
+        }
         
         // Add reactions section
         const reactionsHtml = `<div class="message-reactions"></div>`;
@@ -162,8 +154,6 @@ if (message.image && message.image.trim() !== '') {
             }
         }
         
-// In displayMessage function, replace the scroll section with:
-        
         // Smart scroll: only auto-scroll if user is near bottom
         const isNearBottom = elements.chatMessages.scrollHeight - elements.chatMessages.scrollTop - elements.chatMessages.clientHeight < 100;
         
@@ -171,7 +161,6 @@ if (message.image && message.image.trim() !== '') {
         const isOwnMessage = message.type === 'sent';
         
         if (isOwnMessage || (isNearBottom && !appState.isViewingHistory)) {
-            // Use multiple scroll attempts to ensure it works
             setTimeout(() => {
                 elements.chatMessages.scrollTo({
                     top: elements.chatMessages.scrollHeight,
