@@ -1969,10 +1969,15 @@ function setupRealtimeSubscriptions() {
                 console.log('📦 Realtime message INSERT received:', payload.new?.id, 'from:', payload.new?.sender_name);
                 
                 if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                    // Skip if it's the current user's message (already displayed)
+                    // Skip if it's the current user's message AND we already displayed it optimistically
+                    // But don't skip if we're replacing a temp message
                     if (payload.new.sender_id === appState.userId) {
-                        console.log('Skipping own message (already displayed)');
-                        return;
+                        // Check if we already have this message displayed
+                        const existingMsg = document.getElementById(`msg-${payload.new.id}`);
+                        if (existingMsg) {
+                            console.log('Message already displayed, skipping real-time update');
+                            return;
+                        }
                     }
                     
                     // Check if message is cleared for guests
@@ -2175,7 +2180,6 @@ function checkAndReconnectSubscriptions() {
 // ENHANCED CHAT FUNCTIONS
 // ============================================
 
-
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
     
@@ -2217,6 +2221,49 @@ async function sendMessage() {
     const originalMessageText = messageText;
     const originalImageFile = imageFile;
     
+    // For images, show a preview immediately with a temporary ID
+    let tempId = null;
+    if (imageFile) {
+        tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        
+        // Create a temporary preview
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const tempMessageObj = {
+                id: tempId,
+                sender: appState.userName,
+                text: originalMessageText,
+                image: e.target.result,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_optimistic: true,
+                is_temp: true,
+                reactions: [],
+                reply_to: replyToId
+            };
+            displayMessage(tempMessageObj);
+            forceScrollToBottom('smooth', 100);
+        };
+        reader.readAsDataURL(imageFile);
+    } else {
+        // Text-only optimistic display
+        const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const tempMessageObj = {
+            id: tempId,
+            sender: appState.userName,
+            text: originalMessageText,
+            image: null,
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            type: 'sent',
+            is_optimistic: true,
+            is_temp: true,
+            reactions: [],
+            reply_to: replyToId
+        };
+        displayMessage(tempMessageObj);
+        forceScrollToBottom('smooth', 100);
+    }
+    
     // Clear input immediately for better UX
     messageInput.value = '';
     messageInput.style.height = 'auto';
@@ -2238,33 +2285,28 @@ async function sendMessage() {
         if (result && result.success) {
             console.log('✅ Message sent successfully, ID:', result.data.id);
             
-            // DISPLAY THE MESSAGE OPTIMISTICALLY
-            const messageObj = {
+            // Remove the temporary message and replace with the real one
+            if (tempId) {
+                const tempElement = document.getElementById(`msg-${tempId}`);
+                if (tempElement) {
+                    tempElement.remove();
+                }
+            }
+            
+            // Display the real message
+            const realMessageObj = {
                 id: result.data.id,
                 sender: appState.userName,
                 text: originalMessageText,
-                image: imageFile ? URL.createObjectURL(imageFile) : null,
+                image: result.data.image_url,
                 time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                 type: 'sent',
-                is_optimistic: true,
+                is_optimistic: false,
                 reactions: [],
                 reply_to: replyToId
             };
-            
-            // If it's an image, we need to handle the preview
-            if (imageFile) {
-                // For images, we'll show a preview while uploading
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    messageObj.image = e.target.result;
-                    displayMessage(messageObj);
-                    forceScrollToBottom('smooth', 100);
-                };
-                reader.readAsDataURL(imageFile);
-            } else {
-                displayMessage(messageObj);
-                forceScrollToBottom('smooth', 100);
-            }
+            displayMessage(realMessageObj);
+            forceScrollToBottom('smooth', 100);
         } else {
             console.error('Failed to send message');
             showSendError(originalMessageText);
