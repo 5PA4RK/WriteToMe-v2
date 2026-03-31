@@ -2176,22 +2176,24 @@ function checkAndReconnectSubscriptions() {
 // ============================================
 async function sendMessage() {
     console.log('🔵 sendMessage called at:', new Date().toISOString());
-
-    if (isSendingMessage) return;
-
+    
+    if (isSendingMessage) {
+        console.log('Message already sending, skipping...');
+        return;
+    }
+    
     if (!appState.isConnected || appState.isViewingHistory) {
         alert("You cannot send messages right now.");
         return;
     }
-
+    
     const messageText = messageInput.value.trim();
     const imageFile = imageUpload.files[0];
-
+    
     if (!messageText && !imageFile) return;
-
+    
     isSendingMessage = true;
-
-    // Disable send button
+    
     if (sendMessageBtn) {
         sendMessageBtn.disabled = true;
         if (window.innerWidth <= 768) {
@@ -2201,24 +2203,26 @@ async function sendMessage() {
             sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
         }
     }
-
+    
     const replyToId = window.__tempReplyTo || appState.replyingTo;
+    
     appState.replyingTo = null;
     window.__tempReplyTo = null;
-
+    
     const originalMessageText = messageText;
     const originalImageFile = imageFile;
-
-    // Clear input immediately
+    
     messageInput.value = '';
     messageInput.style.height = 'auto';
-    if (imageFile) imageUpload.value = '';
-
-    // Create optimistic ID
+    
+    if (imageFile) {
+        imageUpload.value = '';
+    }
+    
     const optimisticId = 'opt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
-
+    
     let previewUrl = null;
-
+    
     const optimisticMessage = {
         id: optimisticId,
         sender: appState.userName,
@@ -2229,54 +2233,65 @@ async function sendMessage() {
         reactions: [],
         reply_to: replyToId
     };
-
-    // If image → create preview
+    
     if (originalImageFile) {
         previewUrl = URL.createObjectURL(originalImageFile);
         optimisticMessage.image = previewUrl;
-        console.log('📸 Created optimistic preview:', previewUrl);
+        optimisticMessage._previewUrl = previewUrl;
+        console.log('📸 Created optimistic image preview:', previewUrl);
     }
-
-    // Show optimistic message instantly
+    
     if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
         window.ChatModule.displayMessage(optimisticMessage);
+        console.log('✅ Optimistic message displayed with ID:', optimisticId);
     }
-
+    
     forceScrollToBottom('smooth', 50);
-
+    
     try {
         let result;
-
+        
         if (originalImageFile) {
             result = await sendMessageToDB(originalMessageText, originalImageFile, replyToId);
         } else {
             result = await sendMessageToDB(originalMessageText, null, replyToId);
         }
-
+        
         if (result && result.success) {
-            console.log('✅ Message saved to DB');
-
+            console.log('✅ Message saved to DB successfully');
+            console.log('📸 DB returned image_url:', result.data.image_url);
+            console.log('📸 Full result.data:', JSON.stringify(result.data, null, 2));
+            
             const optimisticElement = document.getElementById(`msg-${optimisticId}`);
-
-            const finalImageUrl = result.data.image_url || null;
-
-            // FIX: Replace preview instead of deleting message
-            if (optimisticElement) {
-                const img = optimisticElement.querySelector('.message-image');
-
-                if (img && finalImageUrl) {
-                    img.src = finalImageUrl + '?t=' + Date.now(); // prevent cache issue
-                }
-
-                optimisticElement.classList.remove('optimistic');
-                optimisticElement.id = `msg-${result.data.id}`;
-            }
-
+            
             if (previewUrl) {
                 URL.revokeObjectURL(previewUrl);
             }
-
-            // Add to local memory
+            
+            const finalImageUrl = result.data.image_url || null;
+            
+            const realMessageObj = {
+                id: result.data.id,
+                sender: appState.userName,
+                text: originalMessageText,
+                image: finalImageUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                is_historical: false,
+                reactions: [],
+                reply_to: replyToId
+            };
+            
+            if (optimisticElement) {
+                optimisticElement.remove();
+                console.log('Removed optimistic message');
+            }
+            
+            if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
+                window.ChatModule.displayMessage(realMessageObj);
+                console.log('✅ Real message displayed with ID:', result.data.id, 'Image URL:', finalImageUrl);
+            }
+            
             if (appState.messages) {
                 appState.messages.push({
                     id: result.data.id,
@@ -2287,33 +2302,41 @@ async function sendMessage() {
                     type: 'sent',
                     reactions: []
                 });
-
                 if (appState.messages.length > 200) {
                     appState.messages = appState.messages.slice(-200);
                 }
             }
-
+            
         } else {
-            throw new Error("Failed to send message");
+            console.error('Failed to send message');
+            
+            const optimisticElement = document.getElementById(`msg-${optimisticId}`);
+            if (optimisticElement) {
+                optimisticElement.remove();
+            }
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+            }
+            
+            showSendError(originalMessageText);
         }
-
+        
     } catch (error) {
-        console.error('❌ Error sending message:', error);
-
+        console.error('Error in sendMessage:', error);
+        
         const optimisticElement = document.getElementById(`msg-${optimisticId}`);
-        if (optimisticElement) optimisticElement.remove();
-
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-
+        if (optimisticElement) {
+            optimisticElement.remove();
+        }
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+        }
+        
         showSendError(originalMessageText);
-    }
-
-    finally {
+    } finally {
         isSendingMessage = false;
-
         if (sendMessageBtn) {
             sendMessageBtn.disabled = false;
-
             if (window.innerWidth <= 768) {
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
                 sendMessageBtn.style.opacity = '1';
@@ -2321,8 +2344,10 @@ async function sendMessage() {
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
         }
-
-        setTimeout(() => messageInput.focus(), 100);
+        
+        setTimeout(() => {
+            messageInput.focus();
+        }, 100);
     }
 }
 
