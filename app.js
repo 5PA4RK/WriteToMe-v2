@@ -488,8 +488,10 @@ function setupEventListeners() {
             }
         });
         
-        messageInput.addEventListener('input', handleTyping);
-    }
+// Temporarily comment out
+// messageInput.addEventListener('input', handleTyping);
+
+}
 
     function fixMobileViewport() {
         if (window.innerWidth <= 768) {
