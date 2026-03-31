@@ -2511,8 +2511,6 @@ async function compressImage(dataUrl) {
 async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
     console.log('💾 sendMessageToDB called at:', new Date().toISOString());
     console.log('Image type:', imageFileOrUrl instanceof File ? 'File object' : typeof imageFileOrUrl);
-    console.log('📸 FINAL - Returning image URL:', finalImageUrl);
-console.log('📸 FINAL - Data object:', { success: true, data });
     
     try {
         const finalReplyToId = replyToId || window.__tempReplyTo || appState.replyingTo;
@@ -2555,7 +2553,7 @@ console.log('📸 FINAL - Data object:', { success: true, data });
         
         if (finalImageUrl && finalImageUrl.trim() !== '') {
             messageData.image_url = finalImageUrl;
-            console.log('📸 Added image URL to message');
+            console.log('📸 Added image URL to message:', finalImageUrl);
         }
         
         const { data, error } = await supabaseClient
@@ -2570,6 +2568,7 @@ console.log('📸 FINAL - Data object:', { success: true, data });
         }
         
         console.log('✅ Message saved to DB. ID:', data.id);
+        console.log('📸 FINAL - Returning image URL:', finalImageUrl);
         
         return { success: true, data };
     } catch (error) {
