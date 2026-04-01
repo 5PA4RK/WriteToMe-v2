@@ -203,8 +203,19 @@ function displayMessage(message) {
         let found = false;
         let isImageOnly = false;
         
-        // Try to find in DOM first
-        const originalMsgElement = document.getElementById(`msg-${replyToId}`);
+        // Check if this is a temporary ID that needs mapping to real ID
+        let realReplyToId = replyToId;
+        if (window._messageIdMap && window._messageIdMap[replyToId]) {
+            realReplyToId = window._messageIdMap[replyToId];
+            console.log('Mapped temp ID', replyToId, 'to real ID', realReplyToId);
+        }
+        
+        // Try to find in DOM first using both possible IDs
+        let originalMsgElement = document.getElementById(`msg-${realReplyToId}`);
+        if (!originalMsgElement && realReplyToId !== replyToId) {
+            originalMsgElement = document.getElementById(`msg-${replyToId}`);
+        }
+        
         if (originalMsgElement) {
             const senderEl = originalMsgElement.querySelector('.message-sender');
             const textEl = originalMsgElement.querySelector('.message-text');
@@ -245,9 +256,9 @@ function displayMessage(message) {
             }
         }
         
-        // If not found in DOM, try appState
+        // If not found in DOM, try appState messages
         if (!found && appState && appState.messages) {
-            const originalMsg = appState.messages.find(m => m.id === replyToId);
+            const originalMsg = appState.messages.find(m => m.id === replyToId || m.id === realReplyToId);
             if (originalMsg) {
                 quotedSender = originalMsg.sender;
                 
@@ -269,13 +280,14 @@ function displayMessage(message) {
             }
         }
         
-        // Async fetch if still not found
+        // If still not found, try to fetch from database
         if (!found && supabaseClient) {
             const currentMsgId = currentMessage.id;
+            
             supabaseClient
                 .from('messages')
                 .select('sender_name, message, image_url')
-                .eq('id', replyToId)
+                .eq('id', realReplyToId)
                 .single()
                 .then(({ data, error }) => {
                     if (!error && data) {
@@ -288,11 +300,9 @@ function displayMessage(message) {
                                 let hasText = data.message && data.message.trim() !== '';
                                 
                                 if (hasImage && !hasText) {
-                                    // Just show image icon without text
-                                    displayText = '<i class="fas fa-image"></i>';
+                                    displayText = '<i class="fas fa-image"></i> [Image]';
                                 } else if (hasImage && hasText) {
-                                    // Show text with small image icon
-                                    displayText = `${escapeHtml(data.message.substring(0, 100))} <i class="fas fa-image" style="font-size: 0.8rem;"></i>`;
+                                    displayText = `${escapeHtml(data.message.substring(0, 100))} <i class="fas fa-image"></i>`;
                                     if (data.message.length > 100) displayText += '...';
                                 } else {
                                     displayText = escapeHtml(data.message.substring(0, 100));
@@ -313,6 +323,7 @@ function displayMessage(message) {
                 })
                 .catch(e => console.log('Error fetching original message:', e));
             
+            // Return loading state with placeholder that includes image indicator
             return `
                 <div class="message-reply-ref">
                     <i class="fas fa-reply"></i> 
@@ -324,20 +335,32 @@ function displayMessage(message) {
             `;
         }
         
+        // Build the display text with image indicator
         let displayText = quotedText;
         if (isImageOnly) {
-            displayText = '';
+            displayText = '<i class="fas fa-image"></i> [Image]';
         } else if (quotedImage && !quotedText.includes('[Image]') && !quotedText.includes('fa-image')) {
             displayText = `${quotedText} <i class="fas fa-image"></i>`;
         }
         
+        // Create the reply HTML with image preview if available
+        // Check if the quoted image is a blob URL - if so, we might want to use the real URL
+        let finalImageUrl = quotedImage;
+        if (finalImageUrl && finalImageUrl.startsWith('blob:')) {
+            // Try to get real URL from appState
+            const originalMsg = appState.messages.find(m => m.id === replyToId || m.id === realReplyToId);
+            if (originalMsg && originalMsg._realImageUrl) {
+                finalImageUrl = originalMsg._realImageUrl;
+            }
+        }
+        
         return `
-            <div class="message-reply-ref" data-original-image="${quotedImage || ''}">
+            <div class="message-reply-ref" data-original-image="${finalImageUrl || ''}">
                 <i class="fas fa-reply"></i> 
                 <div class="reply-content">
                     <span>Replying to <strong>${escapeHtml(quotedSender)}</strong>: ${displayText}</span>
                 </div>
-                ${quotedImage ? `<div class="reply-image-preview"><img src="${quotedImage}" style="max-width: 50px; max-height: 50px; border-radius: 4px;"></div>` : '<div class="reply-image-preview" style="display: none;"></div>'}
+                ${finalImageUrl ? `<div class="reply-image-preview"><img src="${finalImageUrl}" style="max-width: 50px; max-height: 50px; border-radius: 4px;" onerror="this.style.display='none'"></div>` : '<div class="reply-image-preview" style="display: none;"></div>'}
             </div>
         `;
     }
