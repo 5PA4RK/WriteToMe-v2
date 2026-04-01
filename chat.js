@@ -98,21 +98,19 @@ const ChatModule = (function() {
         }
         
 // Add image if present (uploaded file)
+// In chat.js, in the displayMessage function, find this section:
 if (message.image && message.image.trim() !== '') {
     console.log('Rendering image in message:', message.id);
-    console.log('Image type:', message.image.substring(0, 50));
-
+    console.log('Image URL:', message.image.substring(0, 100));
     
-    // Properly escape the image URL for HTML
     const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     
-    // Simplified image rendering without the loading indicator that causes issues
     messageContent += `<img src="${safeImageUrl}" 
         class="message-image" 
         onclick="window.showFullImage('${safeImageUrl}')" 
         loading="lazy"
         style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;"
-        onerror="this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load</div>');">`;
+        onerror="console.error('Image failed to load:', this.src); this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load</div>');">`;
 }
         
         // Add reactions section
