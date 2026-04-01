@@ -625,8 +625,7 @@ async function addReaction(messageId, emoji) {
         }
     }
 
-    // Open reply modal
-// Replace the openReplyModal function in chat.js
+// Replace your openReplyModal function in chat.js with this:
 function openReplyModal(messageId, senderName, messageText) {
     console.log('Opening reply modal for message:', messageId);
     
@@ -668,11 +667,21 @@ function openReplyModal(messageId, senderName, messageText) {
         }
     }
     
-// Update the getReplyQuoteHtml function in chat.js - look for this section:
-if (appState) {
-    appState.replyingTo = messageId;
-    appState.replyingToImage = imageUrl; // Add this line
-}
+    // STORE THE REPLY INFO IN A GLOBAL VARIABLE
+    window.__replyData = {
+        messageId: messageId,
+        senderName: senderName,
+        messageText: actualMessageText,
+        imageUrl: imageUrl
+    };
+    
+    // Also store in appState for backward compatibility
+    if (appState) {
+        appState.replyingTo = messageId;
+        appState.replyingToImage = imageUrl;
+        console.log('Set appState.replyingTo to:', messageId);
+        console.log('Set appState.replyingToImage to:', imageUrl);
+    }
     
     elements.replyToName.textContent = senderName || 'Unknown';
     
@@ -726,81 +735,100 @@ if (appState) {
 }
 
     // Send reply
-async function sendReply() {
-    console.log('🟢 sendReply called at:', new Date().toISOString());
-    
-    const replyText = elements.replyInput ? elements.replyInput.value.trim() : '';
-    if (!replyText) return;
-    
-    const replyToId = appState ? appState.replyingTo : null;
-    const replyToImage = appState ? appState.replyingToImage : null;
-    console.log('Replying to message ID:', replyToId, 'with image:', replyToImage);
-    
-    if (!replyToId) {
-        console.error('No replyToId found!');
-        return;
-    }
-    
-    if (!elements.messageInput) {
-        console.error('Message input not found');
-        return;
-    }
-    
-    // Store the reply info in a global variable that sendMessage can access
-    window.__tempReplyTo = replyToId;
-    window.__tempReplyToImage = replyToImage;
-    
-    // Clear the appState replyingTo
-    appState.replyingTo = null;
-    appState.replyingToImage = null;
-    
-    elements.messageInput.value = replyText;
-    
-    // Close the modal
-    if (elements.replyModal) {
-        elements.replyModal.style.display = 'none';
-        document.body.classList.remove('modal-open');
-    }
-    
-    if (elements.sendReplyBtn) {
-        elements.sendReplyBtn.disabled = true;
-    }
-    
-    if (window.innerWidth <= 768) {
-        if (document.activeElement && document.activeElement.blur) {
-            document.activeElement.blur();
+    async function sendReply() {
+        console.log('🟢 sendReply called at:', new Date().toISOString());
+        
+        const replyText = elements.replyInput ? elements.replyInput.value.trim() : '';
+        if (!replyText) return;
+        
+        // Get reply data from global variable or appState
+        let replyData = window.__replyData;
+        
+        if (!replyData && appState) {
+            replyData = {
+                messageId: appState.replyingTo,
+                senderName: null,
+                messageText: null,
+                imageUrl: appState.replyingToImage
+            };
         }
-        await new Promise(resolve => setTimeout(resolve, 150));
-    }
-    
-    elements.messageInput.focus();
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    if (typeof window.sendMessage === 'function') {
-        console.log('Calling window.sendMessage');
-        await window.sendMessage();
-        console.log('window.sendMessage completed');
-    }
-    
-    window.__tempReplyTo = null;
-    window.__tempReplyToImage = null;
-    
-    if (elements.sendReplyBtn) {
-        setTimeout(() => {
-            if (elements.sendReplyBtn) {
-                elements.sendReplyBtn.disabled = false;
+        
+        const replyToId = replyData ? replyData.messageId : null;
+        const replyToImage = replyData ? replyData.imageUrl : null;
+        
+        console.log('Replying to message ID:', replyToId);
+        console.log('Replying to image URL:', replyToImage);
+        
+        if (!replyToId) {
+            console.error('No replyToId found!');
+            console.log('replyData:', replyData);
+            console.log('appState.replyingTo:', appState?.replyingTo);
+            return;
+        }
+        
+        if (!elements.messageInput) {
+            console.error('Message input not found');
+            return;
+        }
+        
+        // Store the reply info in global variables for sendMessage to access
+        window.__tempReplyTo = replyToId;
+        window.__tempReplyToImage = replyToImage;
+        
+        // Clear the appState and global reply data
+        if (appState) {
+            appState.replyingTo = null;
+            appState.replyingToImage = null;
+        }
+        window.__replyData = null;
+        
+        elements.messageInput.value = replyText;
+        
+        // Close the modal
+        if (elements.replyModal) {
+            elements.replyModal.style.display = 'none';
+            document.body.classList.remove('modal-open');
+        }
+        
+        if (elements.sendReplyBtn) {
+            elements.sendReplyBtn.disabled = true;
+        }
+        
+        if (window.innerWidth <= 768) {
+            if (document.activeElement && document.activeElement.blur) {
+                document.activeElement.blur();
             }
-        }, 500);
-    }
-    
-    elements.messageInput.value = '';
-    
-    setTimeout(() => {
-        if (elements.chatMessages) {
-            elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+            await new Promise(resolve => setTimeout(resolve, 150));
         }
-    }, 200);
-}
+        
+        elements.messageInput.focus();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        if (typeof window.sendMessage === 'function') {
+            console.log('Calling window.sendMessage');
+            await window.sendMessage();
+            console.log('window.sendMessage completed');
+        }
+        
+        window.__tempReplyTo = null;
+        window.__tempReplyToImage = null;
+        
+        if (elements.sendReplyBtn) {
+            setTimeout(() => {
+                if (elements.sendReplyBtn) {
+                    elements.sendReplyBtn.disabled = false;
+                }
+            }, 500);
+        }
+        
+        elements.messageInput.value = '';
+        
+        setTimeout(() => {
+            if (elements.chatMessages) {
+                elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+            }
+        }, 200);
+    }
 
     // Edit message
 // REPLACE the editMessage function in chat.js
