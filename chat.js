@@ -34,6 +34,22 @@ const ChatModule = (function() {
             hasImage: !!message.image,
             isOptimistic: message.is_optimistic
         });
+        // Add image if present (uploaded file)
+// ADD THIS DEBUG LOG RIGHT HERE:
+console.log('🔍 Message object:', {
+    id: message.id,
+    hasImage: !!message.image,
+    imageValue: message.image,
+    imageType: typeof message.image,
+    imageLength: message.image?.length
+});
+
+// Then keep your existing image rendering code:
+if (message.image && message.image.trim() !== '') {
+    console.log('🎨 Rendering image in message:', message.id);
+    console.log('🎨 Image URL:', message.image);
+    messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')" loading="lazy">`;
+}
         
         if (!elements.chatMessages) {
             console.error('Chat messages container not found');
@@ -110,22 +126,7 @@ const ChatModule = (function() {
 if (message.image && message.image.trim() !== '') {
     console.log('🎨 Rendering image in message:', message.id);
     console.log('🎨 Image URL:', message.image);
-    
-    const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    
-    // Create a container for the image with a loading indicator
-    const imageHtml = `<div class="message-image-container" style="position: relative;">
-        <img src="${safeImageUrl}" 
-            class="message-image" 
-            onclick="window.showFullImage('${safeImageUrl}')" 
-            loading="lazy"
-            style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer; display: block;"
-            onload="console.log('✅ Image loaded successfully:', this.src); this.style.opacity = '1';"
-            onerror="console.error('❌ Image failed to load:', this.src); this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\' style=\\'padding: 10px; background: rgba(0,0,0,0.1); border-radius: 8px; text-align: center;\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load<br><small style=\\'font-size: 11px;\\'>' + this.src.substring(0, 50) + '...</small></div>');">
-    </div>`;
-    
-    messageContent += imageHtml;
-    console.log('✅ Image HTML added to message');
+    messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')" loading="lazy">`;
 }
         
         // Add reactions section
