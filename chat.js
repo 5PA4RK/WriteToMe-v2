@@ -26,76 +26,61 @@ const ChatModule = (function() {
     }
 
     // Display a message in the chat
-    function displayMessage(message) {
-        console.log('🎨 displayMessage called:', { 
-            id: message.id, 
-            sender: message.sender, 
-            type: message.type,
-            hasImage: !!message.image,
-            isOptimistic: message.is_optimistic
-        });
-        // Add image if present (uploaded file)
-// ADD THIS DEBUG LOG RIGHT HERE:
-console.log('🔍 Message object:', {
-    id: message.id,
-    hasImage: !!message.image,
-    imageValue: message.image,
-    imageType: typeof message.image,
-    imageLength: message.image?.length
-});
-
-// Then keep your existing image rendering code:
-if (message.image && message.image.trim() !== '') {
-    console.log('🎨 Rendering image in message:', message.id);
-    console.log('🎨 Image URL:', message.image);
-    messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')" loading="lazy">`;
-}
-        
-        if (!elements.chatMessages) {
-            console.error('Chat messages container not found');
+// Display a message in the chat
+function displayMessage(message) {
+    console.log('🎨 displayMessage called:', { 
+        id: message.id, 
+        sender: message.sender, 
+        type: message.type,
+        hasImage: !!message.image,
+        isOptimistic: message.is_optimistic
+    });
+    
+    if (!elements.chatMessages) {
+        console.error('Chat messages container not found');
+        return;
+    }
+    
+    // Don't display if viewing history and this is not a historical message
+    if (appState && appState.isViewingHistory && !message.is_historical) {
+        console.log('Skipping display - viewing history');
+        return;
+    }
+    
+    // Check if message already exists (except optimistic messages)
+    if (message.id && !message.is_optimistic) {
+        const existingMsg = document.getElementById(`msg-${message.id}`);
+        if (existingMsg) {
+            console.log('Message already exists, skipping display:', message.id);
             return;
         }
+    }
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${message.type}`;
+    if (message.is_historical) {
+        messageDiv.classList.add('historical');
+    }
+    if (message.is_optimistic) {
+        messageDiv.classList.add('optimistic');
+        messageDiv.style.opacity = '0.7';
+        messageDiv.style.transition = 'opacity 0.3s ease';
         
-        // Don't display if viewing history and this is not a historical message
-        if (appState && appState.isViewingHistory && !message.is_historical) {
-            console.log('Skipping display - viewing history');
-            return;
-        }
-        
-        // Check if message already exists (except optimistic messages)
-        if (message.id && !message.is_optimistic) {
-            const existingMsg = document.getElementById(`msg-${message.id}`);
-            if (existingMsg) {
-                console.log('Message already exists, skipping display:', message.id);
-                return;
+        setTimeout(() => {
+            if (messageDiv) {
+                messageDiv.style.opacity = '1';
             }
-        }
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${message.type}`;
-        if (message.is_historical) {
-            messageDiv.classList.add('historical');
-        }
-        if (message.is_optimistic) {
-            messageDiv.classList.add('optimistic');
-            messageDiv.style.opacity = '0.7';
-            messageDiv.style.transition = 'opacity 0.3s ease';
-            
-            setTimeout(() => {
-                if (messageDiv) {
-                    messageDiv.style.opacity = '1';
-                }
-            }, 100);
-        }
-        messageDiv.id = `msg-${message.id}`;
-        
-        let messageContent = '';
-        
-        // Add reply reference if this is a reply
-        if (message.reply_to) {
-            messageContent += getReplyQuoteHtml(message.reply_to, message);
-        }
-        
+        }, 100);
+    }
+    messageDiv.id = `msg-${message.id}`;
+    
+    let messageContent = '';
+    
+    // Add reply reference if this is a reply
+    if (message.reply_to) {
+        messageContent += getReplyQuoteHtml(message.reply_to, message);
+    }
+    
     // Process message text for media embeds
     if (message.text && message.text.trim()) {
         const escapedText = escapeHtml(message.text);
@@ -122,8 +107,8 @@ if (message.image && message.image.trim() !== '') {
         }
     }
     
-    // ========== ADD DEBUG LOGS HERE ==========
-    console.log('🔍 [CHAT.JS] Message object:', {
+    // ========== ADD IMAGE WITH DEBUG LOGS (IN CORRECT PLACE) ==========
+    console.log('🔍 [CHAT.JS] Message object before image render:', {
         id: message.id,
         sender: message.sender,
         hasImage: !!message.image,
@@ -141,77 +126,74 @@ if (message.image && message.image.trim() !== '') {
     } else {
         console.log('⚠️ [CHAT.JS] No image to render for message:', message.id, 'image value:', message.image);
     }
-    // ========== END DEBUG LOGS ==========
+    // ========== END IMAGE CODE ==========
     
     // Add reactions section
     const reactionsHtml = `<div class="message-reactions"></div>`;
-        
-        // Add action button (only for non-optimistic messages)
-        const actionButton = message.is_optimistic ? '' : `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
-        
-        // Actions menu (only for non-optimistic messages)
-        const actionsMenu = message.is_optimistic ? '' : getActionsMenuHtml(message);
-        
-        messageDiv.innerHTML = `
-            <div class="message-sender">${escapeHtml(message.sender)}</div>
-            <div class="message-content">
-                ${messageContent}
-                ${reactionsHtml}
-                <div class="message-footer">
-                    <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
-                    ${actionButton}
-                </div>
+    
+    // Add action button (only for non-optimistic messages)
+    const actionButton = message.is_optimistic ? '' : `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
+    
+    // Actions menu (only for non-optimistic messages)
+    const actionsMenu = message.is_optimistic ? '' : getActionsMenuHtml(message);
+    
+    messageDiv.innerHTML = `
+        <div class="message-sender">${escapeHtml(message.sender)}</div>
+        <div class="message-content">
+            ${messageContent}
+            ${reactionsHtml}
+            <div class="message-footer">
+                <div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>
+                ${actionButton}
             </div>
-            ${actionsMenu}
-        `;
-        
-        elements.chatMessages.appendChild(messageDiv);
-        
-        // Render existing reactions
-        const reactionsContainer = messageDiv.querySelector('.message-reactions');
-        if (message.reactions && message.reactions.length > 0) {
-            renderReactions(reactionsContainer, message.reactions);
-        }
-        
-        // Store in appState.messages (skip optimistic messages)
-        if (appState && appState.messages && Array.isArray(appState.messages) && !message.is_optimistic) {
-            const exists = appState.messages.some(m => m.id === message.id);
-            if (!exists) {
-                appState.messages.push(message);
-                if (appState.messages.length > 100) {
-                    appState.messages = appState.messages.slice(-100);
-                }
+        </div>
+        ${actionsMenu}
+    `;
+    
+    elements.chatMessages.appendChild(messageDiv);
+    
+    // Render existing reactions
+    const reactionsContainer = messageDiv.querySelector('.message-reactions');
+    if (message.reactions && message.reactions.length > 0) {
+        renderReactions(reactionsContainer, message.reactions);
+    }
+    
+    // Store in appState.messages (skip optimistic messages)
+    if (appState && appState.messages && Array.isArray(appState.messages) && !message.is_optimistic) {
+        const exists = appState.messages.some(m => m.id === message.id);
+        if (!exists) {
+            appState.messages.push(message);
+            if (appState.messages.length > 100) {
+                appState.messages = appState.messages.slice(-100);
             }
         }
+    }
+    
+    // Smart scroll: only auto-scroll if user is near bottom
+    const isNearBottom = elements.chatMessages.scrollHeight - elements.chatMessages.scrollTop - elements.chatMessages.clientHeight < 100;
+    
+    // Always scroll for user's own messages
+    const isOwnMessage = message.type === 'sent';
+    
+    if (isOwnMessage || (isNearBottom && !appState.isViewingHistory)) {
+        setTimeout(() => {
+            elements.chatMessages.scrollTo({
+                top: elements.chatMessages.scrollHeight,
+                behavior: 'smooth'
+            });
+        }, 50);
         
-// In displayMessage function, replace the scroll section with:
-        
-        // Smart scroll: only auto-scroll if user is near bottom
-        const isNearBottom = elements.chatMessages.scrollHeight - elements.chatMessages.scrollTop - elements.chatMessages.clientHeight < 100;
-        
-        // Always scroll for user's own messages
-        const isOwnMessage = message.type === 'sent';
-        
-        if (isOwnMessage || (isNearBottom && !appState.isViewingHistory)) {
-            // Use multiple scroll attempts to ensure it works
+        // Second attempt for images that load slowly
+        if (message.image) {
             setTimeout(() => {
                 elements.chatMessages.scrollTo({
                     top: elements.chatMessages.scrollHeight,
                     behavior: 'smooth'
                 });
-            }, 50);
-            
-            // Second attempt for images that load slowly
-            if (message.image) {
-                setTimeout(() => {
-                    elements.chatMessages.scrollTo({
-                        top: elements.chatMessages.scrollHeight,
-                        behavior: 'smooth'
-                    });
-                }, 300);
-            }
+            }, 300);
         }
     }
+}
 
     // Get reply quote HTML
     function getReplyQuoteHtml(replyToId, currentMessage) {
