@@ -2176,7 +2176,7 @@ function checkAndReconnectSubscriptions() {
 // ENHANCED CHAT FUNCTIONS
 // ============================================
 async function sendMessage() {
-    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 5.0 - DIRECT DOM 🔵🔵🔵🔵🔵');
+    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 6.0 - NO BLINK 🔵🔵🔵🔵🔵');
     
     if (isSendingMessage) {
         console.log('Already sending, skipping');
@@ -2191,7 +2191,6 @@ async function sendMessage() {
     const messageText = messageInput.value.trim();
     const imageFile = window.pendingImageFile || imageUpload.files[0];
     
-    // Clear the pending image
     if (window.pendingImageFile) {
         window.pendingImageFile = null;
     }
@@ -2200,7 +2199,6 @@ async function sendMessage() {
     
     isSendingMessage = true;
     
-    // Disable send button
     if (sendMessageBtn) {
         sendMessageBtn.disabled = true;
         if (window.innerWidth <= 768) {
@@ -2217,176 +2215,165 @@ async function sendMessage() {
     const originalMessageText = messageText;
     const originalImageFile = imageFile;
     
-    // Clear input immediately
     messageInput.value = '';
     messageInput.style.height = 'auto';
     
-    // Clear image upload if present
     if (imageFile) {
         imageUpload.value = '';
     }
     
-    // Generate a temporary ID for optimistic display
     const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
     
-    // Create local preview URL if it's an image
     let localPreviewUrl = null;
     if (imageFile) {
         localPreviewUrl = URL.createObjectURL(imageFile);
         console.log('📸 Created local preview URL:', localPreviewUrl);
     }
     
-    // ========== OPTIMISTIC DISPLAY - DIRECT DOM MANIPULATION ==========
-    console.log('📝 Creating optimistic message DIV directly');
+    // ========== OPTIMISTIC DISPLAY - THIS IS THE FINAL DISPLAY ==========
+    console.log('📝 Creating optimistic message DIV (this will be the final view)');
     
-    // Create the optimistic message DIV manually (bypass ChatModule)
-    const optimisticDiv = document.createElement('div');
-    optimisticDiv.className = 'message sent optimistic';
-    optimisticDiv.id = `msg-${tempId}`;
-    optimisticDiv.style.opacity = '0.7';
-    optimisticDiv.style.transition = 'opacity 0.3s ease';
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message sent';
+    messageDiv.id = `msg-${tempId}`;
     
-    let optimisticContent = '';
+    let messageContent = '';
     
-    // Add text if present
     if (originalMessageText && originalMessageText.trim()) {
         const escapedText = escapeHtml(originalMessageText);
         const textWithBreaks = escapedText.replace(/\n/g, '<br>');
-        optimisticContent += `<div class="message-text">${textWithBreaks}</div>`;
+        messageContent += `<div class="message-text">${textWithBreaks}</div>`;
     }
     
-    // Add image if present
     if (localPreviewUrl) {
-        optimisticContent += `<img src="${localPreviewUrl}" class="message-image" style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;" onclick="window.showFullImage('${localPreviewUrl}')" loading="lazy">`;
+        messageContent += `<img src="${localPreviewUrl}" class="message-image" style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;" onclick="window.showFullImage('${localPreviewUrl}')" loading="lazy">`;
     }
     
-    optimisticDiv.innerHTML = `
+    messageDiv.innerHTML = `
         <div class="message-sender">${escapeHtml(appState.userName)}</div>
         <div class="message-content">
-            ${optimisticContent}
+            ${messageContent}
             <div class="message-reactions"></div>
             <div class="message-footer">
                 <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                <button class="message-action-dots" onclick="window.toggleMessageActions('${tempId}', this)"><i class="fas fa-ellipsis-v"></i></button>
+            </div>
+        </div>
+        <div class="message-actions-menu" id="actions-${tempId}" style="display: none;">
+            <button onclick="window.editMessage('${tempId}')"><i class="fas fa-edit"></i> Edit</button>
+            <button onclick="window.deleteMessage('${tempId}')"><i class="fas fa-trash"></i> Delete</button>
+            <div class="menu-divider"></div>
+            <button class="reply-btn" data-message-id="${tempId}" data-sender="${escapeHtml(appState.userName)}" data-message-text="${escapeHtml(originalMessageText)}">
+                <i class="fas fa-reply"></i> Reply
+            </button>
+            <div class="menu-divider"></div>
+            <div class="reaction-section">
+                <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+                <div class="reaction-quick-picker">
+                    ${reactionEmojis.map(emoji => 
+                        `<button class="reaction-emoji-btn" onclick="window.addReaction('${tempId}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                    ).join('')}
+                </div>
             </div>
         </div>
     `;
     
-    chatMessages.appendChild(optimisticDiv);
-    console.log('✅ Optimistic message appended to DOM');
-    
-    // Fade in the optimistic message
-    setTimeout(() => {
-        if (optimisticDiv) {
-            optimisticDiv.style.opacity = '1';
-        }
-    }, 100);
+    chatMessages.appendChild(messageDiv);
+    console.log('✅ Message displayed with local preview (no blinking!)');
     
     forceScrollToBottom('smooth', 50);
-    // ========== END OPTIMISTIC DISPLAY ==========
+    // ========== END DISPLAY ==========
     
     try {
         let finalImageUrl = null;
         
-        // Upload image if present
         if (imageFile) {
-            console.log('📸 Uploading image to storage...');
+            console.log('📸 Uploading image to storage in background...');
             finalImageUrl = await uploadImageToStorage(imageFile);
-            console.log('✅ Image uploaded, final URL:', finalImageUrl);
+            console.log('✅ Image uploaded in background, final URL:', finalImageUrl);
         }
         
-        // Send to database
         const result = await sendMessageToDB(originalMessageText, finalImageUrl, replyToId);
         
         if (result && result.success) {
             console.log('✅ Message saved to DB, ID:', result.data.id);
             
-            // ========== UPDATE OPTIMISTIC TO REAL MESSAGE ==========
-            const finalImageUrlForDisplay = finalImageUrl || result.data.image_url;
-            console.log('📝 Updating optimistic message to real with image:', finalImageUrlForDisplay);
+            // Store the mapping from temp ID to real ID
+            if (!window._messageIdMap) window._messageIdMap = {};
+            window._messageIdMap[tempId] = result.data.id;
             
-            // Update the existing optimistic message instead of removing and adding new
-            if (optimisticDiv && optimisticDiv.parentNode) {
-                // Update the ID
-                optimisticDiv.id = `msg-${result.data.id}`;
+            // Update the message ID in DOM (so future actions work)
+            const msgElement = document.getElementById(`msg-${tempId}`);
+            if (msgElement) {
+                msgElement.id = `msg-${result.data.id}`;
                 
-                // Update the image source if it exists
-                if (finalImageUrlForDisplay && optimisticDiv.querySelector('.message-image')) {
-                    const imgElement = optimisticDiv.querySelector('.message-image');
-                    imgElement.src = finalImageUrlForDisplay;
-                    console.log('🖼️ Updated image src to:', finalImageUrlForDisplay);
+                // Update action button onclick
+                const actionBtn = msgElement.querySelector('.message-action-dots');
+                if (actionBtn) {
+                    actionBtn.setAttribute('onclick', `window.toggleMessageActions('${result.data.id}', this)`);
                 }
                 
-                // Remove optimistic class and style
-                optimisticDiv.classList.remove('optimistic');
-                optimisticDiv.style.opacity = '1';
-                
-                // Update action button
-                const footer = optimisticDiv.querySelector('.message-footer');
-                if (footer) {
-                    const actionButton = document.createElement('button');
-                    actionButton.className = 'message-action-dots';
-                    actionButton.setAttribute('onclick', `window.toggleMessageActions('${result.data.id}', this)`);
-                    actionButton.innerHTML = '<i class="fas fa-ellipsis-v"></i>';
-                    footer.appendChild(actionButton);
+                // Update actions menu ID and buttons
+                const actionsMenu = document.getElementById(`actions-${tempId}`);
+                if (actionsMenu) {
+                    actionsMenu.id = `actions-${result.data.id}`;
+                    
+                    // Update edit button
+                    const editBtn = actionsMenu.querySelector(`button[onclick*="editMessage('${tempId}')"]`);
+                    if (editBtn) {
+                        editBtn.setAttribute('onclick', `window.editMessage('${result.data.id}')`);
+                    }
+                    
+                    // Update delete button
+                    const deleteBtn = actionsMenu.querySelector(`button[onclick*="deleteMessage('${tempId}')"]`);
+                    if (deleteBtn) {
+                        deleteBtn.setAttribute('onclick', `window.deleteMessage('${result.data.id}')`);
+                    }
+                    
+                    // Update reply button
+                    const replyBtn = actionsMenu.querySelector('.reply-btn');
+                    if (replyBtn) {
+                        replyBtn.setAttribute('data-message-id', result.data.id);
+                    }
+                    
+                    // Update all reaction buttons
+                    const reactionBtns = actionsMenu.querySelectorAll('.reaction-emoji-btn');
+                    reactionBtns.forEach(btn => {
+                        const onclick = btn.getAttribute('onclick');
+                        if (onclick && onclick.includes(tempId)) {
+                            btn.setAttribute('onclick', onclick.replace(tempId, result.data.id));
+                        }
+                    });
                 }
-                
-                // Add actions menu
-                const actionsMenuDiv = document.createElement('div');
-                actionsMenuDiv.className = 'message-actions-menu';
-                actionsMenuDiv.id = `actions-${result.data.id}`;
-                actionsMenuDiv.style.display = 'none';
-                actionsMenuDiv.innerHTML = `
-                    <button onclick="window.editMessage('${result.data.id}')"><i class="fas fa-edit"></i> Edit</button>
-                    <button onclick="window.deleteMessage('${result.data.id}')"><i class="fas fa-trash"></i> Delete</button>
-                    <div class="menu-divider"></div>
-                    <button class="reply-btn" data-message-id="${result.data.id}" data-sender="${escapeHtml(appState.userName)}" data-message-text="${escapeHtml(originalMessageText)}">
-                        <i class="fas fa-reply"></i> Reply
-                    </button>
-                    <div class="menu-divider"></div>
-                    <div class="reaction-section">
-                        <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
-                        <div class="reaction-quick-picker">
-                            ${reactionEmojis.map(emoji => 
-                                `<button class="reaction-emoji-btn" onclick="window.addReaction('${result.data.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
-                            ).join('')}
-                        </div>
-                    </div>
-                `;
-                optimisticDiv.appendChild(actionsMenuDiv);
-                
-                console.log('✅ Updated optimistic message to real message');
             }
             
-            // Revoke the object URL to free memory
-            if (localPreviewUrl) {
-                URL.revokeObjectURL(localPreviewUrl);
-                console.log('🔄 Revoked local preview URL');
-            }
+            // Update the image source only if the blob URL is about to be revoked
+            // We're NOT updating the image src to avoid blinking
+            // The blob URL will work until the page is refreshed
             
-            // Add to appState.messages
+            // Add to appState.messages with the blob URL (so it works immediately)
             appState.messages.push({
                 id: result.data.id,
                 sender: appState.userName,
                 text: originalMessageText,
-                image: finalImageUrlForDisplay,
+                image: localPreviewUrl, // Keep the blob URL for current session
                 time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                 type: 'sent',
-                reply_to: replyToId
+                reply_to: replyToId,
+                _realImageUrl: finalImageUrl // Store real URL for future use
             });
             
-            forceScrollToBottom('smooth', 50);
-            // ========== END REAL MESSAGE UPDATE ==========
+            console.log('✅ Message saved - no image update, no blinking!');
             
         } else {
             console.error('❌ Failed to send message');
             showSendError(originalMessageText);
             
-            // Remove the failed optimistic message
-            if (optimisticDiv && optimisticDiv.parentNode) {
-                optimisticDiv.remove();
+            const failedElement = document.getElementById(`msg-${tempId}`);
+            if (failedElement) {
+                failedElement.remove();
             }
             
-            // Restore text to input if it was text
             if (originalMessageText) {
                 messageInput.value = originalMessageText;
                 messageInput.focus();
@@ -2396,9 +2383,9 @@ async function sendMessage() {
         console.error('❌ Error in sendMessage:', error);
         showSendError(originalMessageText);
         
-        // Remove the failed optimistic message
-        if (optimisticDiv && optimisticDiv.parentNode) {
-            optimisticDiv.remove();
+        const failedElement = document.getElementById(`msg-${tempId}`);
+        if (failedElement) {
+            failedElement.remove();
         }
         
         if (originalMessageText) {
@@ -2929,23 +2916,24 @@ async function loadChatHistory(sessionId = null, limit = 50) {
         });
         
         // Display messages
-        orderedMessages.forEach((msg) => {
-            const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
-            
-            if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-                window.ChatModule.displayMessage({
-                    id: msg.id,
-                    sender: msg.sender_name,
-                    text: msg.message,
-                    image: msg.image_url,
-                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    type: messageType,
-                    is_historical: !!sessionId,
-                    reactions: reactionsMap.get(msg.id) || [],
-                    reply_to: msg.reply_to
-                });
-            }
+// Display messages
+orderedMessages.forEach((msg) => {
+    const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
+    
+    if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
+        window.ChatModule.displayMessage({
+            id: msg.id,
+            sender: msg.sender_name,
+            text: msg.message,
+            image: msg.image_url,  // <-- THIS LINE
+            time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            type: messageType,
+            is_historical: !!sessionId,
+            reactions: reactionsMap.get(msg.id) || [],
+            reply_to: msg.reply_to
         });
+    }
+});
         
         // Store loaded messages
         appState.messages = orderedMessages;
