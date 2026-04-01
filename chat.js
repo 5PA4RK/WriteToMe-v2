@@ -203,20 +203,18 @@ function displayMessage(message) {
         let found = false;
         let isImageOnly = false;
         
-        // ADD THIS BLOCK RIGHT HERE - after the variable declarations
-        if (appState && appState.replyingToImage && replyToId === appState.replyingTo) {
-            quotedImage = appState.replyingToImage;
-            // If we have the image stored, we can use it immediately
-            if (quotedImage) {
-                // Get the sender name from appState messages
-                const originalMsg = appState.messages.find(m => m.id === replyToId);
-                if (originalMsg) {
-                    quotedSender = originalMsg.sender;
-                    found = true;
-                    isImageOnly = !originalMsg.text || originalMsg.text.trim() === '';
-                    quotedText = isImageOnly ? '[Image]' : (originalMsg.text || '').substring(0, 100);
-                    console.log('Using stored image for reply:', quotedImage);
-                }
+        // Check if the current message has a reply_to_image property (from the reply)
+        if (currentMessage.reply_to_image) {
+            quotedImage = currentMessage.reply_to_image;
+            console.log('Found reply_to_image in message:', quotedImage);
+            
+            // Try to get sender from appState messages
+            const originalMsg = appState.messages.find(m => m.id === replyToId);
+            if (originalMsg) {
+                quotedSender = originalMsg.sender;
+                found = true;
+                isImageOnly = !originalMsg.text || originalMsg.text.trim() === '';
+                quotedText = isImageOnly ? '[Image]' : (originalMsg.text || '').substring(0, 100);
             }
         }
         
@@ -728,72 +726,81 @@ if (appState) {
 }
 
     // Send reply
-    async function sendReply() {
-        console.log('🟢 sendReply called at:', new Date().toISOString());
-        
-        const replyText = elements.replyInput ? elements.replyInput.value.trim() : '';
-        if (!replyText) return;
-        
-        const replyToId = appState ? appState.replyingTo : null;
-        console.log('Replying to message ID:', replyToId);
-        
-        if (!replyToId) {
-            console.error('No replyToId found!');
-            return;
-        }
-        
-        if (!elements.messageInput) {
-            console.error('Message input not found');
-            return;
-        }
-        
-        elements.messageInput.value = replyText;
-        window.__tempReplyTo = replyToId;
-        appState.replyingTo = null;
-        
-        if (elements.replyModal) {
-            elements.replyModal.style.display = 'none';
-            document.body.classList.remove('modal-open');
-        }
-        
-        if (elements.sendReplyBtn) {
-            elements.sendReplyBtn.disabled = true;
-        }
-        
-        if (window.innerWidth <= 768) {
-            if (document.activeElement && document.activeElement.blur) {
-                document.activeElement.blur();
-            }
-            await new Promise(resolve => setTimeout(resolve, 150));
-        }
-        
-        elements.messageInput.focus();
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        if (typeof window.sendMessage === 'function') {
-            console.log('Calling window.sendMessage');
-            await window.sendMessage();
-            console.log('window.sendMessage completed');
-        }
-        
-        window.__tempReplyTo = null;
-        
-        if (elements.sendReplyBtn) {
-            setTimeout(() => {
-                if (elements.sendReplyBtn) {
-                    elements.sendReplyBtn.disabled = false;
-                }
-            }, 500);
-        }
-        
-        elements.messageInput.value = '';
-        
-        setTimeout(() => {
-            if (elements.chatMessages) {
-                elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
-            }
-        }, 200);
+async function sendReply() {
+    console.log('🟢 sendReply called at:', new Date().toISOString());
+    
+    const replyText = elements.replyInput ? elements.replyInput.value.trim() : '';
+    if (!replyText) return;
+    
+    const replyToId = appState ? appState.replyingTo : null;
+    const replyToImage = appState ? appState.replyingToImage : null;
+    console.log('Replying to message ID:', replyToId, 'with image:', replyToImage);
+    
+    if (!replyToId) {
+        console.error('No replyToId found!');
+        return;
     }
+    
+    if (!elements.messageInput) {
+        console.error('Message input not found');
+        return;
+    }
+    
+    // Store the reply info in a global variable that sendMessage can access
+    window.__tempReplyTo = replyToId;
+    window.__tempReplyToImage = replyToImage;
+    
+    // Clear the appState replyingTo
+    appState.replyingTo = null;
+    appState.replyingToImage = null;
+    
+    elements.messageInput.value = replyText;
+    
+    // Close the modal
+    if (elements.replyModal) {
+        elements.replyModal.style.display = 'none';
+        document.body.classList.remove('modal-open');
+    }
+    
+    if (elements.sendReplyBtn) {
+        elements.sendReplyBtn.disabled = true;
+    }
+    
+    if (window.innerWidth <= 768) {
+        if (document.activeElement && document.activeElement.blur) {
+            document.activeElement.blur();
+        }
+        await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    
+    elements.messageInput.focus();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    if (typeof window.sendMessage === 'function') {
+        console.log('Calling window.sendMessage');
+        await window.sendMessage();
+        console.log('window.sendMessage completed');
+    }
+    
+    window.__tempReplyTo = null;
+    window.__tempReplyToImage = null;
+    
+    if (elements.sendReplyBtn) {
+        setTimeout(() => {
+            if (elements.sendReplyBtn) {
+                elements.sendReplyBtn.disabled = false;
+            }
+        }, 500);
+    }
+    
+    elements.messageInput.value = '';
+    
+    setTimeout(() => {
+        if (elements.chatMessages) {
+            elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+        }
+    }, 200);
+}
 
     // Edit message
 // REPLACE the editMessage function in chat.js
