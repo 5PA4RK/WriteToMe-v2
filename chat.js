@@ -27,6 +27,14 @@ const ChatModule = (function() {
 
     // Display a message in the chat
     function displayMessage(message) {
+        console.log('🎨 displayMessage called:', { 
+            id: message.id, 
+            sender: message.sender, 
+            type: message.type,
+            hasImage: !!message.image,
+            isOptimistic: message.is_optimistic
+        });
+        
         if (!elements.chatMessages) {
             console.error('Chat messages container not found');
             return;
@@ -34,6 +42,7 @@ const ChatModule = (function() {
         
         // Don't display if viewing history and this is not a historical message
         if (appState && appState.isViewingHistory && !message.is_historical) {
+            console.log('Skipping display - viewing history');
             return;
         }
         
