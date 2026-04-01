@@ -203,6 +203,24 @@ function displayMessage(message) {
         let found = false;
         let isImageOnly = false;
         
+        // ADD THIS BLOCK RIGHT HERE - after the variable declarations
+        if (appState && appState.replyingToImage && replyToId === appState.replyingTo) {
+            quotedImage = appState.replyingToImage;
+            // If we have the image stored, we can use it immediately
+            if (quotedImage) {
+                // Get the sender name from appState messages
+                const originalMsg = appState.messages.find(m => m.id === replyToId);
+                if (originalMsg) {
+                    quotedSender = originalMsg.sender;
+                    found = true;
+                    isImageOnly = !originalMsg.text || originalMsg.text.trim() === '';
+                    quotedText = isImageOnly ? '[Image]' : (originalMsg.text || '').substring(0, 100);
+                    console.log('Using stored image for reply:', quotedImage);
+                }
+            }
+        }
+        
+        
         // Check if this is a temporary ID that needs mapping to real ID
         let realReplyToId = replyToId;
         if (window._messageIdMap && window._messageIdMap[replyToId]) {
@@ -610,56 +628,104 @@ async function addReaction(messageId, emoji) {
     }
 
     // Open reply modal
-    function openReplyModal(messageId, senderName, messageText) {
-        console.log('Opening reply modal for message:', messageId);
-        
-        if (!elements.replyModal || !elements.replyToName || !elements.replyToContent || !elements.replyInput) {
-            console.error('Reply modal elements not found');
-            return;
+// Replace the openReplyModal function in chat.js
+function openReplyModal(messageId, senderName, messageText) {
+    console.log('Opening reply modal for message:', messageId);
+    
+    if (!elements.replyModal || !elements.replyToName || !elements.replyToContent || !elements.replyInput) {
+        console.error('Reply modal elements not found');
+        return;
+    }
+    
+    // Get the actual message element to find the image
+    const messageElement = document.getElementById(`msg-${messageId}`);
+    let imageUrl = null;
+    let actualMessageText = messageText;
+    
+    if (messageElement) {
+        // Try to find image in the message
+        const imgElement = messageElement.querySelector('.message-image');
+        if (imgElement && imgElement.src) {
+            imageUrl = imgElement.src;
+            console.log('Found image in message:', imageUrl);
         }
         
-        if (appState) {
-            appState.replyingTo = messageId;
-            console.log('Set replyingTo to:', messageId);
-        }
-        
-        elements.replyToName.textContent = senderName || 'Unknown';
-        
-        let displayText = messageText || '';
-        if (displayText.length > 150) {
-            displayText = displayText.substring(0, 150) + '...';
-        }
-        elements.replyToContent.textContent = displayText;
-        elements.replyToContent.setAttribute('data-full-text', messageText || '');
-        
-        elements.replyInput.value = '';
-        
-        elements.replyModal.style.display = 'flex';
-        document.body.classList.add('modal-open');
-        
-        if (window.innerWidth <= 768) {
-            elements.replyModal.style.top = '0';
-            elements.replyModal.style.left = '0';
-            elements.replyModal.style.right = '0';
-            elements.replyModal.style.bottom = '0';
-            elements.replyModal.style.position = 'fixed';
-            
-            setTimeout(() => {
-                if (elements.replyInput) {
-                    elements.replyInput.focus();
-                    setTimeout(() => {
-                        elements.replyInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }, 100);
-                }
-            }, 100);
-        } else {
-            setTimeout(() => {
-                if (elements.replyInput) {
-                    elements.replyInput.focus();
-                }
-            }, 100);
+        // Also try to get the full text if it's truncated in the button
+        const textElement = messageElement.querySelector('.message-text');
+        if (textElement) {
+            actualMessageText = textElement.textContent.replace(/\s*\(edited\)\s*$/, '');
         }
     }
+    
+    // If no image found in DOM, check appState
+    if (!imageUrl && appState && appState.messages) {
+        const originalMsg = appState.messages.find(m => m.id === messageId);
+        if (originalMsg && originalMsg.image) {
+            imageUrl = originalMsg.image;
+            // If it's a blob URL and we have a real URL stored, use that
+            if (imageUrl && imageUrl.startsWith('blob:') && originalMsg._realImageUrl) {
+                imageUrl = originalMsg._realImageUrl;
+            }
+            console.log('Found image in appState:', imageUrl);
+        }
+    }
+    
+// Update the getReplyQuoteHtml function in chat.js - look for this section:
+if (appState) {
+    appState.replyingTo = messageId;
+    appState.replyingToImage = imageUrl; // Add this line
+}
+    
+    elements.replyToName.textContent = senderName || 'Unknown';
+    
+    // Show image preview in the reply modal if there's an image
+    let displayText = actualMessageText || '';
+    let imagePreviewHtml = '';
+    
+    if (imageUrl) {
+        imagePreviewHtml = `<div style="margin-top: 10px;"><img src="${imageUrl}" style="max-width: 100px; max-height: 100px; border-radius: 8px; object-fit: cover;"></div>`;
+        if (displayText) {
+            displayText = displayText + imagePreviewHtml;
+        } else {
+            displayText = '<i class="fas fa-image"></i> [Image]' + imagePreviewHtml;
+        }
+    }
+    
+    if (displayText.length > 150) {
+        displayText = displayText.substring(0, 150) + '...';
+    }
+    elements.replyToContent.innerHTML = displayText;
+    elements.replyToContent.setAttribute('data-full-text', actualMessageText || '');
+    elements.replyToContent.setAttribute('data-image-url', imageUrl || '');
+    
+    elements.replyInput.value = '';
+    
+    elements.replyModal.style.display = 'flex';
+    document.body.classList.add('modal-open');
+    
+    if (window.innerWidth <= 768) {
+        elements.replyModal.style.top = '0';
+        elements.replyModal.style.left = '0';
+        elements.replyModal.style.right = '0';
+        elements.replyModal.style.bottom = '0';
+        elements.replyModal.style.position = 'fixed';
+        
+        setTimeout(() => {
+            if (elements.replyInput) {
+                elements.replyInput.focus();
+                setTimeout(() => {
+                    elements.replyInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 100);
+            }
+        }, 100);
+    } else {
+        setTimeout(() => {
+            if (elements.replyInput) {
+                elements.replyInput.focus();
+            }
+        }, 100);
+    }
+}
 
     // Send reply
     async function sendReply() {
