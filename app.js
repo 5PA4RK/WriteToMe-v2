@@ -1957,95 +1957,68 @@ function setupRealtimeSubscriptions() {
     // Create a new channel for messages
     const messagesChannel = supabaseClient
         .channel('messages_' + appState.currentSessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            async (payload) => {
-                console.log('📦 Realtime message INSERT received:', payload.new?.id, 'from:', payload.new?.sender_name);
+// In the messages INSERT handler, replace the existing code with this:
+on('postgres_changes', {
+    event: 'INSERT',
+    schema: 'public',
+    table: 'messages',
+    filter: `session_id=eq.${appState.currentSessionId}`
+}, async (payload) => {
+    console.log('📦 Realtime message INSERT received:', payload.new?.id, 'from:', payload.new?.sender_name);
+    
+    if (payload.new && payload.new.session_id === appState.currentSessionId) {
+        // Skip if it's the current user's message (we already displayed it manually)
+        if (payload.new.sender_id === appState.userId) {
+            console.log('Skipping own message (already displayed manually)');
+            return;
+        }
+        
+        // Check if message is cleared for guests
+        let shouldDisplay = true;
+        if (!appState.isHost && payload.new.sender_id !== appState.userId) {
+            const { data: cleared } = await supabaseClient
+                .from('cleared_messages')
+                .select('id')
+                .eq('user_id', appState.userId)
+                .eq('message_id', payload.new.id)
+                .maybeSingle();
+            
+            if (cleared) shouldDisplay = false;
+        }
+        
+        if (shouldDisplay) {
+            const existingMsg = document.getElementById(`msg-${payload.new.id}`);
+            if (!existingMsg) {
+                const reactions = await getMessageReactions(payload.new.id);
                 
-                if (payload.new && payload.new.session_id === appState.currentSessionId) {
-                    // Skip if it's the current user's message (already displayed)
-                    if (payload.new.sender_id === appState.userId) {
-                        console.log('Skipping own message (already displayed optimistically)');
-                        
-                        // Find and replace any temporary optimistic message with this real one
-                        const tempMessages = document.querySelectorAll('.message.optimistic');
-                        tempMessages.forEach(tempMsg => {
-                            const tempId = tempMsg.id;
-                            if (tempId && tempId.startsWith('temp_')) {
-                                // Replace with real message
-                                const realMsgElement = createMessageElement({
-                                    id: payload.new.id,
-                                    sender: payload.new.sender_name,
-                                    text: payload.new.message || '',
-                                    image: payload.new.image_url,
-                                    time: new Date(payload.new.created_at).toLocaleTimeString(),
-                                    type: 'sent',
-                                    reactions: [],
-                                    reply_to: payload.new.reply_to
-                                });
-                                tempMsg.replaceWith(realMsgElement);
-                            }
-                        });
-                        return;
-                    }
-                    if (payload.new.sender_id === appState.userId) {
-                        console.log('Skipping own message (already displayed)');
-                        return;
-                    }
-                    
-                    // Check if message is cleared for guests
-                    let shouldDisplay = true;
-                    if (!appState.isHost && payload.new.sender_id !== appState.userId) {
-                        const { data: cleared } = await supabaseClient
-                            .from('cleared_messages')
-                            .select('id')
-                            .eq('user_id', appState.userId)
-                            .eq('message_id', payload.new.id)
-                            .maybeSingle();
-                        
-                        if (cleared) shouldDisplay = false;
-                    }
-                    
-                    if (shouldDisplay) {
-                        const existingMsg = document.getElementById(`msg-${payload.new.id}`);
-                        if (!existingMsg) {
-                            const reactions = await getMessageReactions(payload.new.id);
-                            
-                            let imageUrl = null;
-                            if (payload.new.image_url && payload.new.image_url.trim() !== '') {
-                                imageUrl = payload.new.image_url;
-                            }
-                            
-                            const messageObj = {
-                                id: payload.new.id,
-                                sender: payload.new.sender_name,
-                                text: payload.new.message || '',
-                                image: imageUrl,
-                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                                type: 'received',
-                                is_historical: false,
-                                reactions: reactions || [],
-                                reply_to: payload.new.reply_to
-                            };
-                            
-                            console.log('Displaying new message from:', messageObj.sender);
-                            displayMessage(messageObj);
-                            forceScrollToBottom('smooth', 100);
-                            
-                            if (appState.soundEnabled && window.playNotificationSound) {
-                                window.playNotificationSound();
-                            }
-                        }
-                    }
+                let imageUrl = null;
+                if (payload.new.image_url && payload.new.image_url.trim() !== '') {
+                    imageUrl = payload.new.image_url;
+                }
+                
+                const messageObj = {
+                    id: payload.new.id,
+                    sender: payload.new.sender_name,
+                    text: payload.new.message || '',
+                    image: imageUrl,
+                    time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    type: 'received',
+                    is_historical: false,
+                    reactions: reactions || [],
+                    reply_to: payload.new.reply_to
+                };
+                
+                console.log('Displaying new message from:', messageObj.sender);
+                displayMessage(messageObj);
+                forceScrollToBottom('smooth', 100);
+                
+                if (appState.soundEnabled && window.playNotificationSound) {
+                    window.playNotificationSound();
                 }
             }
-        )
+        }
+    }
+})
         .on(
             'postgres_changes',
             {
@@ -2200,11 +2173,10 @@ function checkAndReconnectSubscriptions() {
 // ============================================
 // REPLACE the existing sendMessage function in app.js with this
 async function sendMessage() {
-    console.log('🔵 sendMessage called at:', new Date().toISOString());
+    console.log('🔵 sendMessage called');
     
-    // Prevent double sending
     if (isSendingMessage) {
-        console.log('Message already sending, skipping...');
+        console.log('Already sending, skipping');
         return;
     }
     
@@ -2218,57 +2190,61 @@ async function sendMessage() {
     
     if (!messageText && !imageFile) return;
     
-    // Set sending flag immediately
     isSendingMessage = true;
     
-    // Disable send button immediately
+    // Disable send button
     if (sendMessageBtn) {
         sendMessageBtn.disabled = true;
         if (window.innerWidth <= 768) {
             sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            sendMessageBtn.style.opacity = '0.7';
         } else {
             sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
         }
     }
     
     const replyToId = window.__tempReplyTo || appState.replyingTo;
-    
     appState.replyingTo = null;
     window.__tempReplyTo = null;
     
     const originalMessageText = messageText;
     const originalImageFile = imageFile;
     
-    // Clear input immediately for better UX
+    // Clear input
     messageInput.value = '';
     messageInput.style.height = 'auto';
-    
-    // Generate a temporary ID for optimistic display
-    const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-    
-    // Create optimistic message object
-    const optimisticMessage = {
-        id: tempId,
-        sender: appState.userName,
-        text: originalMessageText,
-        image: imageFile ? URL.createObjectURL(imageFile) : null,
-        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-        type: 'sent',
-        is_optimistic: true,
-        reactions: [],
-        reply_to: replyToId,
-        is_uploading: !!imageFile
-    };
-    
-    // Display optimistic message immediately
-    displayMessage(optimisticMessage);
-    forceScrollToBottom('smooth', 50);
     
     // Clear image upload if present
     if (imageFile) {
         imageUpload.value = '';
     }
+    
+    // Generate a temporary ID for optimistic display
+    const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    
+    // Create local preview URL if it's an image
+    let localPreviewUrl = null;
+    if (imageFile) {
+        localPreviewUrl = URL.createObjectURL(imageFile);
+    }
+    
+    // Create and display optimistic message
+    const optimisticMessage = {
+        id: tempId,
+        sender: appState.userName,
+        text: originalMessageText,
+        image: localPreviewUrl,
+        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        type: 'sent',
+        is_optimistic: true,
+        reply_to: replyToId,
+        is_uploading: !!imageFile
+    };
+    
+    // Display optimistic message
+    if (window.ChatModule && window.ChatModule.displayMessage) {
+        window.ChatModule.displayMessage(optimisticMessage);
+    }
+    forceScrollToBottom('smooth', 50);
     
     try {
         let finalImageUrl = null;
@@ -2280,56 +2256,76 @@ async function sendMessage() {
             console.log('✅ Image uploaded:', finalImageUrl);
         }
         
-        // Send message to database
+        // Send to database
         const result = await sendMessageToDB(originalMessageText, finalImageUrl, replyToId);
         
         if (result && result.success) {
-            console.log('✅ Message sent successfully, ID:', result.data.id);
+            console.log('✅ Message saved, ID:', result.data.id);
             
-            // Replace optimistic message with real one
+            // Remove the optimistic message
             const optimisticElement = document.getElementById(`msg-${tempId}`);
             if (optimisticElement) {
-                // Create new message element with real data
-                const realMessage = {
-                    id: result.data.id,
-                    sender: appState.userName,
-                    text: originalMessageText,
-                    image: finalImageUrl,
-                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    type: 'sent',
-                    is_optimistic: false,
-                    reactions: [],
-                    reply_to: replyToId
-                };
-                
-                // Replace the optimistic message
-                const newElement = createMessageElement(realMessage);
-                optimisticElement.replaceWith(newElement);
-                
-                // Update appState messages
-                const existingIndex = appState.messages.findIndex(m => m.id === tempId);
-                if (existingIndex !== -1) {
-                    appState.messages[existingIndex] = realMessage;
-                } else {
-                    appState.messages.push(realMessage);
-                }
+                optimisticElement.remove();
+                console.log('Removed optimistic message:', tempId);
             }
+            
+            // Revoke the object URL to free memory
+            if (localPreviewUrl) {
+                URL.revokeObjectURL(localPreviewUrl);
+            }
+            
+            // Add the real message
+            const realMessage = {
+                id: result.data.id,
+                sender: appState.userName,
+                text: originalMessageText,
+                image: finalImageUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                reply_to: replyToId
+            };
+            
+            if (window.ChatModule && window.ChatModule.displayMessage) {
+                window.ChatModule.displayMessage(realMessage);
+                console.log('Displayed real message:', result.data.id);
+            }
+            forceScrollToBottom('smooth', 50);
         } else {
             console.error('Failed to send message');
-            showSendError(originalMessageText, optimisticMessage);
+            showSendError(originalMessageText);
+            
+            // Remove the failed optimistic message
+            const failedElement = document.getElementById(`msg-${tempId}`);
+            if (failedElement) {
+                failedElement.remove();
+            }
+            
+            // Restore text to input if it was text
+            if (originalMessageText) {
+                messageInput.value = originalMessageText;
+                messageInput.focus();
+            }
         }
-        
     } catch (error) {
         console.error('Error in sendMessage:', error);
-        showSendError(originalMessageText, optimisticMessage);
+        showSendError(originalMessageText);
+        
+        // Remove the failed optimistic message
+        const failedElement = document.getElementById(`msg-${tempId}`);
+        if (failedElement) {
+            failedElement.remove();
+        }
+        
+        if (originalMessageText) {
+            messageInput.value = originalMessageText;
+            messageInput.focus();
+        }
     } finally {
-        // Re-enable send button
         isSendingMessage = false;
         if (sendMessageBtn) {
             sendMessageBtn.disabled = false;
             if (window.innerWidth <= 768) {
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
-                sendMessageBtn.style.opacity = '1';
             } else {
                 sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
             }
