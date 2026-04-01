@@ -2351,17 +2351,18 @@ async function sendMessage() {
             // We're NOT updating the image src to avoid blinking
             // The blob URL will work until the page is refreshed
             
-            // Add to appState.messages with the blob URL (so it works immediately)
-            appState.messages.push({
-                id: result.data.id,
-                sender: appState.userName,
-                text: originalMessageText,
-                image: localPreviewUrl, // Keep the blob URL for current session
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                reply_to: replyToId,
-                _realImageUrl: finalImageUrl // Store real URL for future use
-            });
+// Add to appState.messages with the blob URL (so it works immediately)
+appState.messages.push({
+    id: result.data.id,
+    sender: appState.userName,
+    text: originalMessageText,
+    image: localPreviewUrl, // Keep the blob URL for current session
+    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+    type: 'sent',
+    reply_to: replyToId,
+    reply_to_image: window.__tempReplyToImage, // Add this line - store the replied-to image URL
+    _realImageUrl: finalImageUrl // Store real URL for future use
+});
             
             console.log('✅ Message saved - no image update, no blinking!');
             
@@ -2625,6 +2626,12 @@ async function compressImage(dataUrl) {
 // REPLACE the existing sendMessageToDB function with this one
 async function sendMessageToDB(text, imageInput, replyToId = null) {
     console.log('💾 sendMessageToDB called');
+
+        // Check if this is a reply with an image reference
+        let replyToImage = window.__tempReplyToImage;
+        console.log('Reply to image URL:', replyToImage);
+
+
     console.log('Image input type:', typeof imageInput);
     console.log('Is File?', imageInput instanceof File);
     console.log('Is string?', typeof imageInput === 'string');
