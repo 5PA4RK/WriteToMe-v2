@@ -107,19 +107,25 @@ const ChatModule = (function() {
         }
         
 // Add image if present (uploaded file)
-// In chat.js, in the displayMessage function, find this section:
 if (message.image && message.image.trim() !== '') {
-    console.log('Rendering image in message:', message.id);
-    console.log('Image URL:', message.image.substring(0, 100));
+    console.log('🎨 Rendering image in message:', message.id);
+    console.log('🎨 Image URL:', message.image);
     
+    // Make sure the URL is properly escaped
     const safeImageUrl = message.image.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     
-    messageContent += `<img src="${safeImageUrl}" 
-        class="message-image" 
-        onclick="window.showFullImage('${safeImageUrl}')" 
-        loading="lazy"
-        style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;"
-        onerror="console.error('Image failed to load:', this.src); this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load</div>');">`;
+    // Create the image element with proper attributes
+    const imageHtml = `<div class="message-image-container">
+        <img src="${safeImageUrl}" 
+            class="message-image" 
+            onclick="window.showFullImage('${safeImageUrl}')" 
+            loading="lazy"
+            style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer; display: block;"
+            onerror="console.error('Image load error:', this.src); this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load</div>');">
+    </div>`;
+    
+    messageContent += imageHtml;
+    console.log('✅ Image HTML added to message');
 }
         
         // Add reactions section
