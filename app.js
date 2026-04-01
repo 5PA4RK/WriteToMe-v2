@@ -2176,7 +2176,8 @@ function checkAndReconnectSubscriptions() {
 // ENHANCED CHAT FUNCTIONS
 // ============================================
 async function sendMessage() {
-    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 2.0 - DIRECT DOM 🔵🔵🔵🔵🔵');
+    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 4.0 - DIRECT DOM 🔵🔵🔵🔵🔵');
+    
     
     if (isSendingMessage) {
         console.log('Already sending, skipping');
@@ -2189,7 +2190,12 @@ async function sendMessage() {
     }
     
     const messageText = messageInput.value.trim();
-    const imageFile = imageUpload.files[0];
+    const imageFile = window.pendingImageFile || imageUpload.files[0];
+    
+    // Clear the pending image
+    if (window.pendingImageFile) {
+        window.pendingImageFile = null;
+    }
     
     if (!messageText && !imageFile) return;
     
@@ -3286,48 +3292,9 @@ async function handleImageUpload(e) {
         return;
     }
     
-    // Disable send button during upload
-    if (sendMessageBtn) {
-        sendMessageBtn.disabled = true;
-        if (window.innerWidth <= 768) {
-            sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        } else {
-            sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-        }
-    }
-    
-    try {
-        // Pass the File object directly - the upload function will handle it
-        const result = await sendMessageToDB('', file, appState.replyingTo);
-        
-        if (result && result.success) {
-            console.log('✅ Image sent successfully');
-            imageUpload.value = '';
-            
-            // Clear reply if any
-            if (appState.replyingTo) {
-                appState.replyingTo = null;
-                if (window.ChatModule && window.ChatModule.closeMessageActions) {
-                    window.ChatModule.closeMessageActions();
-                }
-            }
-        } else {
-            throw new Error("Failed to send image");
-        }
-    } catch (error) {
-        console.error("❌ Error sending image:", error);
-        alert("Failed to send image: " + error.message);
-    } finally {
-        // Re-enable send button
-        if (sendMessageBtn) {
-            sendMessageBtn.disabled = false;
-            if (window.innerWidth <= 768) {
-                sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
-            } else {
-                sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
-            }
-        }
-    }
+    window.pendingImageFile = file;
+    await sendMessage();
+    imageUpload.value = '';
 }
 
 function toggleEmojiPicker() {
