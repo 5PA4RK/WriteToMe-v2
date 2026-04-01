@@ -2291,14 +2291,14 @@ async function sendMessage() {
                 id: result.data.id,
                 sender: appState.userName,
                 text: originalMessageText,
-                image: finalImageUrl || result.data.image_url,
+                image: finalImageUrl || result.data.image_url, // Use the final URL
                 time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                 type: 'sent',
                 reply_to: replyToId
             };
             
-            console.log('📝 Displaying real message:', realMessage);
-            console.log('Real message image URL:', realMessage.image);
+            console.log('📝 Real message image URL:', realMessage.image);
+            console.log('📝 Real message image URL length:', realMessage.image?.length);
             
             if (window.ChatModule && window.ChatModule.displayMessage) {
                 window.ChatModule.displayMessage(realMessage);
