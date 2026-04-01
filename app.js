@@ -2174,7 +2174,6 @@ function checkAndReconnectSubscriptions() {
 // ============================================
 // ENHANCED CHAT FUNCTIONS
 // ============================================
-// REPLACE the existing sendMessage function in app.js with this
 async function sendMessage() {
     console.log('🔵 sendMessage called');
     
@@ -2228,6 +2227,7 @@ async function sendMessage() {
     let localPreviewUrl = null;
     if (imageFile) {
         localPreviewUrl = URL.createObjectURL(imageFile);
+        console.log('📸 Created local preview URL:', localPreviewUrl);
     }
     
     // Create and display optimistic message
@@ -2239,13 +2239,17 @@ async function sendMessage() {
         time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
         type: 'sent',
         is_optimistic: true,
-        reply_to: replyToId,
-        is_uploading: !!imageFile
+        reply_to: replyToId
     };
+    
+    console.log('📝 Displaying optimistic message:', optimisticMessage);
     
     // Display optimistic message
     if (window.ChatModule && window.ChatModule.displayMessage) {
         window.ChatModule.displayMessage(optimisticMessage);
+        console.log('✅ Optimistic message displayed');
+    } else {
+        console.error('❌ ChatModule.displayMessage not available');
     }
     forceScrollToBottom('smooth', 50);
     
@@ -2254,27 +2258,32 @@ async function sendMessage() {
         
         // Upload image if present
         if (imageFile) {
-            console.log('📸 Uploading image...');
+            console.log('📸 Uploading image to storage...');
             finalImageUrl = await uploadImageToStorage(imageFile);
-            console.log('✅ Image uploaded:', finalImageUrl);
+            console.log('✅ Image uploaded, final URL:', finalImageUrl);
+            console.log('URL length:', finalImageUrl.length);
         }
         
         // Send to database
         const result = await sendMessageToDB(originalMessageText, finalImageUrl, replyToId);
         
         if (result && result.success) {
-            console.log('✅ Message saved, ID:', result.data.id);
+            console.log('✅ Message saved to DB, ID:', result.data.id);
+            console.log('DB returned image_url:', result.data.image_url);
             
             // Remove the optimistic message
             const optimisticElement = document.getElementById(`msg-${tempId}`);
             if (optimisticElement) {
                 optimisticElement.remove();
-                console.log('Removed optimistic message:', tempId);
+                console.log('🗑️ Removed optimistic message:', tempId);
+            } else {
+                console.log('⚠️ Optimistic message not found:', tempId);
             }
             
             // Revoke the object URL to free memory
             if (localPreviewUrl) {
                 URL.revokeObjectURL(localPreviewUrl);
+                console.log('🔄 Revoked local preview URL');
             }
             
             // Add the real message
@@ -2282,19 +2291,39 @@ async function sendMessage() {
                 id: result.data.id,
                 sender: appState.userName,
                 text: originalMessageText,
-                image: finalImageUrl,
+                image: finalImageUrl || result.data.image_url,
                 time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                 type: 'sent',
                 reply_to: replyToId
             };
             
+            console.log('📝 Displaying real message:', realMessage);
+            console.log('Real message image URL:', realMessage.image);
+            
             if (window.ChatModule && window.ChatModule.displayMessage) {
                 window.ChatModule.displayMessage(realMessage);
-                console.log('Displayed real message:', result.data.id);
+                console.log('✅ Real message displayed');
             }
             forceScrollToBottom('smooth', 50);
+            
+            // Verify the message actually appears in DOM
+            setTimeout(() => {
+                const realElement = document.getElementById(`msg-${result.data.id}`);
+                if (realElement) {
+                    console.log('✅ Real message found in DOM:', result.data.id);
+                    const img = realElement.querySelector('.message-image');
+                    if (img) {
+                        console.log('✅ Image element found, src:', img.src);
+                    } else if (realMessage.image) {
+                        console.error('❌ Image element NOT found in DOM even though message has image!');
+                    }
+                } else {
+                    console.error('❌ Real message NOT found in DOM after display!');
+                }
+            }, 100);
+            
         } else {
-            console.error('Failed to send message');
+            console.error('❌ Failed to send message');
             showSendError(originalMessageText);
             
             // Remove the failed optimistic message
@@ -2310,7 +2339,7 @@ async function sendMessage() {
             }
         }
     } catch (error) {
-        console.error('Error in sendMessage:', error);
+        console.error('❌ Error in sendMessage:', error);
         showSendError(originalMessageText);
         
         // Remove the failed optimistic message
