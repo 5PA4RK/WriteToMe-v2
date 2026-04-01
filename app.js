@@ -2362,6 +2362,26 @@ async function sendMessage() {
             chatMessages.appendChild(realDiv);
             console.log('✅ Real message appended to DOM');
             
+            // ADD THIS VERIFICATION CODE RIGHT HERE
+            console.log('Real message ID:', result.data.id);
+            console.log('Real message image URL:', finalImageUrlForDisplay);
+            
+            // Force scroll and verify DOM
+            setTimeout(() => {
+                const checkElement = document.getElementById(`msg-${result.data.id}`);
+                if (checkElement) {
+                    console.log('✅ Verification: Message element found in DOM');
+                    const img = checkElement.querySelector('.message-image');
+                    if (img) {
+                        console.log('✅ Verification: Image found, src:', img.src);
+                    } else {
+                        console.log('❌ Verification: No image element found');
+                    }
+                } else {
+                    console.log('❌ Verification: Message element NOT found in DOM');
+                }
+            }, 200);
+            
             // Add to appState.messages
             appState.messages.push({
                 id: result.data.id,
