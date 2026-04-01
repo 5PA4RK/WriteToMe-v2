@@ -96,41 +96,55 @@ if (message.image && message.image.trim() !== '') {
             messageContent += getReplyQuoteHtml(message.reply_to, message);
         }
         
-        // Process message text for media embeds
-        if (message.text && message.text.trim()) {
-            const escapedText = escapeHtml(message.text);
-            const mediaEmbed = createMediaEmbed(message.text);
+    // Process message text for media embeds
+    if (message.text && message.text.trim()) {
+        const escapedText = escapeHtml(message.text);
+        const mediaEmbed = createMediaEmbed(message.text);
+        
+        if (mediaEmbed) {
+            const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
+            const dirAttr = hasArabic ? ' dir="auto"' : '';
             
-            if (mediaEmbed) {
-                const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
-                const dirAttr = hasArabic ? ' dir="auto"' : '';
-                
-                const textWithoutUrl = message.text.replace(mediaEmbed.url, '').trim();
-                
-                if (textWithoutUrl) {
-                    const textWithBreaks = escapeHtml(textWithoutUrl).replace(/\n/g, '<br>');
-                    messageContent += `<div class="message-text"${dirAttr}>${textWithBreaks}</div>`;
-                }
-                
-                messageContent += mediaEmbed.embedHtml;
-                messageContent += `<div class="media-link-reference"><i class="fas fa-link"></i> <a href="${mediaEmbed.url}" target="_blank">${mediaEmbed.url.substring(0, 50)}${mediaEmbed.url.length > 50 ? '...' : ''}</a></div>`;
-            } else {
-                const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
-                const dirAttr = hasArabic ? ' dir="auto"' : '';
-                const textWithBreaks = escapedText.replace(/\n/g, '<br>');
+            const textWithoutUrl = message.text.replace(mediaEmbed.url, '').trim();
+            
+            if (textWithoutUrl) {
+                const textWithBreaks = escapeHtml(textWithoutUrl).replace(/\n/g, '<br>');
                 messageContent += `<div class="message-text"${dirAttr}>${textWithBreaks}</div>`;
             }
+            
+            messageContent += mediaEmbed.embedHtml;
+            messageContent += `<div class="media-link-reference"><i class="fas fa-link"></i> <a href="${mediaEmbed.url}" target="_blank">${mediaEmbed.url.substring(0, 50)}${mediaEmbed.url.length > 50 ? '...' : ''}</a></div>`;
+        } else {
+            const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message.text);
+            const dirAttr = hasArabic ? ' dir="auto"' : '';
+            const textWithBreaks = escapedText.replace(/\n/g, '<br>');
+            messageContent += `<div class="message-text"${dirAttr}>${textWithBreaks}</div>`;
         }
-        
-// Add image if present (uploaded file)
-if (message.image && message.image.trim() !== '') {
-    console.log('🎨 Rendering image in message:', message.id);
-    console.log('🎨 Image URL:', message.image);
-    messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')" loading="lazy">`;
-}
-        
-        // Add reactions section
-        const reactionsHtml = `<div class="message-reactions"></div>`;
+    }
+    
+    // ========== ADD DEBUG LOGS HERE ==========
+    console.log('🔍 [CHAT.JS] Message object:', {
+        id: message.id,
+        sender: message.sender,
+        hasImage: !!message.image,
+        imageValue: message.image ? message.image.substring(0, 100) : 'null',
+        imageType: typeof message.image,
+        imageLength: message.image?.length,
+        isOptimistic: message.is_optimistic
+    });
+    
+    // Add image if present (uploaded file)
+    if (message.image && message.image.trim() !== '') {
+        console.log('🎨 [CHAT.JS] Rendering image in message:', message.id);
+        console.log('🎨 [CHAT.JS] Full Image URL:', message.image);
+        messageContent += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')" loading="lazy">`;
+    } else {
+        console.log('⚠️ [CHAT.JS] No image to render for message:', message.id, 'image value:', message.image);
+    }
+    // ========== END DEBUG LOGS ==========
+    
+    // Add reactions section
+    const reactionsHtml = `<div class="message-reactions"></div>`;
         
         // Add action button (only for non-optimistic messages)
         const actionButton = message.is_optimistic ? '' : `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
