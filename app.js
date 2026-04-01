@@ -2175,7 +2175,7 @@ function checkAndReconnectSubscriptions() {
 // ENHANCED CHAT FUNCTIONS
 // ============================================
 async function sendMessage() {
-    console.log('🔵 sendMessage called');
+    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 2.0 - DIRECT DOM 🔵🔵🔵🔵🔵');
     
     if (isSendingMessage) {
         console.log('Already sending, skipping');
