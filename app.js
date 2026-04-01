@@ -2176,7 +2176,7 @@ function checkAndReconnectSubscriptions() {
 // ENHANCED CHAT FUNCTIONS
 // ============================================
 async function sendMessage() {
-    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 3.0 - DIRECT DOM 🔵🔵🔵🔵🔵');
+    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 2.0 - DIRECT DOM 🔵🔵🔵🔵🔵');
     
     if (isSendingMessage) {
         console.log('Already sending, skipping');
@@ -2635,9 +2635,14 @@ async function compressImage(dataUrl) {
     });
 }
 // REPLACE the existing sendMessageToDB function with this one
-async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
-    console.log('💾 sendMessageToDB called at:', new Date().toISOString());
-    console.log('Image type:', imageFileOrUrl instanceof File ? 'File object' : typeof imageFileOrUrl);
+async function sendMessageToDB(text, imageInput, replyToId = null) {
+    console.log('💾 sendMessageToDB called');
+    console.log('Image input type:', typeof imageInput);
+    console.log('Is File?', imageInput instanceof File);
+    console.log('Is string?', typeof imageInput === 'string');
+    if (typeof imageInput === 'string') {
+        console.log('String starts with:', imageInput.substring(0, 50));
+    }
     
     try {
         const finalReplyToId = replyToId || window.__tempReplyTo || appState.replyingTo;
@@ -2647,24 +2652,27 @@ async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
         
         let finalImageUrl = null;
         
-        // Handle image - could be File object, base64 string, URL, or null
-        if (imageFileOrUrl) {
-            if (imageFileOrUrl instanceof File) {
-                // It's a file object - upload to storage
-                console.log('📸 Uploading image file to storage...');
-                finalImageUrl = await uploadImageToStorage(imageFileOrUrl);
-            } else if (typeof imageFileOrUrl === 'string' && imageFileOrUrl.startsWith('data:image')) {
-                // It's a base64 string - compress and use
-                console.log('📸 Compressing base64 image...');
-                finalImageUrl = await compressImage(imageFileOrUrl);
-            } else if (typeof imageFileOrUrl === 'string' && imageFileOrUrl.startsWith('http')) {
-                // It's already a URL
-                console.log('📸 Using existing URL...');
-                finalImageUrl = imageFileOrUrl;
+        // Handle different types of image input
+        if (imageInput) {
+            if (imageInput instanceof File) {
+                // It's a File object - upload to storage
+                console.log('📸 Uploading File object to storage...');
+                finalImageUrl = await uploadImageToStorage(imageInput);
+            } else if (typeof imageInput === 'string') {
+                if (imageInput.startsWith('data:image')) {
+                    // It's a base64 string
+                    console.log('📸 Compressing base64 image...');
+                    finalImageUrl = await compressImage(imageInput);
+                } else if (imageInput.startsWith('http')) {
+                    // It's already a URL
+                    console.log('📸 Using existing URL...');
+                    finalImageUrl = imageInput;
+                } else {
+                    console.log('⚠️ Unknown string type:', imageInput.substring(0, 50));
+                }
             }
         }
         
-        // Create message data - DON'T include reply_to if it's null or empty
         const messageData = {
             session_id: appState.currentSessionId,
             sender_id: appState.userId,
@@ -2673,14 +2681,15 @@ async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
             created_at: new Date().toISOString()
         };
         
-        // Only add reply_to if it exists and is valid
         if (finalReplyToId && finalReplyToId !== 'null' && finalReplyToId !== 'undefined') {
             messageData.reply_to = finalReplyToId;
         }
         
         if (finalImageUrl && finalImageUrl.trim() !== '') {
             messageData.image_url = finalImageUrl;
-            console.log('📸 Added image URL to message');
+            console.log('📸 Added image URL to message:', finalImageUrl);
+        } else {
+            console.log('⚠️ No image URL to add');
         }
         
         const { data, error } = await supabaseClient
@@ -2695,6 +2704,7 @@ async function sendMessageToDB(text, imageFileOrUrl, replyToId = null) {
         }
         
         console.log('✅ Message saved to DB. ID:', data.id);
+        console.log('✅ Image URL in DB:', data.image_url);
         
         return { success: true, data };
     } catch (error) {
