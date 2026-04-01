@@ -717,7 +717,8 @@ async function editMessage(messageId) {
         alert('Cannot edit message: Database connection not initialized');
         return;
     }
-    
+    const realId = window._messageIdMap ? window._messageIdMap[messageId] : null;
+    const finalId = realId || messageId;
     const messageElement = document.getElementById(`msg-${messageId}`);
     if (!messageElement) {
         console.error('Message element not found');
