@@ -2176,8 +2176,7 @@ function checkAndReconnectSubscriptions() {
 // ENHANCED CHAT FUNCTIONS
 // ============================================
 async function sendMessage() {
-    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 4.0 - DIRECT DOM 🔵🔵🔵🔵🔵');
-    
+    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 5.0 - DIRECT DOM 🔵🔵🔵🔵🔵');
     
     if (isSendingMessage) {
         console.log('Already sending, skipping');
@@ -2301,52 +2300,42 @@ async function sendMessage() {
         if (result && result.success) {
             console.log('✅ Message saved to DB, ID:', result.data.id);
             
-            // Remove the optimistic message
-            if (optimisticDiv && optimisticDiv.parentNode) {
-                optimisticDiv.remove();
-                console.log('🗑️ Removed optimistic message');
-            }
-            
-            // Revoke the object URL to free memory
-            if (localPreviewUrl) {
-                URL.revokeObjectURL(localPreviewUrl);
-                console.log('🔄 Revoked local preview URL');
-            }
-            
-            // ========== REAL MESSAGE DISPLAY - DIRECT DOM MANIPULATION ==========
+            // ========== UPDATE OPTIMISTIC TO REAL MESSAGE ==========
             const finalImageUrlForDisplay = finalImageUrl || result.data.image_url;
-            console.log('📝 Creating real message with image:', finalImageUrlForDisplay);
+            console.log('📝 Updating optimistic message to real with image:', finalImageUrlForDisplay);
             
-            const realDiv = document.createElement('div');
-            realDiv.className = 'message sent';
-            realDiv.id = `msg-${result.data.id}`;
-            
-            let realContent = '';
-            
-            // Add text if present
-            if (originalMessageText && originalMessageText.trim()) {
-                const escapedText = escapeHtml(originalMessageText);
-                const textWithBreaks = escapedText.replace(/\n/g, '<br>');
-                realContent += `<div class="message-text">${textWithBreaks}</div>`;
-            }
-            
-            // Add image if present
-            if (finalImageUrlForDisplay && finalImageUrlForDisplay.trim() !== '') {
-                console.log('🎨 Adding image to real message:', finalImageUrlForDisplay);
-                realContent += `<img src="${finalImageUrlForDisplay}" class="message-image" style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;" onclick="window.showFullImage('${finalImageUrlForDisplay}')" loading="lazy" onerror="console.error('Image load error:', this.src); this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\\'image-error\\'><i class=\\'fas fa-image-slash\\'></i> Image failed to load</div>');">`;
-            }
-            
-            realDiv.innerHTML = `
-                <div class="message-sender">${escapeHtml(appState.userName)}</div>
-                <div class="message-content">
-                    ${realContent}
-                    <div class="message-reactions"></div>
-                    <div class="message-footer">
-                        <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                        <button class="message-action-dots" onclick="window.toggleMessageActions('${result.data.id}', this)"><i class="fas fa-ellipsis-v"></i></button>
-                    </div>
-                </div>
-                <div class="message-actions-menu" id="actions-${result.data.id}" style="display: none;">
+            // Update the existing optimistic message instead of removing and adding new
+            if (optimisticDiv && optimisticDiv.parentNode) {
+                // Update the ID
+                optimisticDiv.id = `msg-${result.data.id}`;
+                
+                // Update the image source if it exists
+                if (finalImageUrlForDisplay && optimisticDiv.querySelector('.message-image')) {
+                    const imgElement = optimisticDiv.querySelector('.message-image');
+                    imgElement.src = finalImageUrlForDisplay;
+                    console.log('🖼️ Updated image src to:', finalImageUrlForDisplay);
+                }
+                
+                // Remove optimistic class and style
+                optimisticDiv.classList.remove('optimistic');
+                optimisticDiv.style.opacity = '1';
+                
+                // Update action button
+                const footer = optimisticDiv.querySelector('.message-footer');
+                if (footer) {
+                    const actionButton = document.createElement('button');
+                    actionButton.className = 'message-action-dots';
+                    actionButton.setAttribute('onclick', `window.toggleMessageActions('${result.data.id}', this)`);
+                    actionButton.innerHTML = '<i class="fas fa-ellipsis-v"></i>';
+                    footer.appendChild(actionButton);
+                }
+                
+                // Add actions menu
+                const actionsMenuDiv = document.createElement('div');
+                actionsMenuDiv.className = 'message-actions-menu';
+                actionsMenuDiv.id = `actions-${result.data.id}`;
+                actionsMenuDiv.style.display = 'none';
+                actionsMenuDiv.innerHTML = `
                     <button onclick="window.editMessage('${result.data.id}')"><i class="fas fa-edit"></i> Edit</button>
                     <button onclick="window.deleteMessage('${result.data.id}')"><i class="fas fa-trash"></i> Delete</button>
                     <div class="menu-divider"></div>
@@ -2362,31 +2351,17 @@ async function sendMessage() {
                             ).join('')}
                         </div>
                     </div>
-                </div>
-            `;
+                `;
+                optimisticDiv.appendChild(actionsMenuDiv);
+                
+                console.log('✅ Updated optimistic message to real message');
+            }
             
-            chatMessages.appendChild(realDiv);
-            console.log('✅ Real message appended to DOM');
-            
-            // ADD THIS VERIFICATION CODE RIGHT HERE
-            console.log('Real message ID:', result.data.id);
-            console.log('Real message image URL:', finalImageUrlForDisplay);
-            
-            // Force scroll and verify DOM
-            setTimeout(() => {
-                const checkElement = document.getElementById(`msg-${result.data.id}`);
-                if (checkElement) {
-                    console.log('✅ Verification: Message element found in DOM');
-                    const img = checkElement.querySelector('.message-image');
-                    if (img) {
-                        console.log('✅ Verification: Image found, src:', img.src);
-                    } else {
-                        console.log('❌ Verification: No image element found');
-                    }
-                } else {
-                    console.log('❌ Verification: Message element NOT found in DOM');
-                }
-            }, 200);
+            // Revoke the object URL to free memory
+            if (localPreviewUrl) {
+                URL.revokeObjectURL(localPreviewUrl);
+                console.log('🔄 Revoked local preview URL');
+            }
             
             // Add to appState.messages
             appState.messages.push({
@@ -2400,7 +2375,7 @@ async function sendMessage() {
             });
             
             forceScrollToBottom('smooth', 50);
-            // ========== END REAL MESSAGE DISPLAY ==========
+            // ========== END REAL MESSAGE UPDATE ==========
             
         } else {
             console.error('❌ Failed to send message');
