@@ -42,6 +42,7 @@ const appState = {
 };
 
 // DOM Elements
+const reactionEmojis = ["👍", "❤️", "😂", "😮", "😢", "😡"];
 const connectionModal = document.getElementById('connectionModal');
 const connectBtn = document.getElementById('connectBtn');
 const passwordError = document.getElementById('passwordError');
