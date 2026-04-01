@@ -1,4 +1,3 @@
-// Add this at the top of app.js with other global variables
 let isSendingMessage = false;
 let pendingImageUpload = null;
 let imageUploadTimeout = null;
@@ -22,7 +21,7 @@ const appState = {
     typingTimeout: null,
     realtimeSubscription: null,
     typingSubscription: null,
-    reactionsSubscription: null,  // ADD THIS LINE
+    reactionsSubscription: null,
     pendingSubscription: null,
     soundEnabled: true,
     isViewingHistory: false,
@@ -146,7 +145,7 @@ const replyToContent = document.getElementById('replyToContent');
 const replyInput = document.getElementById('replyInput');
 const sendReplyBtn = document.getElementById('sendReplyBtn');
 
-// Initialize ChatModule with appState and supabaseClient
+// Initialize ChatModule
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
         if (window.ChatModule) {
@@ -164,104 +163,380 @@ document.addEventListener('DOMContentLoaded', () => {
                 sendReplyBtn: document.getElementById('sendReplyBtn'),
                 closeReplyModal: document.getElementById('closeReplyModal')
             });
-            console.log('ChatModule initialized with appState and supabaseClient');
+            console.log('ChatModule initialized');
         }
     }, 100);
 });
 
 // ============================================
-// INITIALIZATION
+// SEND MESSAGE - COMPLETE VERSION
 // ============================================
-
-async function initApp() {
-    console.log("🚀 Initializing Enhanced WriteToMira App...");
+async function sendMessage() {
+    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE - COMPLETE VERSION 🔵🔵🔵🔵🔵');
     
-    const mainContainer = document.querySelector('.main-container') || document.querySelector('.app-container');
-    if (mainContainer) {
-        mainContainer.style.display = 'none';
+    if (isSendingMessage) {
+        console.log('Already sending, skipping');
+        return;
     }
-
-    function initAudio() {
-        if (!window.audioContext) {
-            window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            console.log('✅ Audio context initialized');
-        }
-        if (window.audioContext.state === 'suspended') {
-            window.audioContext.resume();
-        }
+    
+    if (!appState.isConnected || appState.isViewingHistory) {
+        alert("You cannot send messages right now.");
+        return;
     }
-
-    setupMobileHeaderScroll();
-
-    document.addEventListener('click', initAudio, { once: true });
-    document.addEventListener('keydown', initAudio, { once: true });
-    document.addEventListener('touchstart', initAudio, { once: true });
     
-    document.body.classList.remove('host-mode');
+    const messageText = messageInput.value.trim();
+    const imageFile = window.pendingImageFile || imageUpload.files[0];
     
-    const savedSession = localStorage.getItem('writeToMe_session');
-    if (savedSession) {
-        try {
-            const sessionData = JSON.parse(savedSession);
-            appState.isHost = sessionData.isHost;
-            appState.userName = sessionData.userName;
-            appState.userId = sessionData.userId;
-            appState.sessionId = sessionData.sessionId;
-            appState.soundEnabled = sessionData.soundEnabled !== false;
+    if (window.pendingImageFile) {
+        window.pendingImageFile = null;
+    }
+    
+    if (!messageText && !imageFile) return;
+    
+    isSendingMessage = true;
+    
+    if (sendMessageBtn) {
+        sendMessageBtn.disabled = true;
+        sendMessageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+    }
+    
+    const replyToId = window.__tempReplyTo || appState.replyingTo;
+    const replyToImage = window.__tempReplyToImage;
+    
+    appState.replyingTo = null;
+    window.__tempReplyTo = null;
+    window.__tempReplyToImage = null;
+    
+    const originalMessageText = messageText;
+    const originalImageFile = imageFile;
+    
+    messageInput.value = '';
+    messageInput.style.height = 'auto';
+    
+    if (imageFile) {
+        imageUpload.value = '';
+    }
+    
+    const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    
+    let localPreviewUrl = null;
+    if (imageFile) {
+        localPreviewUrl = URL.createObjectURL(imageFile);
+        console.log('📸 Created local preview URL:', localPreviewUrl);
+    }
+    
+    // ========== CREATE OPTIMISTIC MESSAGE ==========
+    console.log('📝 Creating optimistic message');
+    
+    const optimisticDiv = document.createElement('div');
+    optimisticDiv.className = 'message sent';
+    optimisticDiv.id = `msg-${tempId}`;
+    
+    let optimisticContent = '';
+    
+    if (originalMessageText && originalMessageText.trim()) {
+        optimisticContent += `<div class="message-text">${escapeHtml(originalMessageText)}</div>`;
+    }
+    
+    if (localPreviewUrl) {
+        optimisticContent += `<img src="${localPreviewUrl}" class="message-image" style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;" onclick="window.showFullImage('${localPreviewUrl}')" loading="lazy">`;
+    }
+    
+    optimisticDiv.innerHTML = `
+        <div class="message-sender">${escapeHtml(appState.userName)}</div>
+        <div class="message-content">
+            ${optimisticContent}
+            <div class="message-reactions"></div>
+            <div class="message-footer">
+                <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                <button class="message-action-dots" onclick="window.toggleMessageActions('${tempId}', this)"><i class="fas fa-ellipsis-v"></i></button>
+            </div>
+        </div>
+        <div class="message-actions-menu" id="actions-${tempId}" style="display: none;">
+            <button onclick="window.editMessage('${tempId}')"><i class="fas fa-edit"></i> Edit</button>
+            <button onclick="window.deleteMessage('${tempId}')"><i class="fas fa-trash"></i> Delete</button>
+            <div class="menu-divider"></div>
+            <button class="reply-btn" data-message-id="${tempId}" data-sender="${escapeHtml(appState.userName)}" data-message-text="${escapeHtml(originalMessageText)}">
+                <i class="fas fa-reply"></i> Reply
+            </button>
+            <div class="menu-divider"></div>
+            <div class="reaction-section">
+                <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+                <div class="reaction-quick-picker">
+                    ${reactionEmojis.map(emoji => 
+                        `<button class="reaction-emoji-btn" onclick="window.addReaction('${tempId}', '${emoji}')">${emoji}</button>`
+                    ).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    chatMessages.appendChild(optimisticDiv);
+    console.log('✅ Optimistic message displayed');
+    forceScrollToBottom('smooth', 50);
+    
+    try {
+        let finalImageUrl = null;
+        
+        if (imageFile) {
+            console.log('📸 Uploading image...');
+            finalImageUrl = await uploadImageToStorage(imageFile);
+            console.log('✅ Image uploaded:', finalImageUrl);
+        }
+        
+        const result = await sendMessageToDB(originalMessageText, finalImageUrl, replyToId);
+        
+        if (result && result.success) {
+            console.log('✅ Message saved to DB, ID:', result.data.id);
             
-            console.log("🔄 Attempting to reconnect to saved session...");
+            // Store ID mapping
+            if (!window._messageIdMap) window._messageIdMap = {};
+            window._messageIdMap[tempId] = result.data.id;
             
-            if (await reconnectToSession()) {
-                appState.isConnected = true;
-                if (appState.isHost) {
-                    document.body.classList.add('host-mode');
+            // Update optimistic message to real message
+            const msgElement = document.getElementById(`msg-${tempId}`);
+            if (msgElement) {
+                msgElement.id = `msg-${result.data.id}`;
+                
+                // Update action button
+                const actionBtn = msgElement.querySelector('.message-action-dots');
+                if (actionBtn) {
+                    actionBtn.setAttribute('onclick', `window.toggleMessageActions('${result.data.id}', this)`);
                 }
-                hideConnectionModal();
-                updateUIAfterConnection();
-                console.log("✅ Successfully reconnected!");
-            } else {
-                console.log("❌ Failed to reconnect, clearing session");
-                localStorage.removeItem('writeToMe_session');
-                showConnectionModal();
+                
+                // Update actions menu
+                const actionsMenu = document.getElementById(`actions-${tempId}`);
+                if (actionsMenu) {
+                    actionsMenu.id = `actions-${result.data.id}`;
+                    
+                    const editBtn = actionsMenu.querySelector(`button[onclick*="editMessage('${tempId}')"]`);
+                    if (editBtn) editBtn.setAttribute('onclick', `window.editMessage('${result.data.id}')`);
+                    
+                    const deleteBtn = actionsMenu.querySelector(`button[onclick*="deleteMessage('${tempId}')"]`);
+                    if (deleteBtn) deleteBtn.setAttribute('onclick', `window.deleteMessage('${result.data.id}')`);
+                    
+                    const replyBtn = actionsMenu.querySelector('.reply-btn');
+                    if (replyBtn) replyBtn.setAttribute('data-message-id', result.data.id);
+                    
+                    actionsMenu.querySelectorAll('.reaction-emoji-btn').forEach(btn => {
+                        const onclick = btn.getAttribute('onclick');
+                        if (onclick && onclick.includes(tempId)) {
+                            btn.setAttribute('onclick', onclick.replace(tempId, result.data.id));
+                        }
+                    });
+                }
             }
-        } catch (e) {
-            console.error("Error parsing saved session:", e);
-            localStorage.removeItem('writeToMe_session');
-            showConnectionModal();
+            
+            if (localPreviewUrl) {
+                URL.revokeObjectURL(localPreviewUrl);
+            }
+            
+            // Add to appState.messages with reply image
+            appState.messages.push({
+                id: result.data.id,
+                sender: appState.userName,
+                text: originalMessageText,
+                image: finalImageUrl || localPreviewUrl,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: 'sent',
+                reply_to: replyToId,
+                reply_to_image: replyToImage, // IMPORTANT: Store the replied-to image
+                _realImageUrl: finalImageUrl
+            });
+            
+            console.log('✅ Message saved with reply_to_image:', replyToImage);
+            
+        } else {
+            console.error('❌ Failed to send message');
+            showSendError(originalMessageText);
+            if (optimisticDiv.parentNode) optimisticDiv.remove();
+            if (originalMessageText) messageInput.value = originalMessageText;
         }
-    } else {
-        showConnectionModal();
+    } catch (error) {
+        console.error('❌ Error:', error);
+        showSendError(originalMessageText);
+        if (optimisticDiv.parentNode) optimisticDiv.remove();
+        if (originalMessageText) messageInput.value = originalMessageText;
+    } finally {
+        isSendingMessage = false;
+        if (sendMessageBtn) {
+            sendMessageBtn.disabled = false;
+            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+        }
     }
-
-    updateSoundControl();
-    setupEventListeners();
-    setupUserManagementListeners();
-    populateEmojis();
-    
-    if (appState.isHost || savedSession) {
-        await loadAllSessions();
-        loadChatSessions();
-    }
-    
-    setInterval(checkAndReconnectSubscriptions, 15000);
 }
 
 // ============================================
-// SCROLL TO BOTTOM HELPER
+// SEND MESSAGE TO DATABASE
 // ============================================
-
-function scrollToBottom(behavior = 'smooth', delay = 50) {
-    setTimeout(() => {
-        if (chatMessages && !appState.isViewingHistory) {
-            const isNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 200;
-            if (isNearBottom) {
-                chatMessages.scrollTo({
-                    top: chatMessages.scrollHeight,
-                    behavior: behavior
-                });
+async function sendMessageToDB(text, imageInput, replyToId = null) {
+    console.log('💾 sendMessageToDB called');
+    console.log('replyToId:', replyToId);
+    console.log('replyToImage from global:', window.__tempReplyToImage);
+    
+    try {
+        const finalReplyToId = replyToId || window.__tempReplyTo;
+        
+        let finalImageUrl = null;
+        
+        if (imageInput) {
+            if (imageInput instanceof File) {
+                finalImageUrl = await uploadImageToStorage(imageInput);
+            } else if (typeof imageInput === 'string' && imageInput.startsWith('http')) {
+                finalImageUrl = imageInput;
             }
         }
-    }, delay);
+        
+        const messageData = {
+            session_id: appState.currentSessionId,
+            sender_id: appState.userId,
+            sender_name: appState.userName,
+            message: text || '',
+            created_at: new Date().toISOString()
+        };
+        
+        if (finalReplyToId && finalReplyToId !== 'null' && finalReplyToId !== 'undefined') {
+            messageData.reply_to = finalReplyToId;
+        }
+        
+        if (finalImageUrl && finalImageUrl.trim() !== '') {
+            messageData.image_url = finalImageUrl;
+        }
+        
+        const { data, error } = await supabaseClient
+            .from('messages')
+            .insert([messageData])
+            .select()
+            .single();
+        
+        if (error) throw error;
+        
+        console.log('✅ Message saved to DB. ID:', data.id);
+        
+        return { success: true, data };
+    } catch (error) {
+        console.error("❌ Error:", error);
+        alert("Failed to send message: " + error.message);
+        return null;
+    }
+}
+
+// ============================================
+// IMAGE UPLOAD
+// ============================================
+async function uploadImageToStorage(file) {
+    try {
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        const extension = file.name.split('.').pop().toLowerCase();
+        const fileName = `${timestamp}_${random}.${extension}`;
+        const filePath = `chat_images/${fileName}`;
+        
+        const { data, error } = await supabaseClient.storage
+            .from('chat-images')
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: file.type
+            });
+        
+        if (error) throw error;
+        
+        const { data: { publicUrl } } = supabaseClient.storage
+            .from('chat-images')
+            .getPublicUrl(filePath);
+        
+        return publicUrl;
+    } catch (error) {
+        console.error("❌ Upload error:", error);
+        return await convertImageToBase64(file);
+    }
+}
+
+// ============================================
+// IMAGE UPLOAD FALLBACK
+// ============================================
+function convertImageToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                const maxSize = 800;
+                
+                if (width > height && width > maxSize) {
+                    height = (height * maxSize) / width;
+                    width = maxSize;
+                } else if (height > maxSize) {
+                    width = (width * maxSize) / height;
+                    height = maxSize;
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                resolve(canvas.toDataURL('image/jpeg', 0.7));
+            };
+            img.onerror = () => resolve(e.target.result);
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+// ============================================
+// HANDLE IMAGE UPLOAD BUTTON
+// ============================================
+async function handleImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    if (file.size > 5 * 1024 * 1024) {
+        alert("❌ Image size should be less than 5MB.");
+        imageUpload.value = '';
+        return;
+    }
+    
+    if (!file.type.startsWith('image/')) {
+        alert("❌ Please select an image file.");
+        imageUpload.value = '';
+        return;
+    }
+    
+    window.pendingImageFile = file;
+    await sendMessage();
+    imageUpload.value = '';
+}
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showSendError(originalText) {
+    const errorMsg = document.createElement('div');
+    errorMsg.className = 'message received';
+    errorMsg.innerHTML = `
+        <div class="message-sender">System</div>
+        <div class="message-content">
+            <div class="message-text" style="color: var(--danger);">
+                <i class="fas fa-exclamation-triangle"></i> Failed to send message. Please try again.
+            </div>
+        </div>
+    `;
+    chatMessages.appendChild(errorMsg);
+    forceScrollToBottom('smooth', 100);
 }
 
 function forceScrollToBottom(behavior = 'smooth', delay = 50) {
@@ -275,9 +550,14 @@ function forceScrollToBottom(behavior = 'smooth', delay = 50) {
     }, delay);
 }
 
-// Make scroll functions global
+// ============================================
+// MAKE FUNCTIONS GLOBAL
+// ============================================
+window.sendMessage = sendMessage;
+window.handleImageUpload = handleImageUpload;
 window.forceScrollToBottom = forceScrollToBottom;
-window.scrollToBottom = scrollToBottom;
+window.escapeHtml = escapeHtml;
+window.reactionEmojis = reactionEmojis;
 
 // ============================================
 // MODAL FUNCTIONS
