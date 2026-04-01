@@ -1957,68 +1957,71 @@ function setupRealtimeSubscriptions() {
     // Create a new channel for messages
     const messagesChannel = supabaseClient
         .channel('messages_' + appState.currentSessionId)
-// In the messages INSERT handler, replace the existing code with this:
-on('postgres_changes', {
-    event: 'INSERT',
-    schema: 'public',
-    table: 'messages',
-    filter: `session_id=eq.${appState.currentSessionId}`
-}, async (payload) => {
-    console.log('📦 Realtime message INSERT received:', payload.new?.id, 'from:', payload.new?.sender_name);
-    
-    if (payload.new && payload.new.session_id === appState.currentSessionId) {
-        // Skip if it's the current user's message (we already displayed it manually)
-        if (payload.new.sender_id === appState.userId) {
-            console.log('Skipping own message (already displayed manually)');
-            return;
-        }
-        
-        // Check if message is cleared for guests
-        let shouldDisplay = true;
-        if (!appState.isHost && payload.new.sender_id !== appState.userId) {
-            const { data: cleared } = await supabaseClient
-                .from('cleared_messages')
-                .select('id')
-                .eq('user_id', appState.userId)
-                .eq('message_id', payload.new.id)
-                .maybeSingle();
-            
-            if (cleared) shouldDisplay = false;
-        }
-        
-        if (shouldDisplay) {
-            const existingMsg = document.getElementById(`msg-${payload.new.id}`);
-            if (!existingMsg) {
-                const reactions = await getMessageReactions(payload.new.id);
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages',
+                filter: `session_id=eq.${appState.currentSessionId}`
+            },
+            async (payload) => {
+                console.log('📦 Realtime message INSERT received:', payload.new?.id, 'from:', payload.new?.sender_name);
                 
-                let imageUrl = null;
-                if (payload.new.image_url && payload.new.image_url.trim() !== '') {
-                    imageUrl = payload.new.image_url;
-                }
-                
-                const messageObj = {
-                    id: payload.new.id,
-                    sender: payload.new.sender_name,
-                    text: payload.new.message || '',
-                    image: imageUrl,
-                    time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    type: 'received',
-                    is_historical: false,
-                    reactions: reactions || [],
-                    reply_to: payload.new.reply_to
-                };
-                
-                console.log('Displaying new message from:', messageObj.sender);
-                displayMessage(messageObj);
-                forceScrollToBottom('smooth', 100);
-                
-                if (appState.soundEnabled && window.playNotificationSound) {
-                    window.playNotificationSound();
+                if (payload.new && payload.new.session_id === appState.currentSessionId) {
+                    // Skip if it's the current user's message (we already displayed it manually)
+                    if (payload.new.sender_id === appState.userId) {
+                        console.log('Skipping own message (already displayed manually)');
+                        return;
+                    }
+                    
+                    // Check if message is cleared for guests
+                    let shouldDisplay = true;
+                    if (!appState.isHost && payload.new.sender_id !== appState.userId) {
+                        const { data: cleared } = await supabaseClient
+                            .from('cleared_messages')
+                            .select('id')
+                            .eq('user_id', appState.userId)
+                            .eq('message_id', payload.new.id)
+                            .maybeSingle();
+                        
+                        if (cleared) shouldDisplay = false;
+                    }
+                    
+                    if (shouldDisplay) {
+                        const existingMsg = document.getElementById(`msg-${payload.new.id}`);
+                        if (!existingMsg) {
+                            const reactions = await getMessageReactions(payload.new.id);
+                            
+                            let imageUrl = null;
+                            if (payload.new.image_url && payload.new.image_url.trim() !== '') {
+                                imageUrl = payload.new.image_url;
+                            }
+                            
+                            const messageObj = {
+                                id: payload.new.id,
+                                sender: payload.new.sender_name,
+                                text: payload.new.message || '',
+                                image: imageUrl,
+                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                                type: 'received',
+                                is_historical: false,
+                                reactions: reactions || [],
+                                reply_to: payload.new.reply_to
+                            };
+                            
+                            console.log('Displaying new message from:', messageObj.sender);
+                            displayMessage(messageObj);
+                            forceScrollToBottom('smooth', 100);
+                            
+                            if (appState.soundEnabled && window.playNotificationSound) {
+                                window.playNotificationSound();
+                            }
+                        }
+                    }
                 }
             }
-        }
-    }
-})
+        )
         .on(
             'postgres_changes',
             {
