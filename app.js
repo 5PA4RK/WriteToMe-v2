@@ -2267,62 +2267,88 @@ async function sendMessage() {
         // Send to database
         const result = await sendMessageToDB(originalMessageText, finalImageUrl, replyToId);
         
-        if (result && result.success) {
-            console.log('✅ Message saved to DB, ID:', result.data.id);
-            console.log('DB returned image_url:', result.data.image_url);
-            
-            // Remove the optimistic message
-            const optimisticElement = document.getElementById(`msg-${tempId}`);
-            if (optimisticElement) {
-                optimisticElement.remove();
-                console.log('🗑️ Removed optimistic message:', tempId);
-            } else {
-                console.log('⚠️ Optimistic message not found:', tempId);
+// Add the real message - FIX: Use createMessageElement directly
+if (result && result.success) {
+    console.log('✅ Message saved to DB, ID:', result.data.id);
+    console.log('DB returned image_url:', result.data.image_url);
+    
+    // Remove the optimistic message
+    const optimisticElement = document.getElementById(`msg-${tempId}`);
+    if (optimisticElement) {
+        optimisticElement.remove();
+        console.log('🗑️ Removed optimistic message:', tempId);
+    } else {
+        console.log('⚠️ Optimistic message not found:', tempId);
+    }
+    
+    // Revoke the object URL to free memory
+    if (localPreviewUrl) {
+        URL.revokeObjectURL(localPreviewUrl);
+        console.log('🔄 Revoked local preview URL');
+    }
+    
+    // Create and display the real message directly using createMessageElement
+    const finalImageUrlForDisplay = finalImageUrl || result.data.image_url;
+    
+    console.log('📝 Creating real message with image:', finalImageUrlForDisplay);
+    
+    // Use createMessageElement to create the DOM element directly
+    const realMessageDiv = createMessageElement({
+        id: result.data.id,
+        sender: appState.userName,
+        text: originalMessageText,
+        image: finalImageUrlForDisplay,
+        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        type: 'sent',
+        reply_to: replyToId
+    });
+    
+    // Append directly to chatMessages
+    chatMessages.appendChild(realMessageDiv);
+    console.log('✅ Real message appended to DOM');
+    
+    // Also add to appState.messages
+    appState.messages.push({
+        id: result.data.id,
+        sender: appState.userName,
+        text: originalMessageText,
+        image: finalImageUrlForDisplay,
+        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        type: 'sent',
+        reply_to: replyToId
+    });
+    
+    forceScrollToBottom('smooth', 50);
+    
+    // Verify the message actually appears in DOM
+    setTimeout(() => {
+        const realElement = document.getElementById(`msg-${result.data.id}`);
+        if (realElement) {
+            console.log('✅ Real message found in DOM:', result.data.id);
+            const img = realElement.querySelector('.message-image');
+            if (img) {
+                console.log('✅ Image element found, src:', img.src);
+                console.log('✅ Image natural dimensions:', img.naturalWidth, 'x', img.naturalHeight);
+            } else if (finalImageUrlForDisplay) {
+                console.error('❌ Image element NOT found in DOM even though message has image!');
             }
-            
-            // Revoke the object URL to free memory
-            if (localPreviewUrl) {
-                URL.revokeObjectURL(localPreviewUrl);
-                console.log('🔄 Revoked local preview URL');
-            }
-            
-            // Add the real message
-            const realMessage = {
-                id: result.data.id,
-                sender: appState.userName,
-                text: originalMessageText,
-                image: finalImageUrl, // Make sure this is the actual URL, not null
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                reply_to: replyToId
-            };
-            
-            console.log('📝 Real message image URL:', realMessage.image);
-            console.log('📝 Real message image URL length:', realMessage.image?.length);
-            
-            if (window.ChatModule && window.ChatModule.displayMessage) {
-                window.ChatModule.displayMessage(realMessage);
-                console.log('✅ Real message displayed');
-            }
-            forceScrollToBottom('smooth', 50);
-            
-            // Verify the message actually appears in DOM
-            setTimeout(() => {
-                const realElement = document.getElementById(`msg-${result.data.id}`);
-                if (realElement) {
-                    console.log('✅ Real message found in DOM:', result.data.id);
-                    const img = realElement.querySelector('.message-image');
-                    if (img) {
-                        console.log('✅ Image element found, src:', img.src);
-                    } else if (realMessage.image) {
-                        console.error('❌ Image element NOT found in DOM even though message has image!');
-                    }
-                } else {
-                    console.error('❌ Real message NOT found in DOM after display!');
-                }
-            }, 100);
-            
         } else {
+            console.error('❌ Real message NOT found in DOM after display!');
+            // Fallback: try displayMessage
+            if (window.ChatModule && window.ChatModule.displayMessage) {
+                window.ChatModule.displayMessage({
+                    id: result.data.id,
+                    sender: appState.userName,
+                    text: originalMessageText,
+                    image: finalImageUrlForDisplay,
+                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    type: 'sent',
+                    reply_to: replyToId
+                });
+            }
+        }
+    }, 100);
+} else {
             console.error('❌ Failed to send message');
             showSendError(originalMessageText);
             
