@@ -2291,7 +2291,7 @@ async function sendMessage() {
                 id: result.data.id,
                 sender: appState.userName,
                 text: originalMessageText,
-                image: finalImageUrl || result.data.image_url, // Use the final URL
+                image: finalImageUrl, // Make sure this is the actual URL, not null
                 time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                 type: 'sent',
                 reply_to: replyToId
