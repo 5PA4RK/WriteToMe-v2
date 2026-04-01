@@ -2626,10 +2626,10 @@ async function compressImage(dataUrl) {
 // REPLACE the existing sendMessageToDB function with this one
 async function sendMessageToDB(text, imageInput, replyToId = null) {
     console.log('💾 sendMessageToDB called');
-
-        // Check if this is a reply with an image reference
-        let replyToImage = window.__tempReplyToImage;
-        console.log('Reply to image URL:', replyToImage);
+    
+    // Get the reply image from the global variable
+    let replyToImage = window.__tempReplyToImage;
+    console.log('Reply to image URL:', replyToImage);
 
 
     console.log('Image input type:', typeof imageInput);
