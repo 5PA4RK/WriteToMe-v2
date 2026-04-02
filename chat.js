@@ -492,74 +492,26 @@ async function addReaction(messageId, emoji) {
     }
     
     try {
-        const messageElement = document.getElementById(`msg-${messageId}`);
-        if (!messageElement) {
-            console.error('Message element not found for ID:', messageId);
-            return;
-        }
-        
-        // Get current reactions from the database
-        const { data: reactions, error: fetchError } = await supabaseClient
+        // Check if user already reacted with this emoji
+        const { data: existingReaction, error: fetchError } = await supabaseClient
             .from('message_reactions')
-            .select('*')
-            .eq('message_id', messageId);
+            .select('id')
+            .eq('message_id', messageId)
+            .eq('user_id', appState.userId)
+            .eq('emoji', emoji)
+            .maybeSingle();
         
-        if (fetchError) {
-            console.error('Error fetching reactions:', fetchError);
-        }
-        
-        const userReaction = (reactions || []).find(r => r.user_id === appState.userId);
-        
-        if (userReaction) {
-            if (userReaction.emoji !== emoji) {
-                // Change existing reaction - delete old, add new
-                console.log('Changing reaction from', userReaction.emoji, 'to', emoji);
-                
-                const { error: deleteError } = await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
-                
-                if (deleteError) {
-                    console.error('Error deleting reaction:', deleteError);
-                }
-                
-                const { error: insertError } = await supabaseClient
-                    .from('message_reactions')
-                    .insert([{
-                        message_id: messageId,
-                        user_id: appState.userId,
-                        user_name: appState.userName,
-                        emoji: emoji,
-                        created_at: new Date().toISOString()
-                    }]);
-                
-                if (insertError) {
-                    console.error('Error inserting new reaction:', insertError);
-                    throw insertError;
-                }
-                
-                console.log('✅ Reaction changed successfully');
-            } else {
-                // Remove existing reaction
-                console.log('Removing reaction:', userReaction.emoji);
-                
-                const { error: deleteError } = await supabaseClient
-                    .from('message_reactions')
-                    .delete()
-                    .eq('id', userReaction.id);
-                
-                if (deleteError) {
-                    console.error('Error deleting reaction:', deleteError);
-                    throw deleteError;
-                }
-                
-                console.log('✅ Reaction removed successfully');
-            }
+        if (existingReaction) {
+            // Remove reaction if already exists
+            const { error: deleteError } = await supabaseClient
+                .from('message_reactions')
+                .delete()
+                .eq('id', existingReaction.id);
+            
+            if (deleteError) throw deleteError;
+            console.log('✅ Reaction removed');
         } else {
             // Add new reaction
-            console.log('Adding new reaction:', emoji);
-            
             const { error: insertError } = await supabaseClient
                 .from('message_reactions')
                 .insert([{
@@ -570,15 +522,19 @@ async function addReaction(messageId, emoji) {
                     created_at: new Date().toISOString()
                 }]);
             
-            if (insertError) {
-                console.error('Error inserting reaction:', insertError);
-                throw insertError;
-            }
-            
-            console.log('✅ New reaction added successfully');
+            if (insertError) throw insertError;
+            console.log('✅ Reaction added');
         }
         
-        // The realtime subscription will handle updating the UI
+        // Refresh reactions display
+        const updatedReactions = await getMessageReactions(messageId);
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        if (messageElement) {
+            const reactionsContainer = messageElement.querySelector('.message-reactions');
+            if (reactionsContainer) {
+                renderReactions(reactionsContainer, updatedReactions);
+            }
+        }
         
     } catch (error) {
         console.error("❌ Error adding reaction:", error);
