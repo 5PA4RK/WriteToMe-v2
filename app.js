@@ -2925,7 +2925,6 @@ window.addEventListener('resize', function() {
 // ============================================
 // LOAD CHAT HISTORY
 // ============================================
-
 async function loadChatHistory(sessionId = null, limit = 50) {
     const targetSessionId = sessionId || appState.currentSessionId;
     if (!targetSessionId) {
@@ -2949,7 +2948,7 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             .eq('session_id', targetSessionId)
             .eq('is_deleted', false)
             .order('created_at', { ascending: false })
-            .limit(limit); // Only load last 50 messages initially
+            .limit(limit);
         
         // For guests, filter out cleared messages
         if (!appState.isHost && !sessionId) {
@@ -2969,7 +2968,6 @@ async function loadChatHistory(sessionId = null, limit = 50) {
         
         if (error) {
             console.error('Error loading messages:', error);
-            // Retry with smaller limit if timeout occurs
             if (error.message.includes('timeout')) {
                 console.log('Retrying with smaller limit...');
                 const { data: retryMessages, error: retryError } = await query.limit(30);
@@ -2995,7 +2993,7 @@ async function loadChatHistory(sessionId = null, limit = 50) {
         
         if (sessionId) {
             const { data: session } = await supabaseClient
-                .from('chat_sessions')  // Changed from 'sessions'
+                .from('chat_sessions')
                 .select('created_at, host_name')
                 .eq('session_id', sessionId)
                 .single();
@@ -3046,38 +3044,90 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             reactionsMap.get(reaction.message_id).push(reaction);
         });
         
-// In loadChatHistory function, around line 1600, replace the displayMessage call:
-orderedMessages.forEach((msg) => {
-    const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
-    
-    // Load reply_to image if this message is a reply
-    let replyToImage = null;
-    if (msg.reply_to) {
-        // Find the original message to get its image
-        const originalMsg = orderedMessages.find(m => m.id === msg.reply_to);
-        if (originalMsg && originalMsg.image_url) {
-            replyToImage = originalMsg.image_url;
-        }
-    }
-    
-    if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-        window.ChatModule.displayMessage({
-            id: msg.id,
-            sender: msg.sender_name,
-            text: msg.message,
-            image: msg.image_url,
-            time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-            type: messageType,
-            is_historical: !!sessionId,
-            reactions: reactionsMap.get(msg.id) || [],
-            reply_to: msg.reply_to,
-            reply_to_image: replyToImage  // ADD THIS LINE
-        });
-    }
-});
-        
         // Store loaded messages
         appState.messages = orderedMessages;
+        
+        // Display each message with its reactions
+        orderedMessages.forEach((msg) => {
+            const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
+            
+            // Load reply_to image if this message is a reply
+            let replyToImage = null;
+            if (msg.reply_to) {
+                const originalMsg = orderedMessages.find(m => m.id === msg.reply_to);
+                if (originalMsg && originalMsg.image_url) {
+                    replyToImage = originalMsg.image_url;
+                }
+            }
+            
+            // Use ChatModule.displayMessage to ensure reactions are rendered
+            if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
+                window.ChatModule.displayMessage({
+                    id: msg.id,
+                    sender: msg.sender_name,
+                    text: msg.message,
+                    image: msg.image_url,
+                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    type: messageType,
+                    is_historical: !!sessionId,
+                    reactions: reactionsMap.get(msg.id) || [],  // Pass reactions here
+                    reply_to: msg.reply_to,
+                    reply_to_image: replyToImage
+                });
+            } else {
+                // Fallback: create message directly
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${messageType}`;
+                if (sessionId) messageDiv.classList.add('historical');
+                messageDiv.id = `msg-${msg.id}`;
+                
+                let messageContent = '';
+                if (msg.message && msg.message.trim()) {
+                    messageContent += `<div class="message-text">${escapeHtml(msg.message)}</div>`;
+                }
+                if (msg.image_url) {
+                    messageContent += `<img src="${msg.image_url}" class="message-image" onclick="window.showFullImage('${msg.image_url}')" loading="lazy">`;
+                }
+                
+                messageDiv.innerHTML = `
+                    <div class="message-sender">${escapeHtml(msg.sender_name)}</div>
+                    <div class="message-content">
+                        ${messageContent}
+                        <div class="message-reactions"></div>
+                        <div class="message-footer">
+                            <div class="message-time">${new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                            <button class="message-action-dots" onclick="window.toggleMessageActions('${msg.id}', this)"><i class="fas fa-ellipsis-v"></i></button>
+                        </div>
+                    </div>
+                    <div class="message-actions-menu" id="actions-${msg.id}" style="display: none;">
+                        <button onclick="window.editMessage('${msg.id}')"><i class="fas fa-edit"></i> Edit</button>
+                        <button onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i> Delete</button>
+                        <div class="menu-divider"></div>
+                        <button class="reply-btn" data-message-id="${msg.id}" data-sender="${escapeHtml(msg.sender_name)}" data-message-text="${escapeHtml(msg.message || '')}">
+                            <i class="fas fa-reply"></i> Reply
+                        </button>
+                        <div class="menu-divider"></div>
+                        <div class="reaction-section">
+                            <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+                            <div class="reaction-quick-picker">
+                                ${reactionEmojis.map(emoji => 
+                                    `<button class="reaction-emoji-btn" onclick="window.addReaction('${msg.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                                ).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                chatMessages.appendChild(messageDiv);
+                
+                // Render reactions
+                const reactionsContainer = messageDiv.querySelector('.message-reactions');
+                const msgReactions = reactionsMap.get(msg.id) || [];
+                if (reactionsContainer && msgReactions.length > 0 && window.ChatModule) {
+                    window.ChatModule.renderReactions(reactionsContainer, msgReactions);
+                }
+            }
+        });
         
         if (chatMessages && !sessionId) {
             forceScrollToBottom('auto', 100);
@@ -3085,7 +3135,7 @@ orderedMessages.forEach((msg) => {
             chatMessages.scrollTop = 0;
         }
         
-        console.log('Chat history loaded successfully');
+        console.log('Chat history loaded successfully with reactions');
     } catch (error) {
         console.error("Error loading chat history:", error);
         
