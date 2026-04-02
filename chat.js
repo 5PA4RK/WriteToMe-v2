@@ -372,38 +372,70 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
     }
 
     // Toggle message actions menu
-    function toggleMessageActions(messageId, button) {
-        console.log('Toggle message actions called for message:', messageId);
-        
-        closeMessageActions();
-        
-        const menu = document.getElementById(`actions-${messageId}`);
-        if (menu) {
-            if (menu.classList.contains('show')) {
-                menu.classList.remove('show');
-                menu.style.display = 'none';
-            } else {
-                menu.classList.add('show');
-                menu.style.display = 'block';
-                if (appState) appState.activeMessageActions = messageId;
-                
-                const rect = button.getBoundingClientRect();
-                
-                menu.style.position = 'fixed';
-                menu.style.top = (rect.bottom + 5) + 'px';
-                menu.style.left = rect.left + 'px';
-                menu.style.zIndex = '9999';
-                
-                const menuRect = menu.getBoundingClientRect();
-                if (menuRect.right > window.innerWidth) {
-                    menu.style.left = (window.innerWidth - menuRect.width - 10) + 'px';
-                }
-                if (menuRect.bottom > window.innerHeight) {
-                    menu.style.top = (rect.top - menuRect.height - 5) + 'px';
-                }
+// Replace the existing toggleMessageActions function in chat.js
+function toggleMessageActions(messageId, button) {
+    console.log('Toggle message actions called for message:', messageId);
+    
+    closeMessageActions();
+    
+    const menu = document.getElementById(`actions-${messageId}`);
+    if (menu) {
+        if (menu.classList.contains('show')) {
+            menu.classList.remove('show');
+            menu.style.display = 'none';
+        } else {
+            menu.classList.add('show');
+            menu.style.display = 'block';
+            if (appState) appState.activeMessageActions = messageId;
+            
+            // Get button position relative to viewport
+            const rect = button.getBoundingClientRect();
+            
+            // Calculate position
+            let top = rect.bottom + 5;
+            let left = rect.left;
+            
+            // Get menu dimensions
+            const menuRect = menu.getBoundingClientRect();
+            
+            // Adjust if menu goes off screen to the right
+            if (left + menuRect.width > window.innerWidth) {
+                left = window.innerWidth - menuRect.width - 10;
             }
+            
+            // Adjust if menu goes off screen to the left
+            if (left < 10) {
+                left = 10;
+            }
+            
+            // Check if menu goes off screen at the bottom
+            if (top + menuRect.height > window.innerHeight) {
+                // Position above the button instead
+                top = rect.top - menuRect.height - 5;
+            }
+            
+            // Check if menu goes off screen at the top
+            if (top < 10) {
+                top = 10;
+            }
+            
+            // Apply position
+            menu.style.position = 'fixed';
+            menu.style.top = top + 'px';
+            menu.style.left = left + 'px';
+            menu.style.zIndex = '999999999'; // Maximum z-index
+            menu.style.maxWidth = '280px';
+            menu.style.width = 'auto';
+            
+            // Ensure menu is above everything
+            menu.style.backgroundColor = 'var(--bg-primary)';
+            menu.style.border = '2px solid var(--primary)';
+            menu.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.3)';
+            
+            console.log('Actions menu positioned at:', { top, left });
         }
     }
+}
 
     // Close message actions menu
     function closeMessageActions() {
