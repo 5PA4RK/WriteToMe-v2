@@ -195,8 +195,6 @@ function displayMessage(message) {
     }
 }
 
-    // Get reply quote HTML
-// Replace the getReplyQuoteHtml function in chat.js
 function getReplyQuoteHtml(replyToId, currentMessage) {
     let quotedSender = 'someone';
     let quotedText = 'a message';
@@ -204,19 +202,10 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
     let found = false;
     let isImageOnly = false;
     
-    // Check if the current message has a reply_to_image property (from the reply)
+    // PRIORITY 1: Check currentMessage for reply_to_image (passed from displayMessage)
     if (currentMessage.reply_to_image) {
         quotedImage = currentMessage.reply_to_image;
-        console.log('Found reply_to_image in message:', quotedImage);
-        
-        // Try to get sender from appState messages
-        const originalMsg = appState.messages.find(m => m.id === replyToId);
-        if (originalMsg) {
-            quotedSender = originalMsg.sender;
-            found = true;
-            isImageOnly = !originalMsg.text || originalMsg.text.trim() === '';
-            quotedText = isImageOnly ? '[Image]' : (originalMsg.text || '').substring(0, 100);
-        }
+        console.log('Found reply_to_image in currentMessage:', quotedImage);
     }
     
     // Check if this is a temporary ID that needs mapping to real ID
@@ -226,7 +215,7 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
         console.log('Mapped temp ID', replyToId, 'to real ID', realReplyToId);
     }
     
-    // Try to find in DOM first using both possible IDs
+    // PRIORITY 2: Try to find in DOM
     let originalMsgElement = document.getElementById(`msg-${realReplyToId}`);
     if (!originalMsgElement && realReplyToId !== replyToId) {
         originalMsgElement = document.getElementById(`msg-${replyToId}`);
@@ -235,132 +224,71 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
     if (originalMsgElement) {
         const senderEl = originalMsgElement.querySelector('.message-sender');
         const textEl = originalMsgElement.querySelector('.message-text');
-        const imageEl = originalMsgElement.querySelector('.message-image');
+        const imgEl = originalMsgElement.querySelector('.message-image');
         
         if (senderEl) {
             quotedSender = senderEl.textContent;
             found = true;
         }
         
-        if (imageEl && imageEl.src) {
-            quotedImage = imageEl.src;
+        if (imgEl && imgEl.src) {
+            if (!quotedImage) quotedImage = imgEl.src;
             found = true;
             
-            if (textEl) {
-                const textContent = textEl.textContent
-                    .replace(/\s*\(edited\)\s*$/, '')
-                    .trim();
-                
-                if (textContent && textContent !== '[Image]') {
-                    quotedText = textContent.substring(0, 100);
-                    if (textContent.length > 100) quotedText += '...';
-                    isImageOnly = false;
-                } else {
-                    quotedText = '[Image]';
-                    isImageOnly = true;
-                }
+            const hasText = textEl && textEl.textContent.trim() && 
+                           !textEl.textContent.includes('[Image]') &&
+                           textEl.textContent !== '';
+            
+            if (hasText) {
+                quotedText = textEl.textContent.replace(/\s*\(edited\)\s*$/, '').substring(0, 100);
+                if (quotedText.length > 100) quotedText += '...';
+                isImageOnly = false;
             } else {
                 quotedText = '[Image]';
                 isImageOnly = true;
             }
-        } else if (textEl) {
-            quotedText = textEl.textContent
-                .replace(/\s*\(edited\)\s*$/, '')
-                .substring(0, 100);
-            if (textEl.textContent.length > 100) quotedText += '...';
+        } else if (textEl && textEl.textContent.trim()) {
+            quotedText = textEl.textContent.replace(/\s*\(edited\)\s*$/, '').substring(0, 100);
+            if (quotedText.length > 100) quotedText += '...';
             isImageOnly = false;
         }
     }
     
-    // If not found in DOM, try appState messages
-    if (!found && appState && appState.messages) {
+    // PRIORITY 3: Try appState messages
+    if ((!found || !quotedImage) && appState && appState.messages) {
         const originalMsg = appState.messages.find(m => m.id === replyToId || m.id === realReplyToId);
         if (originalMsg) {
-            quotedSender = originalMsg.sender;
+            if (!quotedSender) quotedSender = originalMsg.sender;
+            found = true;
             
-            if (originalMsg.image && (!originalMsg.text || originalMsg.text.trim() === '')) {
+            // Check if it's an image-only message
+            const hasImage = originalMsg.image || originalMsg._realImageUrl;
+            const hasText = originalMsg.text && originalMsg.text.trim() !== '';
+            
+            if (hasImage && !quotedImage) {
+                quotedImage = originalMsg._realImageUrl || originalMsg.image;
+            }
+            
+            if (!hasText && hasImage) {
                 quotedText = '[Image]';
-                quotedImage = originalMsg.image;
                 isImageOnly = true;
-            } else if (originalMsg.image && originalMsg.text) {
-                quotedText = (originalMsg.text || '').substring(0, 100);
-                if (originalMsg.text && originalMsg.text.length > 100) quotedText += '...';
-                quotedImage = originalMsg.image;
-                isImageOnly = false;
-            } else {
-                quotedText = (originalMsg.text || '').substring(0, 100);
-                if (originalMsg.text && originalMsg.text.length > 100) quotedText += '...';
+            } else if (hasText) {
+                quotedText = originalMsg.text.substring(0, 100);
+                if (originalMsg.text.length > 100) quotedText += '...';
                 isImageOnly = false;
             }
-            found = true;
         }
     }
     
-    // If still not found, try to fetch from database asynchronously
-    if (!found && supabaseClient) {
-        const currentMsgId = currentMessage.id;
-        
-        // Fetch the original message
-        supabaseClient
-            .from('messages')
-            .select('sender_name, message, image_url')
-            .eq('id', realReplyToId)
-            .single()
-            .then(({ data, error }) => {
-                if (!error && data) {
-                    const quoteElement = document.querySelector(`#msg-${currentMsgId} .message-reply-ref`);
-                    if (quoteElement) {
-                        const contentDiv = quoteElement.querySelector('.reply-content');
-                        if (contentDiv) {
-                            let displayText = '';
-                            let hasImage = data.image_url && data.image_url.trim() !== '';
-                            let hasText = data.message && data.message.trim() !== '';
-                            
-                            if (hasImage && !hasText) {
-                                displayText = '<i class="fas fa-image"></i> [Image]';
-                            } else if (hasImage && hasText) {
-                                displayText = `${escapeHtml(data.message.substring(0, 100))} <i class="fas fa-image"></i>`;
-                                if (data.message.length > 100) displayText += '...';
-                            } else {
-                                displayText = escapeHtml(data.message.substring(0, 100));
-                                if (data.message && data.message.length > 100) displayText += '...';
-                            }
-                            contentDiv.innerHTML = `Replying to <strong>${escapeHtml(data.sender_name)}</strong>: ${displayText}`;
-                            
-                            if (data.image_url) {
-                                const previewDiv = quoteElement.querySelector('.reply-image-preview');
-                                if (previewDiv) {
-                                    previewDiv.innerHTML = `<img src="${data.image_url}" style="max-width: 50px; max-height: 50px; border-radius: 4px;" onerror="this.style.display='none'">`;
-                                    previewDiv.style.display = 'block';
-                                }
-                            }
-                        }
-                    }
-                }
-            })
-            .catch(e => console.log('Error fetching original message:', e));
-        
-        // Return loading state with placeholder
-        return `
-            <div class="message-reply-ref">
-                <i class="fas fa-reply"></i> 
-                <div class="reply-content">
-                    <span>Loading quoted message...</span>
-                </div>
-                <div class="reply-image-preview" style="display: none;"></div>
-            </div>
-        `;
-    }
-    
-    // Build the display text with image indicator
+    // Build the display text
     let displayText = quotedText;
-    if (isImageOnly) {
+    if (isImageOnly || (!quotedText && quotedImage)) {
         displayText = '<i class="fas fa-image"></i> [Image]';
-    } else if (quotedImage && !quotedText.includes('[Image]') && !quotedText.includes('fa-image')) {
-        displayText = `${quotedText} <i class="fas fa-image"></i>`;
+    } else if (quotedImage && !displayText.includes('fa-image')) {
+        displayText = `${displayText} <i class="fas fa-image"></i>`;
     }
     
-    // Create the reply HTML with image preview if available
+    // Handle blob URLs - try to get real URL if available
     let finalImageUrl = quotedImage;
     if (finalImageUrl && finalImageUrl.startsWith('blob:')) {
         const originalMsg = appState.messages.find(m => m.id === replyToId || m.id === realReplyToId);
@@ -369,7 +297,7 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
         }
     }
     
-    // Add a tooltip for the image preview
+    // Create the reply HTML with image preview
     const imagePreviewHtml = finalImageUrl ? `
         <div class="reply-image-preview" data-image-url="${finalImageUrl}">
             <img src="${finalImageUrl}" style="max-width: 40px; max-height: 40px; border-radius: 4px; object-fit: cover;" 
@@ -636,130 +564,97 @@ async function addReaction(messageId, emoji) {
         }
     }
 
-// Replace your openReplyModal function in chat.js with this:
-// Replace the entire openReplyModal function in chat.js with this:
-function openReplyModal(messageId, senderName, messageText) {
-    console.log('Opening reply modal for message:', messageId);
-    
-    if (!elements.replyModal || !elements.replyToName || !elements.replyToContent || !elements.replyInput) {
-        console.error('Reply modal elements not found');
-        return;
-    }
-    
-    // Get the actual message element to find the image
-    const messageElement = document.getElementById(`msg-${messageId}`);
-    let imageUrl = null;
-    let actualMessageText = messageText;
-    
-    if (messageElement) {
-        // Try to find image in the message
-        const imgElement = messageElement.querySelector('.message-image');
-        if (imgElement && imgElement.src) {
-            imageUrl = imgElement.src;
-            console.log('Found image in message:', imageUrl);
+    function openReplyModal(messageId, senderName, messageText) {
+        console.log('Opening reply modal for message:', messageId);
+        
+        if (!elements.replyModal || !elements.replyToName || !elements.replyToContent || !elements.replyInput) {
+            console.error('Reply modal elements not found');
+            return;
         }
         
-        // Also try to get the full text if it's truncated in the button
-        const textElement = messageElement.querySelector('.message-text');
-        if (textElement) {
-            actualMessageText = textElement.textContent.replace(/\s*\(edited\)\s*$/, '');
-        }
-    }
-    
-    // If no image found in DOM, check appState
-    if (!imageUrl && appState && appState.messages) {
-        const originalMsg = appState.messages.find(m => m.id === messageId);
-        if (originalMsg && originalMsg.image) {
-            imageUrl = originalMsg.image;
-            // If it's a blob URL and we have a real URL stored, use that
-            if (imageUrl && imageUrl.startsWith('blob:') && originalMsg._realImageUrl) {
-                imageUrl = originalMsg._realImageUrl;
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        let imageUrl = null;
+        let actualMessageText = messageText;
+        
+        if (messageElement) {
+            const imgElement = messageElement.querySelector('.message-image');
+            if (imgElement && imgElement.src) {
+                imageUrl = imgElement.src;
+                console.log('Found image in DOM:', imageUrl);
             }
-            console.log('Found image in appState:', imageUrl);
-        }
-    }
-    
-    // Also check if this is a reply to a message that might have the image URL in the original message
-    if (!imageUrl && appState && appState.messages) {
-        // Try to find the original message in the messages array
-        const originalMsg = appState.messages.find(m => m.id === messageId);
-        if (originalMsg && originalMsg.image) {
-            imageUrl = originalMsg.image;
-            console.log('Found image in messages array:', imageUrl);
-        }
-    }
-    
-    // STORE THE REPLY INFO IN A GLOBAL VARIABLE
-    window.__replyData = {
-        messageId: messageId,
-        senderName: senderName,
-        messageText: actualMessageText,
-        imageUrl: imageUrl
-    };
-    
-    // Also store in appState for backward compatibility
-    if (appState) {
-        appState.replyingTo = messageId;
-        appState.replyingToImage = imageUrl;
-        console.log('Set appState.replyingTo to:', messageId);
-        console.log('Set appState.replyingToImage to:', imageUrl);
-    }
-    
-    elements.replyToName.textContent = senderName || 'Unknown';
-    
-    // Show image preview in the reply modal if there's an image
-    let displayText = actualMessageText || '';
-    let imagePreviewHtml = '';
-    
-    if (imageUrl) {
-        // For the modal display - show a nice preview
-        imagePreviewHtml = `<div style="margin-top: 10px; display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 8px;">
-            <img src="${imageUrl}" style="max-width: 60px; max-height: 60px; border-radius: 8px; object-fit: cover;">
-            <span style="font-size: 0.85rem; color: var(--text-secondary);"><i class="fas fa-image"></i> Image attached</span>
-        </div>`;
-        
-        if (displayText && displayText.trim() !== '') {
-            displayText = displayText + imagePreviewHtml;
-        } else {
-            displayText = '<i class="fas fa-image"></i> [Image]' + imagePreviewHtml;
-        }
-    }
-    
-    if (displayText.length > 150) {
-        displayText = displayText.substring(0, 150) + '...';
-    }
-    elements.replyToContent.innerHTML = displayText;
-    elements.replyToContent.setAttribute('data-full-text', actualMessageText || '');
-    elements.replyToContent.setAttribute('data-image-url', imageUrl || '');
-    
-    elements.replyInput.value = '';
-    
-    elements.replyModal.style.display = 'flex';
-    document.body.classList.add('modal-open');
-    
-    if (window.innerWidth <= 768) {
-        elements.replyModal.style.top = '0';
-        elements.replyModal.style.left = '0';
-        elements.replyModal.style.right = '0';
-        elements.replyModal.style.bottom = '0';
-        elements.replyModal.style.position = 'fixed';
-        
-        setTimeout(() => {
-            if (elements.replyInput) {
-                elements.replyInput.focus();
-                setTimeout(() => {
-                    elements.replyInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 100);
+            
+            const textElement = messageElement.querySelector('.message-text');
+            if (textElement) {
+                const rawText = textElement.textContent.replace(/\s*\(edited\)\s*$/, '');
+                if (rawText && rawText !== '[Image]') {
+                    actualMessageText = rawText;
+                } else {
+                    actualMessageText = '';
+                }
             }
-        }, 100);
-    } else {
+        }
+        
+        // Check appState messages if not found in DOM
+        if (!imageUrl && appState && appState.messages) {
+            const originalMsg = appState.messages.find(m => m.id === messageId);
+            if (originalMsg) {
+                if (originalMsg._realImageUrl) {
+                    imageUrl = originalMsg._realImageUrl;
+                } else if (originalMsg.image) {
+                    imageUrl = originalMsg.image;
+                }
+                console.log('Found image in appState:', imageUrl);
+            }
+        }
+        
+        // Store the reply info
+        window.__replyData = {
+            messageId: messageId,
+            senderName: senderName,
+            messageText: actualMessageText,
+            imageUrl: imageUrl
+        };
+        
+        if (appState) {
+            appState.replyingTo = messageId;
+            appState.replyingToImage = imageUrl;
+        }
+        
+        elements.replyToName.textContent = senderName || 'Unknown';
+        
+        let displayText = actualMessageText || '';
+        let imagePreviewHtml = '';
+        
+        if (imageUrl) {
+            imagePreviewHtml = `<div style="margin-top: 10px; display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 8px;">
+                <img src="${imageUrl}" style="max-width: 60px; max-height: 60px; border-radius: 8px; object-fit: cover;">
+                <span style="font-size: 0.85rem;"><i class="fas fa-image"></i> Image attached</span>
+            </div>`;
+            
+            if (displayText && displayText.trim() !== '') {
+                displayText = displayText + imagePreviewHtml;
+            } else {
+                displayText = '<i class="fas fa-image"></i> [Image]' + imagePreviewHtml;
+            }
+        }
+        
+        if (displayText.length > 150) {
+            displayText = displayText.substring(0, 150) + '...';
+        }
+        elements.replyToContent.innerHTML = displayText;
+        elements.replyToContent.setAttribute('data-full-text', actualMessageText || '');
+        elements.replyToContent.setAttribute('data-image-url', imageUrl || '');
+        
+        elements.replyInput.value = '';
+        elements.replyModal.style.display = 'flex';
+        document.body.classList.add('modal-open');
+        
         setTimeout(() => {
             if (elements.replyInput) {
                 elements.replyInput.focus();
             }
         }, 100);
     }
-}
 
     // Send reply
 // Replace the sendReply function in chat.js
