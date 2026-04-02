@@ -592,6 +592,9 @@ async function addReaction(messageId, emoji) {
                     actualMessageText = '';
                 }
             }
+            
+            // Scroll the message into view smoothly before opening modal
+            messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
         
         // Check appState messages if not found in DOM
@@ -646,17 +649,44 @@ async function addReaction(messageId, emoji) {
         elements.replyToContent.setAttribute('data-image-url', imageUrl || '');
         
         elements.replyInput.value = '';
+        
+        // FIX: Better modal positioning
         elements.replyModal.style.display = 'flex';
+        elements.replyModal.style.alignItems = 'center';
+        elements.replyModal.style.justifyContent = 'center';
         document.body.classList.add('modal-open');
         
+        // For mobile, ensure modal is at the top of the viewport
+        if (window.innerWidth <= 768) {
+            elements.replyModal.style.alignItems = 'flex-end';
+            elements.replyModal.style.justifyContent = 'center';
+            
+            // Ensure the modal content is scrollable and positioned correctly
+            const modalContent = elements.replyModal.querySelector('.modal-content');
+            if (modalContent) {
+                modalContent.style.maxHeight = '80vh';
+                modalContent.style.overflowY = 'auto';
+                modalContent.style.marginBottom = '0';
+                modalContent.style.borderRadius = '20px 20px 0 0';
+            }
+        }
+        
+        // Focus after a short delay to ensure modal is visible
         setTimeout(() => {
             if (elements.replyInput) {
                 elements.replyInput.focus();
+                
+                // On mobile, ensure the input is visible
+                if (window.innerWidth <= 768) {
+                    setTimeout(() => {
+                        elements.replyInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 100);
+                }
             }
-        }, 100);
+        }, 150);
     }
 
-    // Send reply
+ 
 // Replace the sendReply function in chat.js
 async function sendReply() {
     console.log('🟢 sendReply called at:', new Date().toISOString());
