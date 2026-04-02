@@ -2341,7 +2341,7 @@ async function sendMessage() {
         // Build display text
         let displayText = quotedText || '';
         if (isImageOnly) {
-            displayText = '<i class="fas fa-image"></i> [Image]';
+            displayText = '';
         } else if (hasImage && hasText) {
             displayText = `${quotedText} <i class="fas fa-image"></i>`;
         }
