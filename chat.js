@@ -572,6 +572,11 @@ async function addReaction(messageId, emoji) {
             return;
         }
         
+        // CRITICAL FIX: Ensure modal is in the body, not nested inside any element
+        if (elements.replyModal.parentElement !== document.body) {
+            document.body.appendChild(elements.replyModal);
+        }
+        
         // Close any open message actions menu first
         if (typeof closeMessageActions === 'function') {
             closeMessageActions();
@@ -658,28 +663,32 @@ async function addReaction(messageId, emoji) {
         
         elements.replyInput.value = '';
         
-        // CRITICAL: Save current scroll position and lock body
+        // CRITICAL FIX: Save current scroll position and lock body
         const scrollY = window.scrollY;
         document.body.classList.add('modal-open');
         document.body.style.top = `-${scrollY}px`;
         
-        // Show modal with highest z-index
+        // CRITICAL FIX: Force modal to be visible and on top
         elements.replyModal.style.display = 'flex';
         elements.replyModal.style.position = 'fixed';
         elements.replyModal.style.top = '0';
         elements.replyModal.style.left = '0';
         elements.replyModal.style.right = '0';
         elements.replyModal.style.bottom = '0';
-        elements.replyModal.style.zIndex = '999999';
+        elements.replyModal.style.zIndex = '2147483647';
+        elements.replyModal.style.backgroundColor = 'rgba(0, 0, 0, 0.95)';
+        elements.replyModal.style.backdropFilter = 'blur(12px)';
         
-        // Force modal to be visible and centered
-        setTimeout(() => {
-            elements.replyModal.scrollTop = 0;
-            const modalContent = elements.replyModal.querySelector('.modal-content');
-            if (modalContent) {
-                modalContent.scrollTop = 0;
-            }
-        }, 10);
+        // Force modal content to be centered
+        const modalContent = elements.replyModal.querySelector('.modal-content');
+        if (modalContent) {
+            modalContent.style.position = 'relative';
+            modalContent.style.margin = 'auto';
+            modalContent.style.maxWidth = '500px';
+            modalContent.style.width = '90%';
+            modalContent.style.border = '3px solid var(--primary)';
+            modalContent.style.borderRadius = '20px';
+        }
         
         // Focus after a short delay
         setTimeout(() => {
@@ -796,7 +805,6 @@ async function addReaction(messageId, emoji) {
             }
         }, 200);
     }
-
     // Edit message
 // REPLACE the editMessage function in chat.js
 async function editMessage(messageId) {
