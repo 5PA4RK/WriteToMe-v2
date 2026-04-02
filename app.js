@@ -2365,7 +2365,7 @@ async function sendMessage() {
             displayText = `${quotedText} <i class="fas fa-image"></i>`;
         }
         
-        if (!displayText) displayText = '[Message]';
+        if (!displayText) displayText = '';
         
         // Ensure we have a valid image URL (not blob)
         let finalImageForPreview = quotedImageUrl;
