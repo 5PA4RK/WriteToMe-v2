@@ -411,6 +411,8 @@ header {
     height: calc(100vh - 180px);
     box-shadow: var(--shadow-md);
     transition: background-color var(--transition-base), border-color var(--transition-base);
+    position: relative;
+    z-index: 1;
 }
 
 .section-header {
@@ -449,6 +451,8 @@ header {
     background-position: top left;
     scroll-behavior: smooth;
     transition: background-color var(--transition-base);
+    position: relative;
+    z-index: 1;
 }
 
 .dark-mode .chat-messages {
@@ -464,6 +468,7 @@ header {
     animation: messageSlideIn 0.3s ease;
     position: relative;
     box-shadow: var(--shadow-sm);
+    z-index: 1;
 }
 
 @keyframes messageSlideIn {
@@ -587,6 +592,8 @@ header {
     border-radius: var(--radius-sm);
     opacity: 0;
     transition: opacity var(--transition-fast);
+    position: relative;
+    z-index: 10;
 }
 
 .message:hover .message-action-dots { opacity: 0.7; }
@@ -595,7 +602,7 @@ header {
     background-color: rgba(0, 0, 0, 0.1);
 }
 
-/* Message Actions Menu - ensure it's always on top */
+/* ========== MESSAGE ACTIONS MENU - FORCED ON TOP ========== */
 .message-actions-menu {
     position: fixed !important;
     background-color: var(--bg-primary) !important;
@@ -611,13 +618,6 @@ header {
 .message-actions-menu.show {
     display: block !important;
 }
-
-@keyframes menuFadeIn {
-    from { opacity: 0; transform: scale(0.95); }
-    to { opacity: 1; transform: scale(1); }
-}
-
-.message-actions-menu.show { display: block !important; }
 
 .message-actions-menu button {
     display: flex !important;
@@ -635,27 +635,36 @@ header {
     transition: background-color var(--transition-fast) !important;
 }
 
-.message-actions-menu button:hover { background-color: var(--bg-tertiary); }
-.message-actions-menu button i { width: 18px; color: var(--text-muted); }
-
-.menu-divider {
-    height: 1px;
-    background-color: var(--border-light);
-    margin: 8px 0;
+.message-actions-menu button:hover {
+    background-color: var(--bg-tertiary) !important;
 }
 
-.reaction-section { padding: 4px; }
+.message-actions-menu button i {
+    width: 20px !important;
+    color: var(--text-muted) !important;
+}
+
+.menu-divider {
+    height: 1px !important;
+    background-color: var(--border-light) !important;
+    margin: 8px 0 !important;
+}
+
+.reaction-section {
+    padding: 4px !important;
+}
+
 .reaction-section-title {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-    padding-left: 4px;
+    font-size: 0.8rem !important;
+    color: var(--text-muted) !important;
+    margin-bottom: 8px !important;
+    padding-left: 4px !important;
 }
 
 .reaction-quick-picker {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 4px;
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 4px !important;
 }
 
 .reaction-emoji-btn {
@@ -668,7 +677,7 @@ header {
 
 .reaction-emoji-btn:hover {
     background-color: var(--bg-hover) !important;
-    transform: scale(1.1);
+    transform: scale(1.05) !important;
 }
 
 /* Message Reactions */
@@ -725,7 +734,7 @@ header {
     gap: var(--spacing-md);
     transition: background-color var(--transition-base);
     position: relative;
-    z-index: 1;
+    z-index: 100;
 }
 
 .chat-input-wrapper {
@@ -1802,22 +1811,43 @@ header {
         border-radius: 20px;
     }
     
-
+    .message-actions-menu {
+        position: fixed !important;
+        bottom: auto !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        width: auto !important;
+        min-width: 220px !important;
+        max-width: 280px !important;
+        border-radius: var(--radius-md) !important;
+        transform: none !important;
+        transition: none !important;
+        padding: 8px !important;
+        border-top-width: 2px !important;
+    }
     
-    .message-actions-menu.show { transform: translateY(0); }
+    .message-actions-menu.show { 
+        display: block !important;
+        transform: none !important;
+    }
     
-
+    .message-actions-menu button {
+        padding: 10px 12px !important;
+        font-size: 14px !important;
+        border-radius: var(--radius-sm) !important;
+    }
     
     .reaction-quick-picker {
-        grid-template-columns: repeat(6, 1fr);
-        gap: 8px;
-        padding: 8px 0;
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 4px !important;
+        padding: 4px 0 !important;
     }
     
     .reaction-emoji-btn {
-        font-size: 24px !important;
-        padding: 10px !important;
-        border-radius: 10px !important;
+        font-size: 20px !important;
+        padding: 8px !important;
+        border-radius: var(--radius-md) !important;
     }
     
     .modal-body { max-height: 70vh; }
@@ -2032,103 +2062,7 @@ header {
     background-color: #f5f5f5;
 }
 
-/* ========== FINAL CRITICAL FIX FOR REPLY MODAL ========== */
-/* This must be at the VERY END of the CSS file */
-
-#replyModal.modal-overlay {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    background: rgba(0, 0, 0, 0.95) !important;
-    backdrop-filter: blur(12px) !important;
-    display: none !important;
-    align-items: center !important;
-    justify-content: center !important;
-    z-index: 2147483647 !important;
-    margin: 0 !important;
-    padding: 20px !important;
-    overflow: hidden !important;
-}
-
-#replyModal.modal-overlay[style*="display: flex"] {
-    display: flex !important;
-}
-
-#replyModal.modal-overlay .modal-content {
-    position: relative !important;
-    max-width: 500px !important;
-    width: 90% !important;
-    max-height: 85vh !important;
-    overflow-y: auto !important;
-    background: var(--bg-primary) !important;
-    border-radius: 20px !important;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
-    border: 3px solid var(--primary) !important;
-    margin: auto !important;
-    pointer-events: auto !important;
-    z-index: 2147483647 !important;
-}
-
-#replyModal.modal-overlay .modal-content * {
-    pointer-events: auto;
-}
-
-/* Mobile specific - slide from bottom */
-@media (max-width: 768px) {
-    #replyModal.modal-overlay {
-        align-items: flex-end !important;
-        padding: 0 !important;
-        background: rgba(0, 0, 0, 0.95) !important;
-    }
-    
-    #replyModal.modal-overlay .modal-content {
-        max-height: 75vh !important;
-        border-radius: 24px 24px 0 0 !important;
-        margin-bottom: 0 !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        animation: replyModalSlideUp 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1) !important;
-        border-bottom: none !important;
-        border-left: none !important;
-        border-right: none !important;
-    }
-}
-
-/* Desktop animation */
-@media (min-width: 769px) {
-    #replyModal.modal-overlay .modal-content {
-        animation: replyModalFadeScale 0.2s ease !important;
-    }
-}
-
-@keyframes replyModalSlideUp {
-    from {
-        transform: translateY(100%);
-    }
-    to {
-        transform: translateY(0);
-    }
-}
-
-@keyframes replyModalFadeScale {
-    from {
-        opacity: 0;
-        transform: scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
-}
-
-/* ========== COMPLETE CLEAN CSS - NO DUPLICATES ========== */
-/* Copy your existing CSS up to the image error styling, then add this at the end */
-
-/* ... (keep all your existing CSS from :root through .image-error styling) ... */
-
-/* ========== SINGLE DEFINITION OF REPLY MODAL - AT THE VERY END ========== */
+/* ========== REPLY MODAL - SINGLE CLEAN DEFINITION ========== */
 #replyModal {
     position: fixed !important;
     top: 0 !important;
@@ -2164,7 +2098,6 @@ header {
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
 }
 
-/* Mobile specific */
 @media (max-width: 768px) {
     #replyModal {
         align-items: flex-end !important;
@@ -2184,7 +2117,6 @@ header {
     }
 }
 
-/* Desktop animation */
 @media (min-width: 769px) {
     #replyModal .modal-content {
         animation: replyModalFadeScale 0.2s ease !important;
