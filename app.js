@@ -3046,19 +3046,21 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             reactionsMap.get(reaction.message_id).push(reaction);
         });
         
-// In loadChatHistory function, around line 1600, replace the displayMessage call:
+// Display messages
 orderedMessages.forEach((msg) => {
     const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
     
     // Load reply_to image if this message is a reply
     let replyToImage = null;
     if (msg.reply_to) {
-        // Find the original message to get its image
         const originalMsg = orderedMessages.find(m => m.id === msg.reply_to);
         if (originalMsg && originalMsg.image_url) {
             replyToImage = originalMsg.image_url;
         }
     }
+    
+    // Get reactions for this message from the reactionsMap
+    const messageReactions = reactionsMap.get(msg.id) || [];
     
     if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
         window.ChatModule.displayMessage({
@@ -3069,9 +3071,9 @@ orderedMessages.forEach((msg) => {
             time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             type: messageType,
             is_historical: !!sessionId,
-            reactions: reactionsMap.get(msg.id) || [],
+            reactions: messageReactions,  // Make sure this is passed
             reply_to: msg.reply_to,
-            reply_to_image: replyToImage  // ADD THIS LINE
+            reply_to_image: replyToImage
         });
     }
 });
