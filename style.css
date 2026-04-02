@@ -2159,24 +2159,7 @@ body.modal-open {
         height: 100%;
     }
     
-    #replyModal.modal-overlay {
-        align-items: flex-end;
-    }
-    
-    #replyModal .modal-content {
-        margin-bottom: 0;
-        border-radius: 20px 20px 0 0;
-        animation: slideUp 0.3s ease;
-    }
-    
-    @keyframes slideUp {
-        from {
-            transform: translateY(100%);
-        }
-        to {
-            transform: translateY(0);
-        }
-    }
+
 }
 /* Image error styling */
 .image-error {
@@ -2227,4 +2210,119 @@ body.modal-open {
 
 .image-error i {
     margin-right: 6px;
+}
+
+/* Fix for reply modal positioning */
+#replyModal.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    padding: var(--spacing-md);
+}
+
+#replyModal .modal-content {
+    max-width: 500px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    background-color: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    border: 1px solid var(--border-light);
+    position: relative;
+    margin: auto;
+}
+
+/* Mobile-specific reply modal positioning */
+@media (max-width: 768px) {
+    #replyModal.modal-overlay {
+        align-items: flex-end;
+        padding: 0;
+    }
+    
+    #replyModal .modal-content {
+        max-height: 80vh;
+        margin-bottom: 0;
+        border-radius: 20px 20px 0 0;
+        animation: slideUp 0.3s ease;
+    }
+    
+    @keyframes slideUp {
+        from {
+            transform: translateY(100%);
+        }
+        to {
+            transform: translateY(0);
+        }
+    }
+    
+    /* Ensure the input is accessible when keyboard opens */
+    #replyModal .modal-body {
+        padding-bottom: env(safe-area-inset-bottom, 20px);
+    }
+    
+    #replyModal textarea#replyInput {
+        font-size: 16px; /* Prevents zoom on iOS */
+        min-height: 100px;
+    }
+}
+
+/* Desktop-specific adjustments */
+@media (min-width: 769px) {
+    #replyModal .modal-content {
+        animation: fadeInScale 0.2s ease;
+    }
+    
+    @keyframes fadeInScale {
+        from {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+}
+
+/* Ensure modal z-index hierarchy */
+.modal-overlay {
+    z-index: 10000;
+}
+
+#replyModal {
+    z-index: 10001;
+}
+
+/* Make sure the modal doesn't cause body scroll */
+body.modal-open {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+}
+
+/* Fix for reply modal when scrolling */
+.message-reply-ref {
+    cursor: pointer;
+}
+
+/* Ensure the reply modal backdrop covers everything */
+#replyModal.modal-overlay::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: inherit;
+    z-index: -1;
 }
