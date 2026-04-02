@@ -2209,12 +2209,12 @@ header {
     left: 0 !important;
     right: 0 !important;
     bottom: 0 !important;
-    background-color: rgba(0, 0, 0, 0.7) !important;
+    background-color: rgba(0, 0, 0, 0.85) !important;
     backdrop-filter: blur(8px) !important;
     display: none;
     align-items: center !important;
     justify-content: center !important;
-    z-index: 10001 !important;
+    z-index: 999999 !important;
     margin: 0 !important;
     padding: 20px !important;
     overflow: hidden !important;
@@ -2286,4 +2286,126 @@ body.modal-open {
 .modal-overlay {
     background-color: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(10px);
+}
+/* ========== CRITICAL FIX: REPLY MODAL Z-INDEX AND POSITIONING ========== */
+/* Ensure reply modal is above EVERYTHING */
+#replyModal.modal-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background-color: rgba(0, 0, 0, 0.85) !important;
+    backdrop-filter: blur(8px) !important;
+    display: none;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 999999 !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    overflow: hidden !important;
+}
+
+#replyModal.modal-overlay .modal-content {
+    position: relative !important;
+    max-width: 500px !important;
+    width: 90% !important;
+    max-height: 85vh !important;
+    overflow-y: auto !important;
+    background-color: var(--bg-primary) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+    border: 2px solid var(--primary) !important;
+    margin: auto !important;
+    pointer-events: auto !important;
+    z-index: 999999 !important;
+}
+
+/* Ensure the modal content is above everything inside */
+#replyModal.modal-overlay .modal-content * {
+    pointer-events: auto;
+}
+
+/* Mobile specific reply modal */
+@media (max-width: 768px) {
+    #replyModal.modal-overlay {
+        align-items: flex-end !important;
+        padding: 0 !important;
+        background-color: rgba(0, 0, 0, 0.7) !important;
+    }
+    
+    #replyModal.modal-overlay .modal-content {
+        max-height: 80vh !important;
+        border-radius: 20px 20px 0 0 !important;
+        margin-bottom: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        animation: replyModalSlideUp 0.3s ease !important;
+        border-bottom: none !important;
+    }
+}
+
+/* Desktop reply modal animation */
+@media (min-width: 769px) {
+    #replyModal.modal-overlay .modal-content {
+        animation: replyModalFadeInScale 0.2s ease !important;
+    }
+}
+
+@keyframes replyModalSlideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+@keyframes replyModalFadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Fix body scroll when modal is open - PREVENTS ANY SCROLLING */
+body.modal-open {
+    overflow: hidden !important;
+    position: fixed !important;
+    width: 100% !important;
+    height: 100% !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+}
+
+/* Ensure chat input doesn't overlap modal */
+.chat-input-area {
+    position: relative;
+    z-index: 1;
+}
+
+/* Header should be below modal when open */
+header {
+    z-index: 100;
+}
+
+#replyModal.modal-overlay ~ header {
+    z-index: 1;
+}
+
+/* Ensure all other modals have lower z-index */
+.modal-overlay:not(#replyModal.modal-overlay) {
+    z-index: 10000 !important;
+}
+
+/* Message actions menu should be below reply modal */
+.message-actions-menu {
+    z-index: 99998 !important;
+}
+
+/* Emoji picker should be below reply modal */
+.emoji-picker {
+    z-index: 99998 !important;
 }
