@@ -667,10 +667,10 @@ function setupEventListeners() {
         }
     });
     
-// In setupEventListeners function, replace the closeReplyModal handler with:
+// In setupEventListeners function
 if (closeReplyModal) {
     const handleCloseModal = () => {
-        elements.replyModal.style.display = 'none';
+        replyModal.style.display = 'none';
         if (appState) appState.replyingTo = null;
         document.body.classList.remove('modal-open');
         // Restore scroll position
@@ -685,7 +685,6 @@ if (closeReplyModal) {
         handleCloseModal();
     }, { passive: false });
 }
-
     if (sendReplyBtn) {
         sendReplyBtn.replaceWith(sendReplyBtn.cloneNode(true));
         const newSendReplyBtn = document.getElementById('sendReplyBtn');
