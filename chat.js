@@ -283,7 +283,7 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
     // Build the display text
     let displayText = quotedText;
     if (isImageOnly || (!quotedText && quotedImage)) {
-        displayText = '<i class="fas fa-image"></i> [Image]';
+        displayText = '';
     } else if (quotedImage && !displayText.includes('fa-image')) {
         displayText = `${displayText} <i class="fas fa-image"></i>`;
     }
@@ -695,7 +695,7 @@ async function getMessageReactions(messageId) {
             if (displayText && displayText.trim() !== '') {
                 displayText = displayText + imagePreviewHtml;
             } else {
-                displayText = '<i class="fas fa-image"></i> [Image]' + imagePreviewHtml;
+                displayText = '' + imagePreviewHtml;
             }
         }
         
