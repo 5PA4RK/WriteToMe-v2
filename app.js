@@ -2414,17 +2414,17 @@ messageDiv.innerHTML = `
             // We're NOT updating the image src to avoid blinking
             // The blob URL will work until the page is refreshed
             
-// Add to appState.messages with the blob URL (so it works immediately)
+// In sendMessage function, when saving to appState.messages (around line 950):
 appState.messages.push({
     id: result.data.id,
     sender: appState.userName,
     text: originalMessageText,
-    image: localPreviewUrl, // Keep the blob URL for current session
+    image: localPreviewUrl,
     time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
     type: 'sent',
-    reply_to: replyToId,
-    reply_to_image: window.__tempReplyToImage, // Add this line - store the replied-to image URL
-    _realImageUrl: finalImageUrl // Store real URL for future use
+    reply_to: currentReplyToId,
+    reply_to_image: currentReplyToImage,  // Make sure this is set
+    _realImageUrl: finalImageUrl
 });
             
             console.log('✅ Message saved - no image update, no blinking!');
@@ -2985,22 +2985,32 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             reactionsMap.get(reaction.message_id).push(reaction);
         });
         
-        // Display messages
-// Display messages
+// In loadChatHistory function, around line 1600, replace the displayMessage call:
 orderedMessages.forEach((msg) => {
     const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
+    
+    // Load reply_to image if this message is a reply
+    let replyToImage = null;
+    if (msg.reply_to) {
+        // Find the original message to get its image
+        const originalMsg = orderedMessages.find(m => m.id === msg.reply_to);
+        if (originalMsg && originalMsg.image_url) {
+            replyToImage = originalMsg.image_url;
+        }
+    }
     
     if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
         window.ChatModule.displayMessage({
             id: msg.id,
             sender: msg.sender_name,
             text: msg.message,
-            image: msg.image_url,  // <-- THIS LINE
+            image: msg.image_url,
             time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             type: messageType,
             is_historical: !!sessionId,
             reactions: reactionsMap.get(msg.id) || [],
-            reply_to: msg.reply_to
+            reply_to: msg.reply_to,
+            reply_to_image: replyToImage  // ADD THIS LINE
         });
     }
 });
