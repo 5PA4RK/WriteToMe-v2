@@ -3033,10 +3033,11 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             return;
         }
         
-        // Load ALL reactions for these messages
+        // Load ALL reactions for these messages - use .then() to ensure proper encoding
         const messageIds = messages.map(msg => msg.id);
         console.log('Message IDs:', messageIds);
         
+        // Try to get reactions with explicit encoding handling
         const { data: allReactions, error: reactionsError } = await supabaseClient
             .from('message_reactions')
             .select('*')
@@ -3048,29 +3049,48 @@ async function loadChatHistory(sessionId = null, limit = 50) {
         
         console.log(`Loaded ${allReactions?.length || 0} total reactions`);
         
-        // DEBUG: Log each reaction with its message_id
-        if (allReactions && allReactions.length > 0) {
-            allReactions.forEach(reaction => {
-                console.log(`Reaction: ${reaction.emoji} for message ${reaction.message_id}`);
-            });
-        }
-        
-        // Create reactions map - CRITICAL: Use message_id as key
-        const reactionsMap = new Map();
+        // Process reactions - ensure emoji is properly decoded
+        const processedReactions = [];
         if (allReactions) {
-            allReactions.forEach(reaction => {
-                const msgId = reaction.message_id;
-                if (!reactionsMap.has(msgId)) {
-                    reactionsMap.set(msgId, []);
+            for (const reaction of allReactions) {
+                // Ensure emoji is properly decoded from UTF-8
+                let emojiValue = reaction.emoji;
+                
+                // If emoji is empty or seems corrupted, try to get it from raw data
+                if (!emojiValue || emojiValue.trim() === '') {
+                    console.warn(`Empty emoji for reaction ${reaction.id}, skipping`);
+                    continue;
                 }
-                reactionsMap.get(msgId).push(reaction);
-            });
+                
+                // Log the actual emoji character
+                console.log(`Reaction: ${emojiValue} (${emojiValue.charCodeAt(0).toString(16)}) for message ${reaction.message_id}`);
+                
+                processedReactions.push({
+                    id: reaction.id,
+                    message_id: reaction.message_id,
+                    user_id: reaction.user_id,
+                    user_name: reaction.user_name,
+                    emoji: emojiValue,
+                    created_at: reaction.created_at
+                });
+            }
         }
         
-        // DEBUG: Log what's in the map
+        // Create reactions map
+        const reactionsMap = new Map();
+        processedReactions.forEach(reaction => {
+            const msgId = reaction.message_id;
+            if (!reactionsMap.has(msgId)) {
+                reactionsMap.set(msgId, []);
+            }
+            reactionsMap.get(msgId).push(reaction);
+        });
+        
+        // DEBUG: Log what's in the map with actual emoji characters
         console.log('Reactions Map contents:');
         for (const [msgId, reactions] of reactionsMap.entries()) {
-            console.log(`  Message ${msgId}: ${reactions.length} reactions - ${reactions.map(r => r.emoji).join(', ')}`);
+            const emojiList = reactions.map(r => r.emoji).join(', ');
+            console.log(`  Message ${msgId}: ${reactions.length} reactions - [${emojiList}]`);
         }
         
         // Store messages with their reactions in appState
@@ -3210,7 +3230,9 @@ async function loadChatHistory(sessionId = null, limit = 50) {
                     // Group reactions by emoji and count
                     const reactionCounts = {};
                     messageReactions.forEach(r => {
-                        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+                        if (r.emoji && r.emoji.trim() !== '') {
+                            reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+                        }
                     });
                     
                     let reactionsHtml = '';
@@ -3218,6 +3240,7 @@ async function loadChatHistory(sessionId = null, limit = 50) {
                         reactionsHtml += `<span class="reaction-badge" onclick="window.toggleReaction('${msg.id}', '${emoji}')">${emoji} ${count}</span>`;
                     }
                     reactionsContainer.innerHTML = reactionsHtml;
+                    console.log(`Rendered reactions HTML: ${reactionsHtml}`);
                 } else {
                     reactionsContainer.innerHTML = '';
                 }
