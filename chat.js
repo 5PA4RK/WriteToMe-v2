@@ -356,27 +356,40 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
     }
 
     // Render reactions for a message
-    function renderReactions(container, reactions) {
-        if (!container) return;
-        
-        if (!reactions || reactions.length === 0) {
-            container.innerHTML = '';
-            return;
-        }
-        
-        const reactionCounts = {};
-        reactions.forEach(r => {
-            reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-        });
-        
-        let html = '';
-        for (const [emoji, count] of Object.entries(reactionCounts)) {
-            const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
-            html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
-        }
-        
-        container.innerHTML = html;
+// Render reactions for a message
+function renderReactions(container, reactions) {
+    if (!container) return;
+    
+    if (!reactions || reactions.length === 0) {
+        container.innerHTML = '';
+        return;
     }
+    
+    // Group reactions by emoji and count them
+    const reactionCounts = {};
+    reactions.forEach(r => {
+        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+    });
+    
+    // Get the current user's reactions to highlight them
+    const currentUserId = appState ? appState.userId : null;
+    const userReactions = {};
+    reactions.forEach(r => {
+        if (r.user_id === currentUserId) {
+            userReactions[r.emoji] = true;
+        }
+    });
+    
+    let html = '';
+    for (const [emoji, count] of Object.entries(reactionCounts)) {
+        const messageId = container.closest('.message')?.id.replace('msg-', '') || '';
+        const isUserReacted = userReactions[emoji] || false;
+        const activeClass = isUserReacted ? 'user-reacted' : '';
+        html += `<span class="reaction-badge ${activeClass}" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+    }
+    
+    container.innerHTML = html;
+}
 
     function toggleMessageActions(messageId, button) {
         console.log('Toggle message actions called for message:', messageId);
