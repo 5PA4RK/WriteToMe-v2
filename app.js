@@ -2231,53 +2231,116 @@ async function sendMessage() {
     }
     
     // ========== OPTIMISTIC DISPLAY - THIS IS THE FINAL DISPLAY ==========
-    console.log('📝 Creating optimistic message DIV (this will be the final view)');
+// ========== OPTIMISTIC DISPLAY - THIS IS THE FINAL DISPLAY ==========
+console.log('📝 Creating optimistic message DIV (this will be the final view)');
+
+const messageDiv = document.createElement('div');
+messageDiv.className = 'message sent';
+messageDiv.id = `msg-${tempId}`;
+
+let messageContent = '';
+
+// Add reply quote if this is a reply
+const currentReplyToId = window.__tempReplyTo || appState.replyingTo;
+const currentReplyToImage = window.__tempReplyToImage || appState.replyingToImage;
+
+console.log('Reply info for optimistic display:', { currentReplyToId, currentReplyToImage });
+
+if (currentReplyToId) {
+    // Get the original message to show the quote
+    let quotedSender = '';
+    let quotedText = '';
+    let quotedImageUrl = currentReplyToImage;
     
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'message sent';
-    messageDiv.id = `msg-${tempId}`;
-    
-    let messageContent = '';
-    
-    if (originalMessageText && originalMessageText.trim()) {
-        const escapedText = escapeHtml(originalMessageText);
-        const textWithBreaks = escapedText.replace(/\n/g, '<br>');
-        messageContent += `<div class="message-text">${textWithBreaks}</div>`;
+    // Try to find the original message in DOM
+    const originalMsgElement = document.getElementById(`msg-${currentReplyToId}`);
+    if (originalMsgElement) {
+        const senderEl = originalMsgElement.querySelector('.message-sender');
+        const textEl = originalMsgElement.querySelector('.message-text');
+        const imgEl = originalMsgElement.querySelector('.message-image');
+        
+        if (senderEl) quotedSender = senderEl.textContent;
+        if (textEl) quotedText = textEl.textContent.replace(/\s*\(edited\)\s*$/, '').substring(0, 100);
+        if (imgEl && !quotedImageUrl) quotedImageUrl = imgEl.src;
     }
     
-    if (localPreviewUrl) {
-        messageContent += `<img src="${localPreviewUrl}" class="message-image" style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;" onclick="window.showFullImage('${localPreviewUrl}')" loading="lazy">`;
+    // If not found in DOM, try appState
+    if (!quotedSender && appState.messages) {
+        const originalMsg = appState.messages.find(m => m.id === currentReplyToId);
+        if (originalMsg) {
+            quotedSender = originalMsg.sender;
+            quotedText = originalMsg.text ? originalMsg.text.substring(0, 100) : '';
+            if (originalMsg.image && !quotedImageUrl) quotedImageUrl = originalMsg.image;
+        }
     }
     
-    messageDiv.innerHTML = `
-        <div class="message-sender">${escapeHtml(appState.userName)}</div>
-        <div class="message-content">
-            ${messageContent}
-            <div class="message-reactions"></div>
-            <div class="message-footer">
-                <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                <button class="message-action-dots" onclick="window.toggleMessageActions('${tempId}', this)"><i class="fas fa-ellipsis-v"></i></button>
+    if (quotedSender) {
+        let displayText = quotedText || '[Image]';
+        const isImageOnly = !quotedText && quotedImageUrl;
+        
+        if (isImageOnly) {
+            displayText = '<i class="fas fa-image"></i> [Image]';
+        } else if (quotedImageUrl && !displayText.includes('fa-image')) {
+            displayText = `${displayText} <i class="fas fa-image"></i>`;
+        }
+        
+        const imagePreviewHtml = quotedImageUrl ? `
+            <div class="reply-image-preview" style="display: inline-block; margin-left: 8px;">
+                <img src="${quotedImageUrl}" style="max-width: 30px; max-height: 30px; border-radius: 4px; object-fit: cover;" 
+                     onclick="event.stopPropagation(); window.showFullImage('${quotedImageUrl}')">
             </div>
-        </div>
-        <div class="message-actions-menu" id="actions-${tempId}" style="display: none;">
-            <button onclick="window.editMessage('${tempId}')"><i class="fas fa-edit"></i> Edit</button>
-            <button onclick="window.deleteMessage('${tempId}')"><i class="fas fa-trash"></i> Delete</button>
-            <div class="menu-divider"></div>
-            <button class="reply-btn" data-message-id="${tempId}" data-sender="${escapeHtml(appState.userName)}" data-message-text="${escapeHtml(originalMessageText)}">
-                <i class="fas fa-reply"></i> Reply
-            </button>
-            <div class="menu-divider"></div>
-            <div class="reaction-section">
-                <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
-                <div class="reaction-quick-picker">
-                    ${reactionEmojis.map(emoji => 
-                        `<button class="reaction-emoji-btn" onclick="window.addReaction('${tempId}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
-                    ).join('')}
+        ` : '';
+        
+        messageContent += `
+            <div class="message-reply-ref">
+                <i class="fas fa-reply"></i> 
+                <div class="reply-content">
+                    <span>Replying to <strong>${escapeHtml(quotedSender)}</strong>: ${displayText}</span>
+                    ${imagePreviewHtml}
                 </div>
             </div>
+        `;
+    }
+}
+
+if (originalMessageText && originalMessageText.trim()) {
+    const escapedText = escapeHtml(originalMessageText);
+    const textWithBreaks = escapedText.replace(/\n/g, '<br>');
+    messageContent += `<div class="message-text">${textWithBreaks}</div>`;
+}
+
+if (localPreviewUrl) {
+    messageContent += `<img src="${localPreviewUrl}" class="message-image" style="max-width: 100%; max-height: 250px; border-radius: 8px; cursor: pointer;" onclick="window.showFullImage('${localPreviewUrl}')" loading="lazy">`;
+}
+
+messageDiv.innerHTML = `
+    <div class="message-sender">${escapeHtml(appState.userName)}</div>
+    <div class="message-content">
+        ${messageContent}
+        <div class="message-reactions"></div>
+        <div class="message-footer">
+            <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+            <button class="message-action-dots" onclick="window.toggleMessageActions('${tempId}', this)"><i class="fas fa-ellipsis-v"></i></button>
         </div>
-    `;
-    
+    </div>
+    <div class="message-actions-menu" id="actions-${tempId}" style="display: none;">
+        <button onclick="window.editMessage('${tempId}')"><i class="fas fa-edit"></i> Edit</button>
+        <button onclick="window.deleteMessage('${tempId}')"><i class="fas fa-trash"></i> Delete</button>
+        <div class="menu-divider"></div>
+        <button class="reply-btn" data-message-id="${tempId}" data-sender="${escapeHtml(appState.userName)}" data-message-text="${escapeHtml(originalMessageText)}">
+            <i class="fas fa-reply"></i> Reply
+        </button>
+        <div class="menu-divider"></div>
+        <div class="reaction-section">
+            <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+            <div class="reaction-quick-picker">
+                ${reactionEmojis.map(emoji => 
+                    `<button class="reaction-emoji-btn" onclick="window.addReaction('${tempId}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                ).join('')}
+            </div>
+        </div>
+    </div>
+`;
     chatMessages.appendChild(messageDiv);
     console.log('✅ Message displayed with local preview (no blinking!)');
     
