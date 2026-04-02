@@ -667,19 +667,24 @@ function setupEventListeners() {
         }
     });
     
-    if (closeReplyModal) {
-        const handleCloseModal = () => {
-            replyModal.style.display = 'none';
-            if (appState) appState.replyingTo = null;
-            document.body.classList.remove('modal-open');
-        };
-        
-        closeReplyModal.addEventListener('click', handleCloseModal);
-        closeReplyModal.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            handleCloseModal();
-        }, { passive: false });
-    }
+// In setupEventListeners function, update the closeReplyModal handler:
+if (closeReplyModal) {
+    const handleCloseModal = () => {
+        replyModal.style.display = 'none';
+        if (appState) appState.replyingTo = null;
+        document.body.classList.remove('modal-open');
+        // Restore scroll position
+        const scrollY = Math.abs(parseInt(document.body.style.top || '0'));
+        document.body.style.top = '';
+        window.scrollTo(0, scrollY);
+    };
+    
+    closeReplyModal.addEventListener('click', handleCloseModal);
+    closeReplyModal.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        handleCloseModal();
+    }, { passive: false });
+}
 
     if (sendReplyBtn) {
         sendReplyBtn.replaceWith(sendReplyBtn.cloneNode(true));
