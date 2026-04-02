@@ -2137,19 +2137,12 @@ header {
     }
 }
 
-/* Force body lock when modal is open */
-body.modal-open {
-    overflow: hidden !important;
-    position: fixed !important;
-    width: 100% !important;
-    height: 100% !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-}
+/* ========== COMPLETE CLEAN CSS - NO DUPLICATES ========== */
+/* Copy your existing CSS up to the image error styling, then add this at the end */
 
-/* CRITICAL: Ensure reply modal is ALWAYS on top regardless of scroll position */
+/* ... (keep all your existing CSS from :root through .image-error styling) ... */
+
+/* ========== SINGLE DEFINITION OF REPLY MODAL - AT THE VERY END ========== */
 #replyModal {
     position: fixed !important;
     top: 0 !important;
@@ -2161,13 +2154,13 @@ body.modal-open {
     z-index: 2147483647 !important;
     margin: 0 !important;
     padding: 20px !important;
-    display: none;
+    display: none !important;
     align-items: center !important;
     justify-content: center !important;
 }
 
-#replyModal.show,
-#replyModal[style*="display: flex"] {
+#replyModal[style*="display: flex"],
+#replyModal[style*="display:flex"] {
     display: flex !important;
 }
 
@@ -2182,8 +2175,10 @@ body.modal-open {
     border: 3px solid var(--primary) !important;
     margin: auto !important;
     z-index: 2147483647 !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
 }
 
+/* Mobile specific */
 @media (max-width: 768px) {
     #replyModal {
         align-items: flex-end !important;
@@ -2196,5 +2191,42 @@ body.modal-open {
         width: 100% !important;
         max-width: 100% !important;
         margin-bottom: 0 !important;
+        border-bottom: none !important;
+        border-left: none !important;
+        border-right: none !important;
+        animation: replyModalSlideUp 0.3s ease !important;
     }
+}
+
+/* Desktop animation */
+@media (min-width: 769px) {
+    #replyModal .modal-content {
+        animation: replyModalFadeScale 0.2s ease !important;
+    }
+}
+
+@keyframes replyModalSlideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+@keyframes replyModalFadeScale {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Force body lock when modal is open */
+body.modal-open {
+    overflow: hidden !important;
+    position: fixed !important;
+    width: 100% !important;
+    height: 100% !important;
+    top: 0 !important;
+    left: 0 !important;
 }
