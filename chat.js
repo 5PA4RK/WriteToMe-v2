@@ -592,25 +592,28 @@ async function addReaction(messageId, emoji) {
     }
 
     // Get reactions for a message
-    async function getMessageReactions(messageId) {
-        if (!supabaseClient) {
-            console.error('Supabase client not initialized');
-            return [];
-        }
-        
-        try {
-            const { data, error } = await supabaseClient
-                .from('message_reactions')
-                .select('*')
-                .eq('message_id', messageId);
-            
-            if (error) throw error;
-            return data || [];
-        } catch (error) {
-            console.error("Error getting reactions:", error);
-            return [];
-        }
+// Get reactions for a message
+async function getMessageReactions(messageId) {
+    if (!supabaseClient) {
+        console.error('Supabase client not initialized');
+        return [];
     }
+    
+    try {
+        const { data, error } = await supabaseClient
+            .from('message_reactions')
+            .select('*')
+            .eq('message_id', messageId);
+        
+        if (error) throw error;
+        
+        console.log(`Loaded ${data?.length || 0} reactions for message ${messageId}`);
+        return data || [];
+    } catch (error) {
+        console.error("Error getting reactions:", error);
+        return [];
+    }
+}
 
     function openReplyModal(messageId, senderName, messageText) {
         console.log('Opening reply modal for message:', messageId);
