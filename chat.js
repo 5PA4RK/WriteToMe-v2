@@ -156,6 +156,13 @@ function displayMessage(message) {
     const reactionsContainer = messageDiv.querySelector('.message-reactions');
     if (message.reactions && message.reactions.length > 0) {
         renderReactions(reactionsContainer, message.reactions);
+    } else if (message.reactions === undefined && message.id) {
+        // If reactions weren't passed but we have a message ID, fetch them
+        getMessageReactions(message.id).then(reactions => {
+            if (reactions && reactions.length > 0 && reactionsContainer) {
+                renderReactions(reactionsContainer, reactions);
+            }
+        });
     }
     
     // Store in appState.messages (skip optimistic messages)
