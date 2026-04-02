@@ -572,17 +572,17 @@ async function addReaction(messageId, emoji) {
             return;
         }
         
-        // CRITICAL FIX: Ensure modal is in the body, not nested inside any element
+        // CRITICAL: Ensure modal is in body
         if (elements.replyModal.parentElement !== document.body) {
             document.body.appendChild(elements.replyModal);
         }
         
-        // Close any open message actions menu first
+        // Close any open menus
         if (typeof closeMessageActions === 'function') {
             closeMessageActions();
         }
         
-        // Close emoji picker if open
+        // Close emoji picker
         const emojiPicker = document.getElementById('emojiPicker');
         if (emojiPicker && emojiPicker.classList.contains('show')) {
             emojiPicker.classList.remove('show');
@@ -596,7 +596,6 @@ async function addReaction(messageId, emoji) {
             const imgElement = messageElement.querySelector('.message-image');
             if (imgElement && imgElement.src) {
                 imageUrl = imgElement.src;
-                console.log('Found image in DOM:', imageUrl);
             }
             
             const textElement = messageElement.querySelector('.message-text');
@@ -610,20 +609,15 @@ async function addReaction(messageId, emoji) {
             }
         }
         
-        // Check appState messages if not found in DOM
+        // Check appState for image
         if (!imageUrl && appState && appState.messages) {
             const originalMsg = appState.messages.find(m => m.id === messageId);
             if (originalMsg) {
-                if (originalMsg._realImageUrl) {
-                    imageUrl = originalMsg._realImageUrl;
-                } else if (originalMsg.image) {
-                    imageUrl = originalMsg.image;
-                }
-                console.log('Found image in appState:', imageUrl);
+                imageUrl = originalMsg._realImageUrl || originalMsg.image;
             }
         }
         
-        // Store the reply info
+        // Store reply data
         window.__replyData = {
             messageId: messageId,
             senderName: senderName,
@@ -663,45 +657,26 @@ async function addReaction(messageId, emoji) {
         
         elements.replyInput.value = '';
         
-        // CRITICAL FIX: Save current scroll position and lock body
+        // Lock body and show modal
         const scrollY = window.scrollY;
         document.body.classList.add('modal-open');
         document.body.style.top = `-${scrollY}px`;
         
-        // CRITICAL FIX: Force modal to be visible and on top
+        // Force modal display with highest priority
         elements.replyModal.style.display = 'flex';
         elements.replyModal.style.position = 'fixed';
         elements.replyModal.style.top = '0';
         elements.replyModal.style.left = '0';
         elements.replyModal.style.right = '0';
         elements.replyModal.style.bottom = '0';
-        elements.replyModal.style.zIndex = '2147483647';
+        elements.replyModal.style.zIndex = '999999999';
         elements.replyModal.style.backgroundColor = 'rgba(0, 0, 0, 0.95)';
         elements.replyModal.style.backdropFilter = 'blur(12px)';
         
-        // Force modal content to be centered
-        const modalContent = elements.replyModal.querySelector('.modal-content');
-        if (modalContent) {
-            modalContent.style.position = 'relative';
-            modalContent.style.margin = 'auto';
-            modalContent.style.maxWidth = '500px';
-            modalContent.style.width = '90%';
-            modalContent.style.border = '3px solid var(--primary)';
-            modalContent.style.borderRadius = '20px';
-        }
-        
-        // Focus after a short delay
+        // Focus input
         setTimeout(() => {
             if (elements.replyInput) {
                 elements.replyInput.focus();
-                
-                if (window.innerWidth <= 768) {
-                    setTimeout(() => {
-                        if (elements.replyInput) {
-                            elements.replyInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }
-                    }, 100);
-                }
             }
         }, 200);
     }
