@@ -667,10 +667,10 @@ function setupEventListeners() {
         }
     });
     
-// In setupEventListeners function, update the closeReplyModal handler:
+// In setupEventListeners function, replace the closeReplyModal handler with:
 if (closeReplyModal) {
     const handleCloseModal = () => {
-        replyModal.style.display = 'none';
+        elements.replyModal.style.display = 'none';
         if (appState) appState.replyingTo = null;
         document.body.classList.remove('modal-open');
         // Restore scroll position
