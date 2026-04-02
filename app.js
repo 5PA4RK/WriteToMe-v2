@@ -2992,14 +2992,14 @@ async function loadChatHistory(sessionId = null, limit = 50) {
         console.log(`Loaded ${messages?.length || 0} messages from database`);
         
         // Add history header if viewing historical session
-        if (sessionId) {
+        if (sessionId && chatMessages) {
             const { data: session } = await supabaseClient
                 .from('chat_sessions')
                 .select('created_at, host_name')
                 .eq('session_id', sessionId)
                 .single();
             
-            if (session && chatMessages) {
+            if (session) {
                 const roomNumber = getStableRoomNumber(sessionId);
                 const historyHeader = document.createElement('div');
                 historyHeader.className = 'message received historical';
@@ -3033,44 +3033,71 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             return;
         }
         
-        // FIRST: Load ALL reactions for these messages in one query
+        // Load ALL reactions for these messages
         const messageIds = messages.map(msg => msg.id);
-        const { data: allReactions } = await supabaseClient
+        console.log('Message IDs:', messageIds);
+        
+        const { data: allReactions, error: reactionsError } = await supabaseClient
             .from('message_reactions')
             .select('*')
             .in('message_id', messageIds);
         
+        if (reactionsError) {
+            console.error('Error loading reactions:', reactionsError);
+        }
+        
         console.log(`Loaded ${allReactions?.length || 0} total reactions`);
         
-        // Create reactions map
+        // DEBUG: Log each reaction with its message_id
+        if (allReactions && allReactions.length > 0) {
+            allReactions.forEach(reaction => {
+                console.log(`Reaction: ${reaction.emoji} for message ${reaction.message_id}`);
+            });
+        }
+        
+        // Create reactions map - CRITICAL: Use message_id as key
         const reactionsMap = new Map();
-        (allReactions || []).forEach(reaction => {
-            if (!reactionsMap.has(reaction.message_id)) {
-                reactionsMap.set(reaction.message_id, []);
-            }
-            reactionsMap.get(reaction.message_id).push(reaction);
-        });
+        if (allReactions) {
+            allReactions.forEach(reaction => {
+                const msgId = reaction.message_id;
+                if (!reactionsMap.has(msgId)) {
+                    reactionsMap.set(msgId, []);
+                }
+                reactionsMap.get(msgId).push(reaction);
+            });
+        }
+        
+        // DEBUG: Log what's in the map
+        console.log('Reactions Map contents:');
+        for (const [msgId, reactions] of reactionsMap.entries()) {
+            console.log(`  Message ${msgId}: ${reactions.length} reactions - ${reactions.map(r => r.emoji).join(', ')}`);
+        }
         
         // Store messages with their reactions in appState
-        appState.messages = messages.map(msg => ({
-            id: msg.id,
-            sender: msg.sender_name,
-            text: msg.message,
-            image: msg.image_url,
-            time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-            type: msg.sender_id === appState.userId ? 'sent' : 'received',
-            is_historical: !!sessionId,
-            reactions: reactionsMap.get(msg.id) || [],
-            reply_to: msg.reply_to,
-            created_at: msg.created_at
-        }));
+        appState.messages = messages.map(msg => {
+            const msgReactions = reactionsMap.get(msg.id) || [];
+            console.log(`Message ${msg.id} has ${msgReactions.length} reactions in map`);
+            
+            return {
+                id: msg.id,
+                sender: msg.sender_name,
+                text: msg.message,
+                image: msg.image_url,
+                time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                type: msg.sender_id === appState.userId ? 'sent' : 'received',
+                is_historical: !!sessionId,
+                reactions: msgReactions,
+                reply_to: msg.reply_to,
+                created_at: msg.created_at
+            };
+        });
         
-        // Display each message with its reactions
+        // Display each message
         for (const msg of messages) {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
             const messageReactions = reactionsMap.get(msg.id) || [];
             
-            console.log(`Displaying message ${msg.id} with ${messageReactions.length} reactions`);
+            console.log(`Creating message ${msg.id} with ${messageReactions.length} reactions`);
             
             // Load reply_to image if this message is a reply
             let replyToImage = null;
@@ -3081,7 +3108,7 @@ async function loadChatHistory(sessionId = null, limit = 50) {
                 }
             }
             
-            // Create message element directly (bypass ChatModule for better control)
+            // Create message element
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${messageType}`;
             if (sessionId) messageDiv.classList.add('historical');
@@ -3095,7 +3122,6 @@ async function loadChatHistory(sessionId = null, limit = 50) {
                 let quotedText = '';
                 let quotedImage = replyToImage;
                 
-                // Try to find original message in loaded messages
                 const originalMsg = messages.find(m => m.id === msg.reply_to);
                 if (originalMsg) {
                     quotedSender = originalMsg.sender_name;
@@ -3178,9 +3204,23 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             
             // CRITICAL: Render reactions AFTER the message is in the DOM
             const reactionsContainer = messageDiv.querySelector('.message-reactions');
-            if (reactionsContainer && messageReactions.length > 0) {
-                console.log(`Rendering ${messageReactions.length} reactions for message ${msg.id}`);
-                renderReactionsInContainer(reactionsContainer, messageReactions, msg.id);
+            if (reactionsContainer) {
+                if (messageReactions.length > 0) {
+                    console.log(`Rendering ${messageReactions.length} reactions for message ${msg.id}`);
+                    // Group reactions by emoji and count
+                    const reactionCounts = {};
+                    messageReactions.forEach(r => {
+                        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+                    });
+                    
+                    let reactionsHtml = '';
+                    for (const [emoji, count] of Object.entries(reactionCounts)) {
+                        reactionsHtml += `<span class="reaction-badge" onclick="window.toggleReaction('${msg.id}', '${emoji}')">${emoji} ${count}</span>`;
+                    }
+                    reactionsContainer.innerHTML = reactionsHtml;
+                } else {
+                    reactionsContainer.innerHTML = '';
+                }
             }
         }
         
@@ -3191,7 +3231,7 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             chatMessages.scrollTop = 0;
         }
         
-        console.log('Chat history loaded successfully with reactions');
+        console.log('Chat history loaded successfully');
         
     } catch (error) {
         console.error("Error loading chat history:", error);
