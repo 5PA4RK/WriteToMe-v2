@@ -592,9 +592,6 @@ async function addReaction(messageId, emoji) {
                     actualMessageText = '';
                 }
             }
-            
-            // Scroll the message into view smoothly before opening modal
-            messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
         
         // Check appState messages if not found in DOM
@@ -650,40 +647,79 @@ async function addReaction(messageId, emoji) {
         
         elements.replyInput.value = '';
         
-        // FIX: Better modal positioning
-        elements.replyModal.style.display = 'flex';
-        elements.replyModal.style.alignItems = 'center';
-        elements.replyModal.style.justifyContent = 'center';
+        // CRITICAL FIX: Force modal to be positioned relative to viewport
+        // First, ensure body is locked to prevent scroll issues
         document.body.classList.add('modal-open');
         
-        // For mobile, ensure modal is at the top of the viewport
+        // Set modal display and force reflow
+        elements.replyModal.style.display = 'flex';
+        
+        // Force a reflow to ensure styles are applied
+        elements.replyModal.offsetHeight;
+        
+        // Ensure modal is positioned correctly
+        elements.replyModal.style.position = 'fixed';
+        elements.replyModal.style.top = '0';
+        elements.replyModal.style.left = '0';
+        elements.replyModal.style.right = '0';
+        elements.replyModal.style.bottom = '0';
+        elements.replyModal.style.alignItems = 'center';
+        elements.replyModal.style.justifyContent = 'center';
+        elements.replyModal.style.zIndex = '10001';
+        
+        // For mobile, adjust positioning
         if (window.innerWidth <= 768) {
             elements.replyModal.style.alignItems = 'flex-end';
-            elements.replyModal.style.justifyContent = 'center';
             
-            // Ensure the modal content is scrollable and positioned correctly
             const modalContent = elements.replyModal.querySelector('.modal-content');
             if (modalContent) {
                 modalContent.style.maxHeight = '80vh';
                 modalContent.style.overflowY = 'auto';
                 modalContent.style.marginBottom = '0';
                 modalContent.style.borderRadius = '20px 20px 0 0';
+                modalContent.style.position = 'relative';
+                modalContent.style.width = '100%';
+            }
+        } else {
+            // On desktop, center the modal
+            const modalContent = elements.replyModal.querySelector('.modal-content');
+            if (modalContent) {
+                modalContent.style.position = 'relative';
+                modalContent.style.margin = 'auto';
+                modalContent.style.maxWidth = '500px';
+                modalContent.style.width = '90%';
             }
         }
         
-        // Focus after a short delay to ensure modal is visible
+        // Scroll the original message into view (but don't let it affect modal position)
+        if (messageElement) {
+            // Temporarily disable body scroll to prevent jitter
+            const originalOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            
+            messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Restore overflow after scroll
+            setTimeout(() => {
+                document.body.style.overflow = originalOverflow;
+            }, 300);
+        }
+        
+        // Focus after a short delay
         setTimeout(() => {
             if (elements.replyInput) {
                 elements.replyInput.focus();
                 
-                // On mobile, ensure the input is visible
                 if (window.innerWidth <= 768) {
+                    // On mobile, ensure the input is visible without pushing modal
                     setTimeout(() => {
-                        elements.replyInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        if (elements.replyInput) {
+                            elements.replyInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
                     }, 100);
                 }
             }
-        }, 150);
+        }, 200);
     }
 
  
