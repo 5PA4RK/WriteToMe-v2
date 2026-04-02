@@ -371,71 +371,87 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
         container.innerHTML = html;
     }
 
-    // Toggle message actions menu
-// Replace the existing toggleMessageActions function in chat.js
-function toggleMessageActions(messageId, button) {
-    console.log('Toggle message actions called for message:', messageId);
-    
-    closeMessageActions();
-    
-    const menu = document.getElementById(`actions-${messageId}`);
-    if (menu) {
-        if (menu.classList.contains('show')) {
-            menu.classList.remove('show');
-            menu.style.display = 'none';
-        } else {
-            menu.classList.add('show');
-            menu.style.display = 'block';
-            if (appState) appState.activeMessageActions = messageId;
-            
-            // Get button position relative to viewport
-            const rect = button.getBoundingClientRect();
-            
-            // Calculate position
-            let top = rect.bottom + 5;
-            let left = rect.left;
-            
-            // Get menu dimensions
-            const menuRect = menu.getBoundingClientRect();
-            
-            // Adjust if menu goes off screen to the right
-            if (left + menuRect.width > window.innerWidth) {
-                left = window.innerWidth - menuRect.width - 10;
+    function toggleMessageActions(messageId, button) {
+        console.log('Toggle message actions called for message:', messageId);
+        
+        closeMessageActions();
+        
+        const menu = document.getElementById(`actions-${messageId}`);
+        if (menu) {
+            if (menu.classList.contains('show')) {
+                menu.classList.remove('show');
+                menu.style.display = 'none';
+            } else {
+                // CRITICAL: Ensure menu is appended to body to avoid stacking context issues
+                if (menu.parentElement !== document.body) {
+                    document.body.appendChild(menu);
+                }
+                
+                menu.classList.add('show');
+                menu.style.display = 'block';
+                if (appState) appState.activeMessageActions = messageId;
+                
+                // Get button position relative to viewport
+                const rect = button.getBoundingClientRect();
+                
+                // Get menu dimensions
+                menu.style.visibility = 'hidden';
+                menu.style.display = 'block';
+                const menuRect = menu.getBoundingClientRect();
+                menu.style.display = 'none';
+                menu.style.visibility = 'visible';
+                
+                // Calculate position
+                let top = rect.bottom + 5;
+                let left = rect.left;
+                
+                // Adjust if menu goes off screen to the right
+                if (left + menuRect.width > window.innerWidth) {
+                    left = window.innerWidth - menuRect.width - 10;
+                }
+                
+                // Adjust if menu goes off screen to the left
+                if (left < 10) {
+                    left = 10;
+                }
+                
+                // Check if menu goes off screen at the bottom
+                if (top + menuRect.height > window.innerHeight) {
+                    // Position above the button instead
+                    top = rect.top - menuRect.height - 5;
+                }
+                
+                // Check if menu goes off screen at the top
+                if (top < 10) {
+                    top = 10;
+                }
+                
+                // Apply position with highest z-index
+                menu.style.position = 'fixed';
+                menu.style.top = top + 'px';
+                menu.style.left = left + 'px';
+                menu.style.zIndex = '2147483647';
+                menu.style.maxWidth = '280px';
+                menu.style.width = 'auto';
+                menu.style.display = 'block';
+                
+                console.log('Actions menu positioned at:', { top, left, width: menuRect.width, height: menuRect.height });
+                
+                // Add click outside listener
+                setTimeout(() => {
+                    const handleClickOutside = function(e) {
+                        if (!menu.contains(e.target) && !button.contains(e.target)) {
+                            closeMessageActions();
+                            document.removeEventListener('click', handleClickOutside);
+                            document.removeEventListener('touchstart', handleClickOutside);
+                        }
+                    };
+                    document.addEventListener('click', handleClickOutside);
+                    document.addEventListener('touchstart', handleClickOutside);
+                }, 10);
             }
-            
-            // Adjust if menu goes off screen to the left
-            if (left < 10) {
-                left = 10;
-            }
-            
-            // Check if menu goes off screen at the bottom
-            if (top + menuRect.height > window.innerHeight) {
-                // Position above the button instead
-                top = rect.top - menuRect.height - 5;
-            }
-            
-            // Check if menu goes off screen at the top
-            if (top < 10) {
-                top = 10;
-            }
-            
-            // Apply position
-            menu.style.position = 'fixed';
-            menu.style.top = top + 'px';
-            menu.style.left = left + 'px';
-            menu.style.zIndex = '999999999'; // Maximum z-index
-            menu.style.maxWidth = '280px';
-            menu.style.width = 'auto';
-            
-            // Ensure menu is above everything
-            menu.style.backgroundColor = 'var(--bg-primary)';
-            menu.style.border = '2px solid var(--primary)';
-            menu.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.3)';
-            
-            console.log('Actions menu positioned at:', { top, left });
         }
     }
-}
 
     // Close message actions menu
     function closeMessageActions() {
