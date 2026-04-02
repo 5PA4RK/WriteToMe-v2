@@ -647,63 +647,26 @@ async function addReaction(messageId, emoji) {
         
         elements.replyInput.value = '';
         
-        // CRITICAL FIX: Force modal to be positioned relative to viewport
-        // First, ensure body is locked to prevent scroll issues
+        // CRITICAL: Save current scroll position and lock body
+        const scrollY = window.scrollY;
         document.body.classList.add('modal-open');
+        document.body.style.top = `-${scrollY}px`;
         
-        // Set modal display and force reflow
+        // Show modal
         elements.replyModal.style.display = 'flex';
-        
-        // Force a reflow to ensure styles are applied
-        elements.replyModal.offsetHeight;
-        
-        // Ensure modal is positioned correctly
         elements.replyModal.style.position = 'fixed';
         elements.replyModal.style.top = '0';
         elements.replyModal.style.left = '0';
         elements.replyModal.style.right = '0';
         elements.replyModal.style.bottom = '0';
-        elements.replyModal.style.alignItems = 'center';
-        elements.replyModal.style.justifyContent = 'center';
-        elements.replyModal.style.zIndex = '10001';
         
-        // For mobile, adjust positioning
-        if (window.innerWidth <= 768) {
-            elements.replyModal.style.alignItems = 'flex-end';
-            
-            const modalContent = elements.replyModal.querySelector('.modal-content');
-            if (modalContent) {
-                modalContent.style.maxHeight = '80vh';
-                modalContent.style.overflowY = 'auto';
-                modalContent.style.marginBottom = '0';
-                modalContent.style.borderRadius = '20px 20px 0 0';
-                modalContent.style.position = 'relative';
-                modalContent.style.width = '100%';
+        // Force modal to be visible and centered
+        setTimeout(() => {
+            elements.replyModal.scrollTop = 0;
+            if (elements.replyModal.querySelector('.modal-content')) {
+                elements.replyModal.querySelector('.modal-content').scrollTop = 0;
             }
-        } else {
-            // On desktop, center the modal
-            const modalContent = elements.replyModal.querySelector('.modal-content');
-            if (modalContent) {
-                modalContent.style.position = 'relative';
-                modalContent.style.margin = 'auto';
-                modalContent.style.maxWidth = '500px';
-                modalContent.style.width = '90%';
-            }
-        }
-        
-        // Scroll the original message into view (but don't let it affect modal position)
-        if (messageElement) {
-            // Temporarily disable body scroll to prevent jitter
-            const originalOverflow = document.body.style.overflow;
-            document.body.style.overflow = 'hidden';
-            
-            messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            // Restore overflow after scroll
-            setTimeout(() => {
-                document.body.style.overflow = originalOverflow;
-            }, 300);
-        }
+        }, 10);
         
         // Focus after a short delay
         setTimeout(() => {
@@ -711,7 +674,6 @@ async function addReaction(messageId, emoji) {
                 elements.replyInput.focus();
                 
                 if (window.innerWidth <= 768) {
-                    // On mobile, ensure the input is visible without pushing modal
                     setTimeout(() => {
                         if (elements.replyInput) {
                             elements.replyInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -723,103 +685,104 @@ async function addReaction(messageId, emoji) {
     }
 
  
-// Replace the sendReply function in chat.js
-async function sendReply() {
-    console.log('🟢 sendReply called at:', new Date().toISOString());
-    
-    const replyText = elements.replyInput ? elements.replyInput.value.trim() : '';
-    if (!replyText) return;
-    
-    // Get reply data from global variable or appState
-    let replyData = window.__replyData;
-    
-    if (!replyData && appState) {
-        replyData = {
-            messageId: appState.replyingTo,
-            senderName: null,
-            messageText: null,
-            imageUrl: appState.replyingToImage
-        };
-    }
-    
-    const replyToId = replyData ? replyData.messageId : null;
-    const replyToImage = replyData ? replyData.imageUrl : null;
-    
-    console.log('Replying to message ID:', replyToId);
-    console.log('Replying to image URL:', replyToImage);
-    
-    if (!replyToId) {
-        console.error('No replyToId found!');
-        console.log('replyData:', replyData);
-        console.log('appState.replyingTo:', appState?.replyingTo);
-        return;
-    }
-    
-    if (!elements.messageInput) {
-        console.error('Message input not found');
-        return;
-    }
-    
-    // Store the reply info in global variables for sendMessage to access
-    window.__tempReplyTo = replyToId;
-    window.__tempReplyToImage = replyToImage;
-    
-    console.log('Set __tempReplyToImage to:', replyToImage);
-    
-    // Clear the appState and global reply data
-    if (appState) {
-        appState.replyingTo = null;
-        appState.replyingToImage = null;
-    }
-    window.__replyData = null;
-    
-    elements.messageInput.value = replyText;
-    
-    // Close the modal
-    if (elements.replyModal) {
-        elements.replyModal.style.display = 'none';
-        document.body.classList.remove('modal-open');
-    }
-    
-    if (elements.sendReplyBtn) {
-        elements.sendReplyBtn.disabled = true;
-    }
-    
-    if (window.innerWidth <= 768) {
-        if (document.activeElement && document.activeElement.blur) {
-            document.activeElement.blur();
+    async function sendReply() {
+        console.log('🟢 sendReply called at:', new Date().toISOString());
+        
+        const replyText = elements.replyInput ? elements.replyInput.value.trim() : '';
+        if (!replyText) return;
+        
+        // Get reply data from global variable or appState
+        let replyData = window.__replyData;
+        
+        if (!replyData && appState) {
+            replyData = {
+                messageId: appState.replyingTo,
+                senderName: null,
+                messageText: null,
+                imageUrl: appState.replyingToImage
+            };
         }
-        await new Promise(resolve => setTimeout(resolve, 150));
-    }
-    
-    elements.messageInput.focus();
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    if (typeof window.sendMessage === 'function') {
-        console.log('Calling window.sendMessage with reply image:', replyToImage);
-        await window.sendMessage();
-        console.log('window.sendMessage completed');
-    }
-    
-    window.__tempReplyTo = null;
-    window.__tempReplyToImage = null;
-    
-    if (elements.sendReplyBtn) {
-        setTimeout(() => {
-            if (elements.sendReplyBtn) {
-                elements.sendReplyBtn.disabled = false;
+        
+        const replyToId = replyData ? replyData.messageId : null;
+        const replyToImage = replyData ? replyData.imageUrl : null;
+        
+        console.log('Replying to message ID:', replyToId);
+        console.log('Replying to image URL:', replyToImage);
+        
+        if (!replyToId) {
+            console.error('No replyToId found!');
+            return;
+        }
+        
+        if (!elements.messageInput) {
+            console.error('Message input not found');
+            return;
+        }
+        
+        // Store the reply info in global variables for sendMessage to access
+        window.__tempReplyTo = replyToId;
+        window.__tempReplyToImage = replyToImage;
+        
+        console.log('Set __tempReplyToImage to:', replyToImage);
+        
+        // Clear the appState and global reply data
+        if (appState) {
+            appState.replyingTo = null;
+            appState.replyingToImage = null;
+        }
+        window.__replyData = null;
+        
+        elements.messageInput.value = replyText;
+        
+        // Close the modal and restore scroll
+        if (elements.replyModal) {
+            elements.replyModal.style.display = 'none';
+            document.body.classList.remove('modal-open');
+            // Restore scroll position
+            const scrollY = Math.abs(parseInt(document.body.style.top || '0'));
+            document.body.style.top = '';
+            window.scrollTo(0, scrollY);
+        }
+        
+        if (elements.sendReplyBtn) {
+            elements.sendReplyBtn.disabled = true;
+        }
+        
+        if (window.innerWidth <= 768) {
+            if (document.activeElement && document.activeElement.blur) {
+                document.activeElement.blur();
             }
-        }, 500);
-    }
-    
-    elements.messageInput.value = '';
-    
-    setTimeout(() => {
-        if (elements.chatMessages) {
-            elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+            await new Promise(resolve => setTimeout(resolve, 150));
         }
-    }, 200);
-}
+        
+        elements.messageInput.focus();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        if (typeof window.sendMessage === 'function') {
+            console.log('Calling window.sendMessage with reply image:', replyToImage);
+            await window.sendMessage();
+            console.log('window.sendMessage completed');
+        }
+        
+        window.__tempReplyTo = null;
+        window.__tempReplyToImage = null;
+        
+        if (elements.sendReplyBtn) {
+            setTimeout(() => {
+                if (elements.sendReplyBtn) {
+                    elements.sendReplyBtn.disabled = false;
+                }
+            }, 500);
+        }
+        
+        elements.messageInput.value = '';
+        
+        setTimeout(() => {
+            if (elements.chatMessages) {
+                elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+            }
+        }, 200);
+    }
 
     // Edit message
 // REPLACE the editMessage function in chat.js
