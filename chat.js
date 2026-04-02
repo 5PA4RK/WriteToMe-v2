@@ -572,6 +572,17 @@ async function addReaction(messageId, emoji) {
             return;
         }
         
+        // Close any open message actions menu first
+        if (typeof closeMessageActions === 'function') {
+            closeMessageActions();
+        }
+        
+        // Close emoji picker if open
+        const emojiPicker = document.getElementById('emojiPicker');
+        if (emojiPicker && emojiPicker.classList.contains('show')) {
+            emojiPicker.classList.remove('show');
+        }
+        
         const messageElement = document.getElementById(`msg-${messageId}`);
         let imageUrl = null;
         let actualMessageText = messageText;
@@ -652,19 +663,21 @@ async function addReaction(messageId, emoji) {
         document.body.classList.add('modal-open');
         document.body.style.top = `-${scrollY}px`;
         
-        // Show modal
+        // Show modal with highest z-index
         elements.replyModal.style.display = 'flex';
         elements.replyModal.style.position = 'fixed';
         elements.replyModal.style.top = '0';
         elements.replyModal.style.left = '0';
         elements.replyModal.style.right = '0';
         elements.replyModal.style.bottom = '0';
+        elements.replyModal.style.zIndex = '999999';
         
         // Force modal to be visible and centered
         setTimeout(() => {
             elements.replyModal.scrollTop = 0;
-            if (elements.replyModal.querySelector('.modal-content')) {
-                elements.replyModal.querySelector('.modal-content').scrollTop = 0;
+            const modalContent = elements.replyModal.querySelector('.modal-content');
+            if (modalContent) {
+                modalContent.scrollTop = 0;
             }
         }, 10);
         
