@@ -466,6 +466,7 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
     }
 
 // Add or remove reaction
+// Add or remove reaction
 async function addReaction(messageId, emoji) {
     console.log('🔵 addReaction called with:', { messageId, emoji });
     
@@ -491,6 +492,15 @@ async function addReaction(messageId, emoji) {
         return;
     }
     
+    // Ensure emoji is a proper UTF-8 character
+    const cleanEmoji = String(emoji).trim();
+    if (!cleanEmoji || cleanEmoji.length === 0) {
+        console.error('Invalid emoji provided');
+        return;
+    }
+    
+    console.log('Processing emoji:', cleanEmoji, 'charCode:', cleanEmoji.charCodeAt(0).toString(16));
+    
     try {
         const messageElement = document.getElementById(`msg-${messageId}`);
         if (!messageElement) {
@@ -511,9 +521,9 @@ async function addReaction(messageId, emoji) {
         const userReaction = (reactions || []).find(r => r.user_id === appState.userId);
         
         if (userReaction) {
-            if (userReaction.emoji !== emoji) {
+            if (userReaction.emoji !== cleanEmoji) {
                 // Change existing reaction - delete old, add new
-                console.log('Changing reaction from', userReaction.emoji, 'to', emoji);
+                console.log('Changing reaction from', userReaction.emoji, 'to', cleanEmoji);
                 
                 const { error: deleteError } = await supabaseClient
                     .from('message_reactions')
@@ -524,22 +534,24 @@ async function addReaction(messageId, emoji) {
                     console.error('Error deleting reaction:', deleteError);
                 }
                 
-                const { error: insertError } = await supabaseClient
+                // Insert with proper encoding
+                const { error: insertError, data: newReaction } = await supabaseClient
                     .from('message_reactions')
                     .insert([{
                         message_id: messageId,
                         user_id: appState.userId,
                         user_name: appState.userName,
-                        emoji: emoji,
+                        emoji: cleanEmoji,  // Use the cleaned emoji
                         created_at: new Date().toISOString()
-                    }]);
+                    }])
+                    .select();
                 
                 if (insertError) {
                     console.error('Error inserting new reaction:', insertError);
                     throw insertError;
                 }
                 
-                console.log('✅ Reaction changed successfully');
+                console.log('✅ Reaction changed successfully', newReaction);
             } else {
                 // Remove existing reaction
                 console.log('Removing reaction:', userReaction.emoji);
@@ -557,28 +569,50 @@ async function addReaction(messageId, emoji) {
                 console.log('✅ Reaction removed successfully');
             }
         } else {
-            // Add new reaction
-            console.log('Adding new reaction:', emoji);
+            // Add new reaction with proper encoding
+            console.log('Adding new reaction:', cleanEmoji);
             
-            const { error: insertError } = await supabaseClient
+            const { error: insertError, data: newReaction } = await supabaseClient
                 .from('message_reactions')
                 .insert([{
                     message_id: messageId,
                     user_id: appState.userId,
                     user_name: appState.userName,
-                    emoji: emoji,
+                    emoji: cleanEmoji,  // Use the cleaned emoji
                     created_at: new Date().toISOString()
-                }]);
+                }])
+                .select();
             
             if (insertError) {
                 console.error('Error inserting reaction:', insertError);
                 throw insertError;
             }
             
-            console.log('✅ New reaction added successfully');
+            console.log('✅ New reaction added successfully', newReaction);
         }
         
-        // The realtime subscription will handle updating the UI
+        // Force refresh the reactions display for this message
+        const { data: updatedReactions } = await supabaseClient
+            .from('message_reactions')
+            .select('*')
+            .eq('message_id', messageId);
+        
+        const reactionsContainer = messageElement.querySelector('.message-reactions');
+        if (reactionsContainer && updatedReactions) {
+            // Group reactions by emoji and count
+            const reactionCounts = {};
+            updatedReactions.forEach(r => {
+                if (r.emoji && r.emoji.trim() !== '') {
+                    reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+                }
+            });
+            
+            let reactionsHtml = '';
+            for (const [emojiKey, count] of Object.entries(reactionCounts)) {
+                reactionsHtml += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emojiKey}')">${emojiKey} ${count}</span>`;
+            }
+            reactionsContainer.innerHTML = reactionsHtml;
+        }
         
     } catch (error) {
         console.error("❌ Error adding reaction:", error);
