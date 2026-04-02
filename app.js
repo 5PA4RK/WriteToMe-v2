@@ -667,24 +667,20 @@ function setupEventListeners() {
         }
     });
     
-// In setupEventListeners function
-if (closeReplyModal) {
-    const handleCloseModal = () => {
-        replyModal.style.display = 'none';
-        if (appState) appState.replyingTo = null;
-        document.body.classList.remove('modal-open');
-        // Restore scroll position
-        const scrollY = Math.abs(parseInt(document.body.style.top || '0'));
-        document.body.style.top = '';
-        window.scrollTo(0, scrollY);
-    };
-    
-    closeReplyModal.addEventListener('click', handleCloseModal);
-    closeReplyModal.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        handleCloseModal();
-    }, { passive: false });
-}
+    if (closeReplyModal) {
+        const handleCloseModal = () => {
+            replyModal.style.display = 'none';
+            if (appState) appState.replyingTo = null;
+            document.body.classList.remove('modal-open');
+        };
+        
+        closeReplyModal.addEventListener('click', handleCloseModal);
+        closeReplyModal.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleCloseModal();
+        }, { passive: false });
+    }
+
     if (sendReplyBtn) {
         sendReplyBtn.replaceWith(sendReplyBtn.cloneNode(true));
         const newSendReplyBtn = document.getElementById('sendReplyBtn');
@@ -2180,7 +2176,7 @@ function checkAndReconnectSubscriptions() {
 // ENHANCED CHAT FUNCTIONS
 // ============================================
 async function sendMessage() {
-    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 7.0 - FIXED REPLY IMAGE 🔵🔵🔵🔵🔵');
+    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 6.0 - NO BLINK 🔵🔵🔵🔵🔵');
     
     if (isSendingMessage) {
         console.log('Already sending, skipping');
@@ -2212,58 +2208,9 @@ async function sendMessage() {
         }
     }
     
-    // Get reply info BEFORE clearing
-    const currentReplyToId = window.__tempReplyTo || appState.replyingTo;
-    let currentReplyToImage = window.__tempReplyToImage || appState.replyingToImage;
-    
-    // CRITICAL FIX: If we have a reply ID but no image URL, try to find the original message's image
-    if (currentReplyToId && !currentReplyToImage) {
-        console.log('No reply image from temp, searching for original message...');
-        
-        // Try to find in DOM first
-        const originalMsgElement = document.getElementById(`msg-${currentReplyToId}`);
-        if (originalMsgElement) {
-            const imgEl = originalMsgElement.querySelector('.message-image');
-            if (imgEl && imgEl.src) {
-                currentReplyToImage = imgEl.src;
-                console.log('Found reply image in DOM:', currentReplyToImage);
-            }
-        }
-        
-        // If not in DOM, try appState messages
-        if (!currentReplyToImage && appState.messages) {
-            const originalMsg = appState.messages.find(m => m.id === currentReplyToId);
-            if (originalMsg) {
-                // Use _realImageUrl if available (permanent URL), otherwise use image
-                currentReplyToImage = originalMsg._realImageUrl || originalMsg.image;
-                console.log('Found reply image in appState:', currentReplyToImage);
-            }
-        }
-        
-        // If still no image, try to fetch from database
-        if (!currentReplyToImage && supabaseClient) {
-            try {
-                const { data: msgData } = await supabaseClient
-                    .from('messages')
-                    .select('image_url')
-                    .eq('id', currentReplyToId)
-                    .single();
-                if (msgData && msgData.image_url) {
-                    currentReplyToImage = msgData.image_url;
-                    console.log('Found reply image in database:', currentReplyToImage);
-                }
-            } catch (e) {
-                console.log('Could not fetch from DB:', e);
-            }
-        }
-    }
-    
-    console.log('Reply info for optimistic display:', { currentReplyToId, currentReplyToImage });
-    
-    // Clear reply data
+    const replyToId = window.__tempReplyTo || appState.replyingTo;
     appState.replyingTo = null;
     window.__tempReplyTo = null;
-    window.__tempReplyToImage = null;
     
     const originalMessageText = messageText;
     const originalImageFile = imageFile;
@@ -2283,98 +2230,14 @@ async function sendMessage() {
         console.log('📸 Created local preview URL:', localPreviewUrl);
     }
     
-    // ========== OPTIMISTIC DISPLAY ==========
-    console.log('📝 Creating optimistic message DIV');
+    // ========== OPTIMISTIC DISPLAY - THIS IS THE FINAL DISPLAY ==========
+    console.log('📝 Creating optimistic message DIV (this will be the final view)');
     
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message sent';
     messageDiv.id = `msg-${tempId}`;
     
     let messageContent = '';
-    
-    // Add reply quote if this is a reply
-    if (currentReplyToId) {
-        // Get the original message details for the quote
-        let quotedSender = '';
-        let quotedText = '';
-        let quotedImageUrl = currentReplyToImage;
-        let isImageOnly = false;
-        
-        // Try to find the original message in DOM
-        const originalMsgElement = document.getElementById(`msg-${currentReplyToId}`);
-        if (originalMsgElement) {
-            const senderEl = originalMsgElement.querySelector('.message-sender');
-            const textEl = originalMsgElement.querySelector('.message-text');
-            const imgEl = originalMsgElement.querySelector('.message-image');
-            
-            if (senderEl) quotedSender = senderEl.textContent;
-            if (textEl) {
-                const rawText = textEl.textContent.replace(/\s*\(edited\)\s*$/, '');
-                if (rawText && rawText !== '[Image]') {
-                    quotedText = rawText.substring(0, 100);
-                    if (rawText.length > 100) quotedText += '...';
-                }
-            }
-            if (imgEl && !quotedImageUrl) quotedImageUrl = imgEl.src;
-        }
-        
-        // If not found in DOM, try appState
-        if (!quotedSender && appState.messages) {
-            const originalMsg = appState.messages.find(m => m.id === currentReplyToId);
-            if (originalMsg) {
-                quotedSender = originalMsg.sender;
-                if (originalMsg.text && originalMsg.text.trim() !== '') {
-                    quotedText = originalMsg.text.substring(0, 100);
-                    if (originalMsg.text.length > 100) quotedText += '...';
-                }
-                if (!quotedImageUrl) {
-                    quotedImageUrl = originalMsg._realImageUrl || originalMsg.image;
-                }
-            }
-        }
-        
-        // Determine if it's image-only
-        const hasImage = quotedImageUrl && quotedImageUrl.trim() !== '';
-        const hasText = quotedText && quotedText.trim() !== '';
-        isImageOnly = hasImage && !hasText;
-        
-        // Build display text
-        let displayText = quotedText || '';
-        if (isImageOnly) {
-            displayText = '';
-        } else if (hasImage && hasText) {
-            displayText = `${quotedText} <i class="fas fa-image"></i>`;
-        }
-        
-        if (!displayText) displayText = '[Message]';
-        
-        // Ensure we have a valid image URL (not blob)
-        let finalImageForPreview = quotedImageUrl;
-        if (finalImageForPreview && finalImageForPreview.startsWith('blob:')) {
-            // Try to get permanent URL from appState
-            const originalMsg = appState.messages.find(m => m.id === currentReplyToId);
-            if (originalMsg && originalMsg._realImageUrl) {
-                finalImageForPreview = originalMsg._realImageUrl;
-            }
-        }
-        
-        const imagePreviewHtml = finalImageForPreview ? `
-            <div class="reply-image-preview" style="display: inline-block; margin-left: 8px;">
-                <img src="${finalImageForPreview}" style="max-width: 30px; max-height: 30px; border-radius: 4px; object-fit: cover;" 
-                     onclick="event.stopPropagation(); window.showFullImage('${finalImageForPreview}')">
-            </div>
-        ` : '';
-        
-        messageContent += `
-            <div class="message-reply-ref">
-                <i class="fas fa-reply"></i> 
-                <div class="reply-content">
-                    <span>Replying to <strong>${escapeHtml(quotedSender || 'someone')}</strong>: ${displayText}</span>
-                    ${imagePreviewHtml}
-                </div>
-            </div>
-        `;
-    }
     
     if (originalMessageText && originalMessageText.trim()) {
         const escapedText = escapeHtml(originalMessageText);
@@ -2416,7 +2279,7 @@ async function sendMessage() {
     `;
     
     chatMessages.appendChild(messageDiv);
-    console.log('✅ Message displayed with reply quote (image preview should be visible)');
+    console.log('✅ Message displayed with local preview (no blinking!)');
     
     forceScrollToBottom('smooth', 50);
     // ========== END DISPLAY ==========
@@ -2427,45 +2290,53 @@ async function sendMessage() {
         if (imageFile) {
             console.log('📸 Uploading image to storage in background...');
             finalImageUrl = await uploadImageToStorage(imageFile);
-            console.log('✅ Image uploaded, final URL:', finalImageUrl);
+            console.log('✅ Image uploaded in background, final URL:', finalImageUrl);
         }
         
-        const result = await sendMessageToDB(originalMessageText, finalImageUrl, currentReplyToId);
+        const result = await sendMessageToDB(originalMessageText, finalImageUrl, replyToId);
         
         if (result && result.success) {
             console.log('✅ Message saved to DB, ID:', result.data.id);
             
+            // Store the mapping from temp ID to real ID
             if (!window._messageIdMap) window._messageIdMap = {};
             window._messageIdMap[tempId] = result.data.id;
             
+            // Update the message ID in DOM (so future actions work)
             const msgElement = document.getElementById(`msg-${tempId}`);
             if (msgElement) {
                 msgElement.id = `msg-${result.data.id}`;
                 
+                // Update action button onclick
                 const actionBtn = msgElement.querySelector('.message-action-dots');
                 if (actionBtn) {
                     actionBtn.setAttribute('onclick', `window.toggleMessageActions('${result.data.id}', this)`);
                 }
                 
+                // Update actions menu ID and buttons
                 const actionsMenu = document.getElementById(`actions-${tempId}`);
                 if (actionsMenu) {
                     actionsMenu.id = `actions-${result.data.id}`;
                     
+                    // Update edit button
                     const editBtn = actionsMenu.querySelector(`button[onclick*="editMessage('${tempId}')"]`);
                     if (editBtn) {
                         editBtn.setAttribute('onclick', `window.editMessage('${result.data.id}')`);
                     }
                     
+                    // Update delete button
                     const deleteBtn = actionsMenu.querySelector(`button[onclick*="deleteMessage('${tempId}')"]`);
                     if (deleteBtn) {
                         deleteBtn.setAttribute('onclick', `window.deleteMessage('${result.data.id}')`);
                     }
                     
+                    // Update reply button
                     const replyBtn = actionsMenu.querySelector('.reply-btn');
                     if (replyBtn) {
                         replyBtn.setAttribute('data-message-id', result.data.id);
                     }
                     
+                    // Update all reaction buttons
                     const reactionBtns = actionsMenu.querySelectorAll('.reaction-emoji-btn');
                     reactionBtns.forEach(btn => {
                         const onclick = btn.getAttribute('onclick');
@@ -2476,19 +2347,24 @@ async function sendMessage() {
                 }
             }
             
-            appState.messages.push({
-                id: result.data.id,
-                sender: appState.userName,
-                text: originalMessageText,
-                image: localPreviewUrl,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: 'sent',
-                reply_to: currentReplyToId,
-                reply_to_image: currentReplyToImage,
-                _realImageUrl: finalImageUrl
-            });
+            // Update the image source only if the blob URL is about to be revoked
+            // We're NOT updating the image src to avoid blinking
+            // The blob URL will work until the page is refreshed
             
-            console.log('✅ Message saved with reply_to_image:', currentReplyToImage);
+// Add to appState.messages with the blob URL (so it works immediately)
+appState.messages.push({
+    id: result.data.id,
+    sender: appState.userName,
+    text: originalMessageText,
+    image: localPreviewUrl, // Keep the blob URL for current session
+    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+    type: 'sent',
+    reply_to: replyToId,
+    reply_to_image: window.__tempReplyToImage, // Add this line - store the replied-to image URL
+    _realImageUrl: finalImageUrl // Store real URL for future use
+});
+            
+            console.log('✅ Message saved - no image update, no blinking!');
             
         } else {
             console.error('❌ Failed to send message');
@@ -3046,34 +2922,22 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             reactionsMap.get(reaction.message_id).push(reaction);
         });
         
+        // Display messages
 // Display messages
 orderedMessages.forEach((msg) => {
     const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
-    
-    // Load reply_to image if this message is a reply
-    let replyToImage = null;
-    if (msg.reply_to) {
-        const originalMsg = orderedMessages.find(m => m.id === msg.reply_to);
-        if (originalMsg && originalMsg.image_url) {
-            replyToImage = originalMsg.image_url;
-        }
-    }
-    
-    // Get reactions for this message from the reactionsMap
-    const messageReactions = reactionsMap.get(msg.id) || [];
     
     if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
         window.ChatModule.displayMessage({
             id: msg.id,
             sender: msg.sender_name,
             text: msg.message,
-            image: msg.image_url,
+            image: msg.image_url,  // <-- THIS LINE
             time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             type: messageType,
             is_historical: !!sessionId,
-            reactions: messageReactions,  // Make sure this is passed
-            reply_to: msg.reply_to,
-            reply_to_image: replyToImage
+            reactions: reactionsMap.get(msg.id) || [],
+            reply_to: msg.reply_to
         });
     }
 });
