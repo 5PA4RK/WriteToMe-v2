@@ -2116,46 +2116,65 @@ function setupRealtimeSubscriptions() {
     appState.typingSubscription = typingChannel;
     
     // Reactions subscription
-    const reactionsChannel = supabaseClient
-        .channel('reactions_' + appState.currentSessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: '*',
-                schema: 'public',
-                table: 'message_reactions'
-            },
-            async (payload) => {
-                console.log('🎯 REACTION CHANGE DETECTED:', payload.event, payload.new?.message_id || payload.old?.message_id);
-                
-                const messageId = payload.new?.message_id || payload.old?.message_id;
-                if (!messageId) return;
-                
-                const messageElement = document.getElementById(`msg-${messageId}`);
-                if (!messageElement) return;
-                
-                const updatedReactions = await getMessageReactions(messageId);
-                const reactionsContainer = messageElement.querySelector('.message-reactions');
-                if (reactionsContainer && window.ChatModule) {
-                    window.ChatModule.renderReactions(reactionsContainer, updatedReactions);
-                }
-                
-                if (appState.messages) {
-                    const messageIndex = appState.messages.findIndex(m => m.id === messageId);
-                    if (messageIndex !== -1) {
-                        appState.messages[messageIndex].reactions = updatedReactions;
-                    }
+// Reactions subscription - IMPROVED VERSION
+const reactionsChannel = supabaseClient
+    .channel('reactions_' + appState.currentSessionId)
+    .on(
+        'postgres_changes',
+        {
+            event: '*',
+            schema: 'public',
+            table: 'message_reactions'
+        },
+        async (payload) => {
+            console.log('🎯 REACTION CHANGE DETECTED:', payload.event, payload.new?.message_id || payload.old?.message_id);
+            
+            const messageId = payload.new?.message_id || payload.old?.message_id;
+            if (!messageId) return;
+            
+            const messageElement = document.getElementById(`msg-${messageId}`);
+            if (!messageElement) return;
+            
+            // Fetch fresh reactions from database
+            const { data: updatedReactions, error } = await supabaseClient
+                .from('message_reactions')
+                .select('*')
+                .eq('message_id', messageId);
+            
+            if (error) {
+                console.error('Error fetching reactions:', error);
+                return;
+            }
+            
+            console.log(`Message ${messageId} now has ${updatedReactions?.length || 0} reactions`);
+            
+            const reactionsContainer = messageElement.querySelector('.message-reactions');
+            if (reactionsContainer) {
+                // Use the helper function to render
+                if (typeof renderReactionsInContainer === 'function') {
+                    renderReactionsInContainer(reactionsContainer, updatedReactions || [], messageId);
+                } else if (window.ChatModule && window.ChatModule.renderReactions) {
+                    window.ChatModule.renderReactions(reactionsContainer, updatedReactions || []);
                 }
             }
-        )
-        .subscribe((status, err) => {
-            console.log('📡 REACTIONS Subscription status:', status);
-            if (err) {
-                console.error('❌ Reactions subscription error:', err);
-            } else if (status === 'SUBSCRIBED') {
-                console.log('✅ Successfully subscribed to message_reactions!');
+            
+            // Update appState
+            if (appState.messages) {
+                const messageIndex = appState.messages.findIndex(m => m.id === messageId);
+                if (messageIndex !== -1) {
+                    appState.messages[messageIndex].reactions = updatedReactions || [];
+                }
             }
-        });
+        }
+    )
+    .subscribe((status, err) => {
+        console.log('📡 REACTIONS Subscription status:', status);
+        if (err) {
+            console.error('❌ Reactions subscription error:', err);
+        } else if (status === 'SUBSCRIBED') {
+            console.log('✅ Successfully subscribed to message_reactions!');
+        }
+    });
     
     appState.reactionsSubscription = reactionsChannel;
 }
@@ -2341,7 +2360,7 @@ async function sendMessage() {
         // Build display text
         let displayText = quotedText || '';
         if (isImageOnly) {
-            displayText = '<i class="fas fa-image"></i> [Image]';
+            displayText = '';
         } else if (hasImage && hasText) {
             displayText = `${quotedText} <i class="fas fa-image"></i>`;
         }
@@ -2935,19 +2954,18 @@ async function loadChatHistory(sessionId = null, limit = 50) {
     console.log('Loading chat history for session:', targetSessionId);
     
     try {
-        // First, check if we already have messages in memory
-        if (!sessionId && appState.messages.length > 0) {
-            console.log('Using cached messages');
-            return;
+        // Clear existing messages
+        if (chatMessages) {
+            chatMessages.innerHTML = '';
         }
         
-        // Build the query with pagination
+        // Build the query
         let query = supabaseClient
             .from('messages')
             .select('*')
             .eq('session_id', targetSessionId)
             .eq('is_deleted', false)
-            .order('created_at', { ascending: false })
+            .order('created_at', { ascending: true })
             .limit(limit);
         
         // For guests, filter out cleared messages
@@ -2968,29 +2986,12 @@ async function loadChatHistory(sessionId = null, limit = 50) {
         
         if (error) {
             console.error('Error loading messages:', error);
-            if (error.message.includes('timeout')) {
-                console.log('Retrying with smaller limit...');
-                const { data: retryMessages, error: retryError } = await query.limit(30);
-                if (!retryError) {
-                    messages = retryMessages;
-                } else {
-                    throw retryError;
-                }
-            } else {
-                throw error;
-            }
+            throw error;
         }
         
-        // Reverse to get chronological order for display
-        const orderedMessages = (messages || []).reverse();
+        console.log(`Loaded ${messages?.length || 0} messages from database`);
         
-        console.log(`Loaded ${orderedMessages.length} messages from database`);
-        
-        // Clear existing messages and display new ones
-        if (chatMessages) {
-            chatMessages.innerHTML = '';
-        }
-        
+        // Add history header if viewing historical session
         if (sessionId) {
             const { data: session } = await supabaseClient
                 .from('chat_sessions')
@@ -2998,7 +2999,7 @@ async function loadChatHistory(sessionId = null, limit = 50) {
                 .eq('session_id', sessionId)
                 .single();
             
-            if (session) {
+            if (session && chatMessages) {
                 const roomNumber = getStableRoomNumber(sessionId);
                 const historyHeader = document.createElement('div');
                 historyHeader.className = 'message received historical';
@@ -3008,7 +3009,7 @@ async function loadChatHistory(sessionId = null, limit = 50) {
                         <div class="message-text">
                             <i class="fas fa-door-open"></i> Chat History - Room ${roomNumber}
                             <br><small>Host: ${escapeHtml(session.host_name)} | Date: ${new Date(session.created_at).toLocaleDateString()}</small>
-                            ${orderedMessages.length === limit ? '<br><small>Showing last ' + limit + ' messages. <button onclick="loadMoreMessages()">Load more...</button></small>' : ''}
+                            ${messages?.length === limit ? '<br><small>Showing last ' + limit + ' messages.</small>' : ''}
                         </div>
                     </div>
                 `;
@@ -3016,26 +3017,32 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             }
         }
         
-        if (orderedMessages.length === 0) {
-            const emptyMessage = document.createElement('div');
-            emptyMessage.className = 'message received';
-            emptyMessage.innerHTML = `
-                <div class="message-sender">System</div>
-                <div class="message-content">
-                    <div class="message-text">No messages in this room yet.</div>
-                </div>
-            `;
-            chatMessages.appendChild(emptyMessage);
+        if (!messages || messages.length === 0) {
+            if (chatMessages) {
+                const emptyMessage = document.createElement('div');
+                emptyMessage.className = 'message received';
+                emptyMessage.innerHTML = `
+                    <div class="message-sender">System</div>
+                    <div class="message-content">
+                        <div class="message-text">No messages in this room yet.</div>
+                    </div>
+                `;
+                chatMessages.appendChild(emptyMessage);
+            }
+            appState.messages = [];
             return;
         }
         
-        // Load reactions in batches to avoid too many requests
-        const messageIds = orderedMessages.map(msg => msg.id);
+        // FIRST: Load ALL reactions for these messages in one query
+        const messageIds = messages.map(msg => msg.id);
         const { data: allReactions } = await supabaseClient
             .from('message_reactions')
             .select('*')
             .in('message_id', messageIds);
         
+        console.log(`Loaded ${allReactions?.length || 0} total reactions`);
+        
+        // Create reactions map
         const reactionsMap = new Map();
         (allReactions || []).forEach(reaction => {
             if (!reactionsMap.has(reaction.message_id)) {
@@ -3044,91 +3051,140 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             reactionsMap.get(reaction.message_id).push(reaction);
         });
         
-        // Store loaded messages
-        appState.messages = orderedMessages;
+        // Store messages with their reactions in appState
+        appState.messages = messages.map(msg => ({
+            id: msg.id,
+            sender: msg.sender_name,
+            text: msg.message,
+            image: msg.image_url,
+            time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            type: msg.sender_id === appState.userId ? 'sent' : 'received',
+            is_historical: !!sessionId,
+            reactions: reactionsMap.get(msg.id) || [],
+            reply_to: msg.reply_to,
+            created_at: msg.created_at
+        }));
         
         // Display each message with its reactions
-        orderedMessages.forEach((msg) => {
+        for (const msg of messages) {
             const messageType = msg.sender_id === appState.userId ? 'sent' : 'received';
+            const messageReactions = reactionsMap.get(msg.id) || [];
+            
+            console.log(`Displaying message ${msg.id} with ${messageReactions.length} reactions`);
             
             // Load reply_to image if this message is a reply
             let replyToImage = null;
             if (msg.reply_to) {
-                const originalMsg = orderedMessages.find(m => m.id === msg.reply_to);
+                const originalMsg = messages.find(m => m.id === msg.reply_to);
                 if (originalMsg && originalMsg.image_url) {
                     replyToImage = originalMsg.image_url;
                 }
             }
             
-            // Use ChatModule.displayMessage to ensure reactions are rendered
-            if (window.ChatModule && typeof window.ChatModule.displayMessage === 'function') {
-                window.ChatModule.displayMessage({
-                    id: msg.id,
-                    sender: msg.sender_name,
-                    text: msg.message,
-                    image: msg.image_url,
-                    time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    type: messageType,
-                    is_historical: !!sessionId,
-                    reactions: reactionsMap.get(msg.id) || [],  // Pass reactions here
-                    reply_to: msg.reply_to,
-                    reply_to_image: replyToImage
-                });
-            } else {
-                // Fallback: create message directly
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `message ${messageType}`;
-                if (sessionId) messageDiv.classList.add('historical');
-                messageDiv.id = `msg-${msg.id}`;
+            // Create message element directly (bypass ChatModule for better control)
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${messageType}`;
+            if (sessionId) messageDiv.classList.add('historical');
+            messageDiv.id = `msg-${msg.id}`;
+            
+            let messageContent = '';
+            
+            // Add reply reference if this is a reply
+            if (msg.reply_to) {
+                let quotedSender = '';
+                let quotedText = '';
+                let quotedImage = replyToImage;
                 
-                let messageContent = '';
-                if (msg.message && msg.message.trim()) {
-                    messageContent += `<div class="message-text">${escapeHtml(msg.message)}</div>`;
-                }
-                if (msg.image_url) {
-                    messageContent += `<img src="${msg.image_url}" class="message-image" onclick="window.showFullImage('${msg.image_url}')" loading="lazy">`;
+                // Try to find original message in loaded messages
+                const originalMsg = messages.find(m => m.id === msg.reply_to);
+                if (originalMsg) {
+                    quotedSender = originalMsg.sender_name;
+                    if (originalMsg.message && originalMsg.message.trim()) {
+                        quotedText = originalMsg.message.substring(0, 100);
+                        if (originalMsg.message.length > 100) quotedText += '...';
+                    } else if (originalMsg.image_url) {
+                        quotedText = '[Image]';
+                    }
                 }
                 
-                messageDiv.innerHTML = `
-                    <div class="message-sender">${escapeHtml(msg.sender_name)}</div>
-                    <div class="message-content">
-                        ${messageContent}
-                        <div class="message-reactions"></div>
-                        <div class="message-footer">
-                            <div class="message-time">${new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                            <button class="message-action-dots" onclick="window.toggleMessageActions('${msg.id}', this)"><i class="fas fa-ellipsis-v"></i></button>
-                        </div>
+                const imagePreviewHtml = quotedImage ? `
+                    <div class="reply-image-preview">
+                        <img src="${quotedImage}" style="max-width: 40px; max-height: 40px; border-radius: 4px; object-fit: cover;" 
+                             onclick="event.stopPropagation(); window.showFullImage('${quotedImage}')">
                     </div>
-                    <div class="message-actions-menu" id="actions-${msg.id}" style="display: none;">
+                ` : '';
+                
+                messageContent += `
+                    <div class="message-reply-ref">
+                        <i class="fas fa-reply"></i> 
+                        <div class="reply-content">
+                            <span>Replying to <strong>${escapeHtml(quotedSender || 'someone')}</strong>: ${escapeHtml(quotedText)}</span>
+                        </div>
+                        ${imagePreviewHtml}
+                    </div>
+                `;
+            }
+            
+            // Add message text
+            if (msg.message && msg.message.trim()) {
+                const escapedText = escapeHtml(msg.message);
+                const textWithBreaks = escapedText.replace(/\n/g, '<br>');
+                messageContent += `<div class="message-text">${textWithBreaks}</div>`;
+            }
+            
+            // Add image
+            if (msg.image_url && msg.image_url.trim()) {
+                messageContent += `<img src="${msg.image_url}" class="message-image" onclick="window.showFullImage('${msg.image_url}')" loading="lazy">`;
+            }
+            
+            // Create actions menu HTML
+            const isOwnMessage = msg.sender_id === appState.userId;
+            const actionsMenuHtml = `
+                <div class="message-actions-menu" id="actions-${msg.id}" style="display: none;">
+                    ${isOwnMessage ? `
                         <button onclick="window.editMessage('${msg.id}')"><i class="fas fa-edit"></i> Edit</button>
                         <button onclick="window.deleteMessage('${msg.id}')"><i class="fas fa-trash"></i> Delete</button>
                         <div class="menu-divider"></div>
-                        <button class="reply-btn" data-message-id="${msg.id}" data-sender="${escapeHtml(msg.sender_name)}" data-message-text="${escapeHtml(msg.message || '')}">
-                            <i class="fas fa-reply"></i> Reply
-                        </button>
-                        <div class="menu-divider"></div>
-                        <div class="reaction-section">
-                            <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
-                            <div class="reaction-quick-picker">
-                                ${reactionEmojis.map(emoji => 
-                                    `<button class="reaction-emoji-btn" onclick="window.addReaction('${msg.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
-                                ).join('')}
-                            </div>
+                    ` : ''}
+                    <button class="reply-btn" data-message-id="${msg.id}" data-sender="${escapeHtml(msg.sender_name)}" data-message-text="${escapeHtml(msg.message || '')}">
+                        <i class="fas fa-reply"></i> Reply
+                    </button>
+                    <div class="menu-divider"></div>
+                    <div class="reaction-section">
+                        <div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div>
+                        <div class="reaction-quick-picker">
+                            ${reactionEmojis.map(emoji => 
+                                `<button class="reaction-emoji-btn" onclick="window.addReaction('${msg.id}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
+                            ).join('')}
                         </div>
                     </div>
-                `;
-                
-                chatMessages.appendChild(messageDiv);
-                
-                // Render reactions
-                const reactionsContainer = messageDiv.querySelector('.message-reactions');
-                const msgReactions = reactionsMap.get(msg.id) || [];
-                if (reactionsContainer && msgReactions.length > 0 && window.ChatModule) {
-                    window.ChatModule.renderReactions(reactionsContainer, msgReactions);
-                }
+                </div>
+            `;
+            
+            messageDiv.innerHTML = `
+                <div class="message-sender">${escapeHtml(msg.sender_name)}</div>
+                <div class="message-content">
+                    ${messageContent}
+                    <div class="message-reactions"></div>
+                    <div class="message-footer">
+                        <div class="message-time">${new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                        <button class="message-action-dots" onclick="window.toggleMessageActions('${msg.id}', this)"><i class="fas fa-ellipsis-v"></i></button>
+                    </div>
+                </div>
+                ${actionsMenuHtml}
+            `;
+            
+            chatMessages.appendChild(messageDiv);
+            
+            // CRITICAL: Render reactions AFTER the message is in the DOM
+            const reactionsContainer = messageDiv.querySelector('.message-reactions');
+            if (reactionsContainer && messageReactions.length > 0) {
+                console.log(`Rendering ${messageReactions.length} reactions for message ${msg.id}`);
+                renderReactionsInContainer(reactionsContainer, messageReactions, msg.id);
             }
-        });
+        }
         
+        // Scroll to bottom for active chat, top for history
         if (chatMessages && !sessionId) {
             forceScrollToBottom('auto', 100);
         } else if (chatMessages) {
@@ -3136,6 +3192,7 @@ async function loadChatHistory(sessionId = null, limit = 50) {
         }
         
         console.log('Chat history loaded successfully with reactions');
+        
     } catch (error) {
         console.error("Error loading chat history:", error);
         
@@ -3151,6 +3208,27 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             chatMessages.appendChild(errorMsg);
         }
     }
+}
+
+// Helper function to render reactions (independent of ChatModule)
+function renderReactionsInContainer(container, reactions, messageId) {
+    if (!container || !reactions || reactions.length === 0) {
+        if (container) container.innerHTML = '';
+        return;
+    }
+    
+    // Group reactions by emoji and count
+    const reactionCounts = {};
+    reactions.forEach(r => {
+        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+    });
+    
+    let html = '';
+    for (const [emoji, count] of Object.entries(reactionCounts)) {
+        html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+    }
+    
+    container.innerHTML = html;
 }
 
 // Add function to load more messages
