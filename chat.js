@@ -324,9 +324,15 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
     function getActionsMenuHtml(message) {
         const isOwnMessage = message.sender === (appState ? appState.userName : '');
         const messageIdStr = String(message.id);
+        const isMobile = window.innerWidth <= 768;
         
         return `
             <div class="message-actions-menu" id="actions-${messageIdStr}" style="display: none;">
+                ${isMobile ? `
+                    <button class="close-actions-menu" onclick="window.ChatModule.closeMessageActions()" style="position: absolute; top: 8px; right: 8px; width: auto; background: transparent; font-size: 20px; padding: 4px 8px;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                ` : ''}
                 ${isOwnMessage ? `
                     <button onclick="window.editMessage('${messageIdStr}')"><i class="fas fa-edit"></i> Edit</button>
                     <button onclick="window.deleteMessage('${messageIdStr}')"><i class="fas fa-trash"></i> Delete</button>
@@ -342,7 +348,7 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
                         ${reactionEmojis.map(emoji => 
                             `<button class="reaction-emoji-btn" onclick="window.addReaction('${messageIdStr}', '${emoji}')" title="React with ${emoji}">${emoji}</button>`
                         ).join('')}
-                    </div>
+                    </button>
                 </div>
             </div>
         `;
