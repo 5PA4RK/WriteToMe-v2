@@ -610,19 +610,7 @@ header {
     background-color: rgba(0, 0, 0, 0.1);
 }
 
-/* Message Actions Menu */
-.message-actions-menu {
-    position: fixed;
-    background-color: var(--bg-primary);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-md);
-    padding: 8px;
-    min-width: 220px;
-    box-shadow: var(--shadow-xl);
-    z-index: 9999;
-    display: none;
-    animation: menuFadeIn 0.2s ease;
-}
+
 
 @keyframes menuFadeIn {
     from { opacity: 0; transform: scale(0.95); }
@@ -666,8 +654,10 @@ header {
 
 .reaction-quick-picker {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 4px;
+    grid-template-columns: repeat(3, minmax(45px, 1fr));
+    gap: 6px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .reaction-emoji-btn {
@@ -676,7 +666,13 @@ header {
     justify-content: center !important;
     background-color: var(--bg-tertiary) !important;
     border-radius: var(--radius-md) !important;
+    min-width: 45px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
+
+
 
 .reaction-emoji-btn:hover {
     background-color: var(--bg-hover) !important;
@@ -1878,21 +1874,25 @@ header {
     
     .message-actions-menu {
         position: fixed !important;
-        top: auto !important;
         bottom: 0 !important;
         left: 0 !important;
         right: 0 !important;
         width: 100% !important;
+        max-width: 100% !important;
         border-radius: 20px 20px 0 0;
         transform: translateY(100%);
         transition: transform 0.3s ease;
         padding: 16px;
         border-top-width: 2px;
         z-index: 10000;
+        overflow-y: auto;
+        max-height: 80vh;
     }
     
-    .message-actions-menu.show { transform: translateY(0); }
-    
+    .message-actions-menu.show { 
+        transform: translateY(0);
+        display: block !important;
+    }    
     .message-actions-menu button {
         padding: 14px 16px;
         font-size: 1rem;
@@ -1900,15 +1900,15 @@ header {
     }
     
     .reaction-quick-picker {
-        grid-template-columns: repeat(6, 1fr);
+        grid-template-columns: repeat(3, 1fr);
         gap: 8px;
         padding: 8px 0;
     }
     
     .reaction-emoji-btn {
-        font-size: 24px !important;
-        padding: 10px !important;
-        border-radius: 10px !important;
+        font-size: 28px !important;
+        padding: 12px !important;
+        min-width: 60px;
     }
     
     .modal-body { max-height: 70vh; }
