@@ -1928,67 +1928,6 @@ function loadBackupNotifications() {
         console.log("Error loading backup notifications:", e);
     }
 }
-// ============================================
-// REACTION REAL-TIME UPDATE FUNCTION
-// ============================================
-
-async function updateReactionsForMessage(messageId) {
-    console.log('🔄 [REACTION] Updating reactions for message:', messageId);
-    
-    if (!messageId) {
-        console.error('No message ID provided');
-        return;
-    }
-    
-    try {
-        const { data: reactions, error } = await supabaseClient
-            .from('message_reactions')
-            .select('*')
-            .eq('message_id', messageId);
-        
-        if (error) {
-            console.error('Error fetching reactions:', error);
-            return;
-        }
-        
-        console.log(`📊 [REACTION] Found ${reactions?.length || 0} reactions for message ${messageId}`);
-        
-        const messageElement = document.getElementById(`msg-${messageId}`);
-        if (messageElement) {
-            const reactionsContainer = messageElement.querySelector('.message-reactions');
-            if (reactionsContainer) {
-                // Use ChatModule's renderReactions if available
-                if (window.ChatModule && typeof window.ChatModule.renderReactions === 'function') {
-                    window.ChatModule.renderReactions(reactionsContainer, reactions || []);
-                    console.log('✅ [REACTION] Updated via ChatModule.renderReactions');
-                } else {
-                    // Fallback rendering
-                    const reactionCounts = {};
-                    (reactions || []).forEach(r => {
-                        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-                    });
-                    
-                    let html = '';
-                    for (const [emoji, count] of Object.entries(reactionCounts)) {
-                        html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
-                    }
-                    reactionsContainer.innerHTML = html;
-                    console.log('✅ [REACTION] Updated via fallback renderer');
-                }
-            } else {
-                console.warn(`No reactions container found for message ${messageId}`);
-            }
-        } else {
-            console.warn(`Message element not found: msg-${messageId}`);
-        }
-    } catch (error) {
-        console.error('Error in updateReactionsForMessage:', error);
-    }
-}
-
-// Make it globally available
-window.updateReactionsForMessage = updateReactionsForMessage;
-
 
 // ============================================
 // REALTIME SUBSCRIPTIONS
@@ -2175,96 +2114,51 @@ function setupRealtimeSubscriptions() {
         });
     
     appState.typingSubscription = typingChannel;
-
-// Reactions subscription
-console.log('Setting up reactions subscription for session:', appState.currentSessionId);
-
-const reactionsChannel = supabaseClient
-    .channel(`reactions_${appState.currentSessionId}_${Date.now()}`)
-    .on(
-        'postgres_changes',
-        {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'message_reactions'
-        },
-        async (payload) => {
-            console.log('🎯 [REACTION] INSERTED:', payload.new);
-            const messageId = payload.new?.message_id;
-            if (messageId) {
-                // Verify this reaction belongs to current session
-                const { data: message } = await supabaseClient
-                    .from('messages')
-                    .select('session_id')
-                    .eq('id', messageId)
-                    .single();
+    
+    // Reactions subscription
+    const reactionsChannel = supabaseClient
+        .channel('reactions_' + appState.currentSessionId)
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'message_reactions'
+            },
+            async (payload) => {
+                console.log('🎯 REACTION CHANGE DETECTED:', payload.event, payload.new?.message_id || payload.old?.message_id);
                 
-                if (message && message.session_id === appState.currentSessionId) {
-                    await updateReactionsForMessage(messageId);
+                const messageId = payload.new?.message_id || payload.old?.message_id;
+                if (!messageId) return;
+                
+                const messageElement = document.getElementById(`msg-${messageId}`);
+                if (!messageElement) return;
+                
+                const updatedReactions = await getMessageReactions(messageId);
+                const reactionsContainer = messageElement.querySelector('.message-reactions');
+                if (reactionsContainer && window.ChatModule) {
+                    window.ChatModule.renderReactions(reactionsContainer, updatedReactions);
+                }
+                
+                if (appState.messages) {
+                    const messageIndex = appState.messages.findIndex(m => m.id === messageId);
+                    if (messageIndex !== -1) {
+                        appState.messages[messageIndex].reactions = updatedReactions;
+                    }
                 }
             }
-        }
-    )
-    .on(
-        'postgres_changes',
-        {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'message_reactions'
-        },
-        async (payload) => {
-            console.log('🎯 [REACTION] UPDATED:', payload.new);
-            const messageId = payload.new?.message_id;
-            if (messageId) {
-                const { data: message } = await supabaseClient
-                    .from('messages')
-                    .select('session_id')
-                    .eq('id', messageId)
-                    .single();
-                
-                if (message && message.session_id === appState.currentSessionId) {
-                    await updateReactionsForMessage(messageId);
-                }
+        )
+        .subscribe((status, err) => {
+            console.log('📡 REACTIONS Subscription status:', status);
+            if (err) {
+                console.error('❌ Reactions subscription error:', err);
+            } else if (status === 'SUBSCRIBED') {
+                console.log('✅ Successfully subscribed to message_reactions!');
             }
-        }
-    )
-    .on(
-        'postgres_changes',
-        {
-            event: 'DELETE',
-            schema: 'public',
-            table: 'message_reactions'
-        },
-        async (payload) => {
-            console.log('🎯 [REACTION] DELETED:', payload.old);
-            const messageId = payload.old?.message_id;
-            if (messageId) {
-                const { data: message } = await supabaseClient
-                    .from('messages')
-                    .select('session_id')
-                    .eq('id', messageId)
-                    .single();
-                
-                if (message && message.session_id === appState.currentSessionId) {
-                    await updateReactionsForMessage(messageId);
-                }
-            }
-        }
-    )
-    .subscribe((status, err) => {
-        console.log('📡 REACTIONS Subscription status:', status);
-        if (err) {
-            console.error('❌ Reactions subscription error:', err);
-        } else if (status === 'SUBSCRIBED') {
-            console.log('✅ Successfully subscribed to message_reactions!');
-        }
-    });
-
-appState.reactionsSubscription = reactionsChannel;
-
+        });
+    
+    appState.reactionsSubscription = reactionsChannel;
 }
-
-
 
 function checkAndReconnectSubscriptions() {
     if (!appState.isConnected || !appState.currentSessionId) return;
@@ -2282,37 +2176,6 @@ function checkAndReconnectSubscriptions() {
     }
 }
 
-
-
-
-
-// Add this helper function after setupRealtimeSubscriptions
-function renderReactionsFallback(container, reactions) {
-    if (!container) return;
-    
-    if (!reactions || reactions.length === 0) {
-        container.innerHTML = '';
-        return;
-    }
-    
-    // Count reactions
-    const reactionCounts = {};
-    reactions.forEach(r => {
-        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-    });
-    
-    // Get message ID from container
-    const messageElement = container.closest('.message');
-    const messageId = messageElement ? messageElement.id.replace('msg-', '') : '';
-    
-    // Build HTML
-    let html = '';
-    for (const [emoji, count] of Object.entries(reactionCounts)) {
-        html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
-    }
-    
-    container.innerHTML = html;
-}
 // ============================================
 // ENHANCED CHAT FUNCTIONS
 // ============================================
