@@ -2184,6 +2184,7 @@ const reactionsChannel = supabaseClient
 appState.reactionsSubscription = reactionsChannel;
 }
 
+
 function checkAndReconnectSubscriptions() {
     if (!appState.isConnected || !appState.currentSessionId) return;
     
@@ -2199,7 +2200,33 @@ function checkAndReconnectSubscriptions() {
         setupPendingGuestsSubscription();
     }
 }
-
+// Add this helper function after setupRealtimeSubscriptions
+function renderReactionsFallback(container, reactions) {
+    if (!container) return;
+    
+    if (!reactions || reactions.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    // Count reactions
+    const reactionCounts = {};
+    reactions.forEach(r => {
+        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+    });
+    
+    // Get message ID from container
+    const messageElement = container.closest('.message');
+    const messageId = messageElement ? messageElement.id.replace('msg-', '') : '';
+    
+    // Build HTML
+    let html = '';
+    for (const [emoji, count] of Object.entries(reactionCounts)) {
+        html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+    }
+    
+    container.innerHTML = html;
+}
 // ============================================
 // ENHANCED CHAT FUNCTIONS
 // ============================================
