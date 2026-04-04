@@ -1928,6 +1928,67 @@ function loadBackupNotifications() {
         console.log("Error loading backup notifications:", e);
     }
 }
+// ============================================
+// REACTION REAL-TIME UPDATE FUNCTION
+// ============================================
+
+async function updateReactionsForMessage(messageId) {
+    console.log('🔄 [REACTION] Updating reactions for message:', messageId);
+    
+    if (!messageId) {
+        console.error('No message ID provided');
+        return;
+    }
+    
+    try {
+        const { data: reactions, error } = await supabaseClient
+            .from('message_reactions')
+            .select('*')
+            .eq('message_id', messageId);
+        
+        if (error) {
+            console.error('Error fetching reactions:', error);
+            return;
+        }
+        
+        console.log(`📊 [REACTION] Found ${reactions?.length || 0} reactions for message ${messageId}`);
+        
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        if (messageElement) {
+            const reactionsContainer = messageElement.querySelector('.message-reactions');
+            if (reactionsContainer) {
+                // Use ChatModule's renderReactions if available
+                if (window.ChatModule && typeof window.ChatModule.renderReactions === 'function') {
+                    window.ChatModule.renderReactions(reactionsContainer, reactions || []);
+                    console.log('✅ [REACTION] Updated via ChatModule.renderReactions');
+                } else {
+                    // Fallback rendering
+                    const reactionCounts = {};
+                    (reactions || []).forEach(r => {
+                        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+                    });
+                    
+                    let html = '';
+                    for (const [emoji, count] of Object.entries(reactionCounts)) {
+                        html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+                    }
+                    reactionsContainer.innerHTML = html;
+                    console.log('✅ [REACTION] Updated via fallback renderer');
+                }
+            } else {
+                console.warn(`No reactions container found for message ${messageId}`);
+            }
+        } else {
+            console.warn(`Message element not found: msg-${messageId}`);
+        }
+    } catch (error) {
+        console.error('Error in updateReactionsForMessage:', error);
+    }
+}
+
+// Make it globally available
+window.updateReactionsForMessage = updateReactionsForMessage;
+
 
 // ============================================
 // REALTIME SUBSCRIPTIONS
@@ -2223,66 +2284,6 @@ function checkAndReconnectSubscriptions() {
 
 
 
-// ============================================
-// REACTION REAL-TIME UPDATE FUNCTION
-// ============================================
-
-async function updateReactionsForMessage(messageId) {
-    console.log('🔄 [REACTION] Updating reactions for message:', messageId);
-    
-    if (!messageId) {
-        console.error('No message ID provided');
-        return;
-    }
-    
-    try {
-        const { data: reactions, error } = await supabaseClient
-            .from('message_reactions')
-            .select('*')
-            .eq('message_id', messageId);
-        
-        if (error) {
-            console.error('Error fetching reactions:', error);
-            return;
-        }
-        
-        console.log(`📊 [REACTION] Found ${reactions?.length || 0} reactions for message ${messageId}`);
-        
-        const messageElement = document.getElementById(`msg-${messageId}`);
-        if (messageElement) {
-            const reactionsContainer = messageElement.querySelector('.message-reactions');
-            if (reactionsContainer) {
-                // Use ChatModule's renderReactions if available
-                if (window.ChatModule && typeof window.ChatModule.renderReactions === 'function') {
-                    window.ChatModule.renderReactions(reactionsContainer, reactions || []);
-                    console.log('✅ [REACTION] Updated via ChatModule.renderReactions');
-                } else {
-                    // Fallback rendering
-                    const reactionCounts = {};
-                    (reactions || []).forEach(r => {
-                        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-                    });
-                    
-                    let html = '';
-                    for (const [emoji, count] of Object.entries(reactionCounts)) {
-                        html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
-                    }
-                    reactionsContainer.innerHTML = html;
-                    console.log('✅ [REACTION] Updated via fallback renderer');
-                }
-            } else {
-                console.warn(`No reactions container found for message ${messageId}`);
-            }
-        } else {
-            console.warn(`Message element not found: msg-${messageId}`);
-        }
-    } catch (error) {
-        console.error('Error in updateReactionsForMessage:', error);
-    }
-}
-
-// Make it globally available
-window.updateReactionsForMessage = updateReactionsForMessage;
 
 
 // Add this helper function after setupRealtimeSubscriptions
