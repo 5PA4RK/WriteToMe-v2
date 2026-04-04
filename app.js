@@ -2116,48 +2116,94 @@ function setupRealtimeSubscriptions() {
     appState.typingSubscription = typingChannel;
     
     // Reactions subscription
-    const reactionsChannel = supabaseClient
-        .channel('reactions_' + appState.currentSessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: '*',
-                schema: 'public',
-                table: 'message_reactions'
-            },
-            async (payload) => {
-                console.log('🎯 REACTION CHANGE DETECTED:', payload.event, payload.new?.message_id || payload.old?.message_id);
-                
-                const messageId = payload.new?.message_id || payload.old?.message_id;
-                if (!messageId) return;
-                
-                const messageElement = document.getElementById(`msg-${messageId}`);
-                if (!messageElement) return;
-                
-                const updatedReactions = await getMessageReactions(messageId);
-                const reactionsContainer = messageElement.querySelector('.message-reactions');
-                if (reactionsContainer && window.ChatModule) {
-                    window.ChatModule.renderReactions(reactionsContainer, updatedReactions);
-                }
-                
-                if (appState.messages) {
-                    const messageIndex = appState.messages.findIndex(m => m.id === messageId);
-                    if (messageIndex !== -1) {
-                        appState.messages[messageIndex].reactions = updatedReactions;
+// Reactions subscription - FIXED VERSION
+console.log('🎯 Setting up reactions subscription...');
+
+const reactionsChannel = supabaseClient
+    .channel(`reactions_${appState.currentSessionId}_${Date.now()}`)
+    .on(
+        'postgres_changes',
+        {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'message_reactions'
+        },
+        async (payload) => {
+            console.log('🎯 [INSERT] Reaction event received!', payload.new);
+            const messageId = payload.new.message_id;
+            if (!messageId) return;
+            
+            // Fetch fresh reactions
+            const { data: reactions } = await supabaseClient
+                .from('message_reactions')
+                .select('*')
+                .eq('message_id', messageId);
+            
+            // Update UI
+            const msgElement = document.getElementById(`msg-${messageId}`);
+            if (msgElement) {
+                const reactionsDiv = msgElement.querySelector('.message-reactions');
+                if (reactionsDiv) {
+                    if (!reactions || reactions.length === 0) {
+                        reactionsDiv.innerHTML = '';
+                    } else {
+                        const counts = {};
+                        reactions.forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
+                        let html = '';
+                        for (const [emoji, count] of Object.entries(counts)) {
+                            html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+                        }
+                        reactionsDiv.innerHTML = html;
+                        console.log('✅ UI updated for message', messageId, 'with', reactions.length, 'reactions');
                     }
                 }
             }
-        )
-        .subscribe((status, err) => {
-            console.log('📡 REACTIONS Subscription status:', status);
-            if (err) {
-                console.error('❌ Reactions subscription error:', err);
-            } else if (status === 'SUBSCRIBED') {
-                console.log('✅ Successfully subscribed to message_reactions!');
+        }
+    )
+    .on(
+        'postgres_changes',
+        {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'message_reactions'
+        },
+        async (payload) => {
+            console.log('🎯 [DELETE] Reaction event received!', payload.old);
+            const messageId = payload.old.message_id;
+            if (!messageId) return;
+            
+            // Fetch fresh reactions
+            const { data: reactions } = await supabaseClient
+                .from('message_reactions')
+                .select('*')
+                .eq('message_id', messageId);
+            
+            // Update UI
+            const msgElement = document.getElementById(`msg-${messageId}`);
+            if (msgElement) {
+                const reactionsDiv = msgElement.querySelector('.message-reactions');
+                if (reactionsDiv) {
+                    if (!reactions || reactions.length === 0) {
+                        reactionsDiv.innerHTML = '';
+                    } else {
+                        const counts = {};
+                        reactions.forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
+                        let html = '';
+                        for (const [emoji, count] of Object.entries(counts)) {
+                            html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+                        }
+                        reactionsDiv.innerHTML = html;
+                    }
+                }
             }
-        });
-    
-    appState.reactionsSubscription = reactionsChannel;
+        }
+    )
+    .subscribe((status, err) => {
+        console.log('📡 REACTIONS subscription status:', status);
+        if (err) console.error('❌ Subscription error:', err);
+    });
+
+appState.reactionsSubscription = reactionsChannel;
 }
 
 function checkAndReconnectSubscriptions() {
