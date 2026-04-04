@@ -419,36 +419,39 @@
 <script src="chat.js"></script>
 
 <script>
-// Theme switching - added directly to HTML to ensure it loads
-(function() {
-    function setTheme(theme) {
-        const body = document.body;
-        const lightBtn = document.getElementById('lightModeBtn');
-        const darkBtn = document.getElementById('darkModeBtn');
-        
-        if (theme === 'dark') {
-            body.classList.add('dark-mode');
-            if (lightBtn) lightBtn.classList.remove('active');
-            if (darkBtn) darkBtn.classList.add('active');
-            localStorage.setItem('writeToMe_theme', 'dark');
-        } else {
-            body.classList.remove('dark-mode');
-            if (lightBtn) lightBtn.classList.add('active');
-            if (darkBtn) darkBtn.classList.remove('active');
-            localStorage.setItem('writeToMe_theme', 'light');
+    // Theme switching - added directly to HTML to ensure it loads
+    (function() {
+        function setTheme(theme) {
+            const body = document.body;
+            const lightBtn = document.getElementById('lightModeBtn');
+            const darkBtn = document.getElementById('darkModeBtn');
+            
+            if (theme === 'dark') {
+                body.classList.add('dark-mode');
+                if (lightBtn) lightBtn.classList.remove('active');
+                if (darkBtn) darkBtn.classList.add('active');
+                localStorage.setItem('writeToMe_theme', 'dark');
+            } else {
+                body.classList.remove('dark-mode');
+                if (lightBtn) lightBtn.classList.add('active');
+                if (darkBtn) darkBtn.classList.remove('active');
+                localStorage.setItem('writeToMe_theme', 'light');
+            }
         }
-    }
-    
-    // Load saved theme
-    const savedTheme = localStorage.getItem('writeToMe_theme');
-    if (savedTheme === 'dark') {
-        setTheme('dark');
-    }
-    
-    // Make setTheme globally available
-    window.setTheme = setTheme;
-})();
-</script>
+        
+        // Load saved theme - DEFAULT TO DARK if no saved preference
+        const savedTheme = localStorage.getItem('writeToMe_theme');
+        if (savedTheme === 'light') {
+            setTheme('light');
+        } else {
+            // Default to dark mode
+            setTheme('dark');
+        }
+        
+        // Make setTheme globally available
+        window.setTheme = setTheme;
+    })();
+    </script>
 
 
 
