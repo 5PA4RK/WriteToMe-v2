@@ -1865,28 +1865,18 @@ header {
     .reaction-section-title { display: none; }
     
     .reaction-quick-picker {
-        display: flex;
-        flex-direction: row;
-        justify-content: flex-start;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 8px;
-        overflow-x: auto;
-        white-space: nowrap;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: thin;
-        flex-wrap: nowrap;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        padding: 8px 0;
     }
     
     .reaction-emoji-btn {
-        font-size: 32px !important;
-        padding: 12px 16px !important;
-        min-width: auto;
-        width: auto;
-        background: var(--bg-tertiary) !important;
-        border-radius: 50px !important;
-        display: inline-flex !important;
-        flex-shrink: 0;
+        font-size: 28px !important;
+        padding: 12px !important;
+        background-color: var(--bg-tertiary) !important;
+        border-radius: 12px !important;
+        min-width: 60px;
     }
     
     /* Reply button prominent */
