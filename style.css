@@ -1882,34 +1882,67 @@ header {
         border-radius: 20px 20px 0 0;
         transform: translateY(100%);
         transition: transform 0.3s ease;
-        padding: 16px;
+        padding: 50px 16px 30px 16px;
         border-top-width: 2px;
         z-index: 10000;
         overflow-y: auto;
         max-height: 80vh;
+        background-color: var(--bg-primary);
+        box-shadow: 0 -5px 20px rgba(0,0,0,0.3);
+    }
+    /* Add close button to menu */
+.message-actions-menu::before {
+    content: '✕';
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 16px;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: none;
+}
+    
+.message-actions-menu.show { 
+    transform: translateY(0);
+    display: block !important;
+}
+
+    /* Add close button on mobile */
+    .message-actions-menu::before {
+        display: block;
+        font-size: 24px;
+        top: 15px;
+        right: 20px;
+        padding: 5px 10px;
+        border-radius: 50%;
+        background-color: var(--bg-tertiary);
+        z-index: 10001;
     }
     
-    .message-actions-menu.show { 
-        transform: translateY(0);
-        display: block !important;
-    }    
-    .message-actions-menu button {
-        padding: 14px 16px;
-        font-size: 1rem;
-        border-radius: 10px;
+    .message-actions-menu::before:hover {
+        background-color: var(--danger);
+        color: white;
     }
     
     .reaction-quick-picker {
         grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-        padding: 8px 0;
+        gap: 12px;
+        padding: 16px 0;
     }
     
     .reaction-emoji-btn {
-        font-size: 28px !important;
-        padding: 12px !important;
-        min-width: 60px;
+        font-size: 32px !important;
+        padding: 14px !important;
+        min-width: 70px;
+        border-radius: 12px !important;
     }
+    
+    .message-actions-menu button {
+        padding: 14px 16px;
+        font-size: 16px;
+        margin: 4px 0;
+    }
+}
     
     .modal-body { max-height: 70vh; }
     
