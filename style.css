@@ -615,7 +615,7 @@ header {
 
 .reaction-quick-picker {
     display: grid;
-    grid-template-columns: repeat(4, minmax(45px, 1fr));
+    grid-template-columns: repeat(3, minmax(45px, 1fr));
     gap: 6px;
     width: 100%;
     box-sizing: border-box;
