@@ -465,8 +465,8 @@ function getReplyQuoteHtml(replyToId, currentMessage) {
         }
     }
 
-// Add or remove reaction
-// Update the addReaction function in chat.js (around line 280-350)
+// In chat.js - Update the addReaction function
+
 async function addReaction(messageId, emoji) {
     console.log('🔵 addReaction called with:', { messageId, emoji });
     
@@ -511,14 +511,20 @@ async function addReaction(messageId, emoji) {
             console.error('Error fetching existing reaction:', fetchError);
         }
         
+        let operation = null;
+        
         if (existingReaction) {
             if (existingReaction.emoji !== emoji) {
                 // Update existing reaction
                 console.log('Updating reaction from', existingReaction.emoji, 'to', emoji);
+                operation = 'UPDATE';
                 
                 const { error: updateError } = await supabaseClient
                     .from('message_reactions')
-                    .update({ emoji: emoji })
+                    .update({ 
+                        emoji: emoji,
+                        updated_at: new Date().toISOString()
+                    })
                     .eq('id', existingReaction.id);
                 
                 if (updateError) {
@@ -530,6 +536,7 @@ async function addReaction(messageId, emoji) {
             } else {
                 // Remove existing reaction
                 console.log('Removing reaction');
+                operation = 'DELETE';
                 
                 const { error: deleteError } = await supabaseClient
                     .from('message_reactions')
@@ -546,6 +553,7 @@ async function addReaction(messageId, emoji) {
         } else {
             // Add new reaction
             console.log('Adding new reaction:', emoji);
+            operation = 'INSERT';
             
             const { error: insertError } = await supabaseClient
                 .from('message_reactions')
@@ -565,19 +573,23 @@ async function addReaction(messageId, emoji) {
             console.log('✅ New reaction added successfully');
         }
         
-        // Immediately update local UI for better UX
-        const { data: updatedReactions } = await supabaseClient
-            .from('message_reactions')
-            .select('*')
-            .eq('message_id', realMessageId);
-        
-        const messageElement = document.getElementById(`msg-${realMessageId}`);
-        if (messageElement) {
-            const reactionsContainer = messageElement.querySelector('.message-reactions');
-            if (reactionsContainer) {
-                renderReactions(reactionsContainer, updatedReactions || []);
+        // Force immediate UI update for ALL users by fetching fresh data
+        // This ensures the real-time event triggers the update
+        setTimeout(async () => {
+            const { data: freshReactions } = await supabaseClient
+                .from('message_reactions')
+                .select('*')
+                .eq('message_id', realMessageId);
+            
+            // Update local UI
+            const messageElement = document.getElementById(`msg-${realMessageId}`);
+            if (messageElement) {
+                const reactionsContainer = messageElement.querySelector('.message-reactions');
+                if (reactionsContainer && window.ChatModule) {
+                    window.ChatModule.renderReactions(reactionsContainer, freshReactions || []);
+                }
             }
-        }
+        }, 100);
         
     } catch (error) {
         console.error("❌ Error adding reaction:", error);
