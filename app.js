@@ -2115,25 +2115,32 @@ function setupRealtimeSubscriptions() {
     
     appState.typingSubscription = typingChannel;
 
-// Reactions subscription - FIXED FOR ALL USERS
+// Reactions subscription
 console.log('Setting up reactions subscription for session:', appState.currentSessionId);
 
 const reactionsChannel = supabaseClient
-    .channel(`reactions_${appState.currentSessionId}_${Date.now()}`)  // Unique channel name
+    .channel(`reactions_${appState.currentSessionId}_${Date.now()}`)
     .on(
         'postgres_changes',
         {
             event: 'INSERT',
             schema: 'public',
             table: 'message_reactions'
-            // NO filter on session_id because message_reactions doesn't have session_id
-            // We'll filter in the callback instead
         },
         async (payload) => {
-            console.log('🎯 REACTION INSERTED:', payload.new);
+            console.log('🎯 [REACTION] INSERTED:', payload.new);
             const messageId = payload.new?.message_id;
             if (messageId) {
-                await updateReactionsForMessage(messageId);
+                // Verify this reaction belongs to current session
+                const { data: message } = await supabaseClient
+                    .from('messages')
+                    .select('session_id')
+                    .eq('id', messageId)
+                    .single();
+                
+                if (message && message.session_id === appState.currentSessionId) {
+                    await updateReactionsForMessage(messageId);
+                }
             }
         }
     )
@@ -2145,10 +2152,18 @@ const reactionsChannel = supabaseClient
             table: 'message_reactions'
         },
         async (payload) => {
-            console.log('🎯 REACTION UPDATED:', payload.new);
+            console.log('🎯 [REACTION] UPDATED:', payload.new);
             const messageId = payload.new?.message_id;
             if (messageId) {
-                await updateReactionsForMessage(messageId);
+                const { data: message } = await supabaseClient
+                    .from('messages')
+                    .select('session_id')
+                    .eq('id', messageId)
+                    .single();
+                
+                if (message && message.session_id === appState.currentSessionId) {
+                    await updateReactionsForMessage(messageId);
+                }
             }
         }
     )
@@ -2160,10 +2175,18 @@ const reactionsChannel = supabaseClient
             table: 'message_reactions'
         },
         async (payload) => {
-            console.log('🎯 REACTION DELETED:', payload.old);
+            console.log('🎯 [REACTION] DELETED:', payload.old);
             const messageId = payload.old?.message_id;
             if (messageId) {
-                await updateReactionsForMessage(messageId);
+                const { data: message } = await supabaseClient
+                    .from('messages')
+                    .select('session_id')
+                    .eq('id', messageId)
+                    .single();
+                
+                if (message && message.session_id === appState.currentSessionId) {
+                    await updateReactionsForMessage(messageId);
+                }
             }
         }
     )
@@ -2173,8 +2196,6 @@ const reactionsChannel = supabaseClient
             console.error('❌ Reactions subscription error:', err);
         } else if (status === 'SUBSCRIBED') {
             console.log('✅ Successfully subscribed to message_reactions!');
-            // Test subscription by fetching a random reaction
-            testReactionsSubscription();
         }
     });
 
@@ -2182,6 +2203,66 @@ appState.reactionsSubscription = reactionsChannel;
 
 }
 
+// ============================================
+// REACTION REAL-TIME UPDATE FUNCTION
+// ============================================
+
+async function updateReactionsForMessage(messageId) {
+    console.log('🔄 [REACTION] Updating reactions for message:', messageId);
+    
+    if (!messageId) {
+        console.error('No message ID provided');
+        return;
+    }
+    
+    try {
+        const { data: reactions, error } = await supabaseClient
+            .from('message_reactions')
+            .select('*')
+            .eq('message_id', messageId);
+        
+        if (error) {
+            console.error('Error fetching reactions:', error);
+            return;
+        }
+        
+        console.log(`📊 [REACTION] Found ${reactions?.length || 0} reactions for message ${messageId}`);
+        
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        if (messageElement) {
+            const reactionsContainer = messageElement.querySelector('.message-reactions');
+            if (reactionsContainer) {
+                // Use ChatModule's renderReactions if available
+                if (window.ChatModule && typeof window.ChatModule.renderReactions === 'function') {
+                    window.ChatModule.renderReactions(reactionsContainer, reactions || []);
+                    console.log('✅ [REACTION] Updated via ChatModule.renderReactions');
+                } else {
+                    // Fallback rendering
+                    const reactionCounts = {};
+                    (reactions || []).forEach(r => {
+                        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+                    });
+                    
+                    let html = '';
+                    for (const [emoji, count] of Object.entries(reactionCounts)) {
+                        html += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+                    }
+                    reactionsContainer.innerHTML = html;
+                    console.log('✅ [REACTION] Updated via fallback renderer');
+                }
+            } else {
+                console.warn(`No reactions container found for message ${messageId}`);
+            }
+        } else {
+            console.warn(`Message element not found: msg-${messageId}`);
+        }
+    } catch (error) {
+        console.error('Error in updateReactionsForMessage:', error);
+    }
+}
+
+// Make it globally available
+window.updateReactionsForMessage = updateReactionsForMessage;
 
 function checkAndReconnectSubscriptions() {
     if (!appState.isConnected || !appState.currentSessionId) return;
