@@ -2203,6 +2203,26 @@ appState.reactionsSubscription = reactionsChannel;
 
 }
 
+
+
+function checkAndReconnectSubscriptions() {
+    if (!appState.isConnected || !appState.currentSessionId) return;
+    
+    console.log("🔍 Checking subscription health...");
+    
+    if (!appState.realtimeSubscription) {
+        console.log("🔄 Reconnecting messages subscription...");
+        setupRealtimeSubscriptions();
+    }
+    
+    if (appState.isHost && !appState.pendingSubscription) {
+        console.log("🔄 Reconnecting pending guests subscription...");
+        setupPendingGuestsSubscription();
+    }
+}
+
+
+
 // ============================================
 // REACTION REAL-TIME UPDATE FUNCTION
 // ============================================
@@ -2264,21 +2284,7 @@ async function updateReactionsForMessage(messageId) {
 // Make it globally available
 window.updateReactionsForMessage = updateReactionsForMessage;
 
-function checkAndReconnectSubscriptions() {
-    if (!appState.isConnected || !appState.currentSessionId) return;
-    
-    console.log("🔍 Checking subscription health...");
-    
-    if (!appState.realtimeSubscription) {
-        console.log("🔄 Reconnecting messages subscription...");
-        setupRealtimeSubscriptions();
-    }
-    
-    if (appState.isHost && !appState.pendingSubscription) {
-        console.log("🔄 Reconnecting pending guests subscription...");
-        setupPendingGuestsSubscription();
-    }
-}
+
 // Add this helper function after setupRealtimeSubscriptions
 function renderReactionsFallback(container, reactions) {
     if (!container) return;
