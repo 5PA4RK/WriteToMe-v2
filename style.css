@@ -857,7 +857,7 @@ header {
     bottom: 80px;
     left: 50%;
     transform: translateX(-50%);
-    width: 280px;
+    width: 222px;
     max-width: 90vw;
     grid-template-columns: repeat(5, 1fr);
     gap: 8px;
