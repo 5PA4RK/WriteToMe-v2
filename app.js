@@ -2004,16 +2004,16 @@ function setupRealtimeSubscriptions() {
                             }
                             
                             const messageObj = {
-                                id: payload.new.id,
-                                sender: payload.new.sender_name,
-                                text: payload.new.message || '',
-                                image: imageUrl,
-                                time: new Date(payload.new.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                                type: 'received',
-                                is_historical: false,
-                                reactions: reactions || [],
-                                reply_to: payload.new.reply_to
-                            };
+                                id: tempId,
+                                sender: appState.userName,
+                                text: originalMessageText,
+                                image: localPreviewUrl,
+                                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                                type: 'sent',
+                                is_optimistic: true,
+                                reply_to: currentReplyToId,
+                                reply_to_image: currentReplyToImage  // ADD THIS LINE
+                            }
                             
                             console.log('Displaying new message from:', messageObj.sender);
                             displayMessage(messageObj);
@@ -2852,6 +2852,11 @@ async function sendMessageToDB(text, imageInput, replyToId = null) {
         
         if (finalReplyToId && finalReplyToId !== 'null' && finalReplyToId !== 'undefined') {
             messageData.reply_to = finalReplyToId;
+                    // ADD THIS - store the original message's image URL for reference
+        if (replyToImage && replyToImage.trim() !== '') {
+            messageData.reply_to_image = replyToImage;
+        }
+
         }
         
         if (finalImageUrl && finalImageUrl.trim() !== '') {
