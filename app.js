@@ -2115,8 +2115,9 @@ function setupRealtimeSubscriptions() {
     
     appState.typingSubscription = typingChannel;
     
-    // Reactions subscription
-// Reactions subscription - IMPROVED VERSION
+// Replace the entire reactions subscription section in setupRealtimeSubscriptions()
+
+// Reactions subscription - IMPROVED REAL-TIME UPDATES
 const reactionsChannel = supabaseClient
     .channel('reactions_' + appState.currentSessionId)
     .on(
@@ -2132,8 +2133,19 @@ const reactionsChannel = supabaseClient
             const messageId = payload.new?.message_id || payload.old?.message_id;
             if (!messageId) return;
             
+            // Skip if it's the current user's own reaction (already handled locally)
+            const userId = payload.new?.user_id || payload.old?.user_id;
+            if (userId === appState.userId && payload.event !== 'DELETE') {
+                console.log('Skipping own reaction update (already handled locally)');
+                // Still need to update UI for others, but we already handled locally
+                // For now, we'll still process to ensure consistency
+            }
+            
             const messageElement = document.getElementById(`msg-${messageId}`);
-            if (!messageElement) return;
+            if (!messageElement) {
+                console.log(`Message element ${messageId} not found in DOM, will update when displayed`);
+                return;
+            }
             
             // Fetch fresh reactions from database
             const { data: updatedReactions, error } = await supabaseClient
@@ -2150,11 +2162,29 @@ const reactionsChannel = supabaseClient
             
             const reactionsContainer = messageElement.querySelector('.message-reactions');
             if (reactionsContainer) {
-                // Use the helper function to render
+                // Render using the helper function
                 if (typeof renderReactionsInContainer === 'function') {
                     renderReactionsInContainer(reactionsContainer, updatedReactions || [], messageId);
                 } else if (window.ChatModule && window.ChatModule.renderReactions) {
                     window.ChatModule.renderReactions(reactionsContainer, updatedReactions || []);
+                } else {
+                    // Fallback rendering
+                    if (!updatedReactions || updatedReactions.length === 0) {
+                        reactionsContainer.innerHTML = '';
+                    } else {
+                        const reactionCounts = {};
+                        updatedReactions.forEach(r => {
+                            if (r.emoji && r.emoji.trim() !== '') {
+                                reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+                            }
+                        });
+                        
+                        let reactionsHtml = '';
+                        for (const [emoji, count] of Object.entries(reactionCounts)) {
+                            reactionsHtml += `<span class="reaction-badge" onclick="window.toggleReaction('${messageId}', '${emoji}')">${emoji} ${count}</span>`;
+                        }
+                        reactionsContainer.innerHTML = reactionsHtml;
+                    }
                 }
             }
             
@@ -2175,8 +2205,9 @@ const reactionsChannel = supabaseClient
             console.log('✅ Successfully subscribed to message_reactions!');
         }
     });
-    
-    appState.reactionsSubscription = reactionsChannel;
+
+appState.reactionsSubscription = reactionsChannel;
+
 }
 
 function checkAndReconnectSubscriptions() {
@@ -3093,24 +3124,34 @@ async function loadChatHistory(sessionId = null, limit = 50) {
             console.log(`  Message ${msgId}: ${reactions.length} reactions - [${emojiList}]`);
         }
         
-        // Store messages with their reactions in appState
-        appState.messages = messages.map(msg => {
-            const msgReactions = reactionsMap.get(msg.id) || [];
-            console.log(`Message ${msg.id} has ${msgReactions.length} reactions in map`);
-            
-            return {
-                id: msg.id,
-                sender: msg.sender_name,
-                text: msg.message,
-                image: msg.image_url,
-                time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                type: msg.sender_id === appState.userId ? 'sent' : 'received',
-                is_historical: !!sessionId,
-                reactions: msgReactions,
-                reply_to: msg.reply_to,
-                created_at: msg.created_at
-            };
-        });
+// Store messages with their reactions in appState
+appState.messages = messages.map(msg => {
+    const msgReactions = reactionsMap.get(msg.id) || [];
+    
+    // Load reply_to_image if this message is a reply
+    let replyToImage = null;
+    if (msg.reply_to) {
+        // Try to find the original message in the loaded messages
+        const originalMsg = messages.find(m => m.id === msg.reply_to);
+        if (originalMsg && originalMsg.image_url) {
+            replyToImage = originalMsg.image_url;
+        }
+    }
+    
+    return {
+        id: msg.id,
+        sender: msg.sender_name,
+        text: msg.message,
+        image: msg.image_url,
+        time: new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        type: msg.sender_id === appState.userId ? 'sent' : 'received',
+        is_historical: !!sessionId,
+        reactions: msgReactions,
+        reply_to: msg.reply_to,
+        reply_to_image: replyToImage,  // ADD THIS LINE
+        created_at: msg.created_at
+    };
+});
         
         // Display each message
         for (const msg of messages) {
@@ -3275,15 +3316,19 @@ async function loadChatHistory(sessionId = null, limit = 50) {
 
 // Helper function to render reactions (independent of ChatModule)
 function renderReactionsInContainer(container, reactions, messageId) {
-    if (!container || !reactions || reactions.length === 0) {
-        if (container) container.innerHTML = '';
+    if (!container) return;
+    
+    if (!reactions || reactions.length === 0) {
+        container.innerHTML = '';
         return;
     }
     
     // Group reactions by emoji and count
     const reactionCounts = {};
     reactions.forEach(r => {
-        reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+        if (r.emoji && r.emoji.trim() !== '') {
+            reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+        }
     });
     
     let html = '';
@@ -3293,6 +3338,9 @@ function renderReactionsInContainer(container, reactions, messageId) {
     
     container.innerHTML = html;
 }
+
+// Make it globally available
+window.renderReactionsInContainer = renderReactionsInContainer;
 
 // Add function to load more messages
 window.loadMoreMessages = async function() {
