@@ -499,8 +499,8 @@ function setupEventListeners() {
             }
         });
         
-// Temporarily comment out
-// messageInput.addEventListener('input', handleTyping);
+// Typing indicator
+messageInput.addEventListener('input', handleTyping);
 
 }
 
@@ -833,6 +833,51 @@ async function clearChat() {
     } catch (error) {
         console.error("Error clearing chat:", error);
         alert("Failed to clear chat: " + error.message);
+    }
+}
+
+// ============================================
+// TYPING INDICATOR
+// ============================================
+
+async function handleTyping() {
+    if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) {
+        return;
+    }
+    
+    if (!appState.userName) return;
+    
+    try {
+        // Clear previous timeout
+        if (appState.typingTimeout) {
+            clearTimeout(appState.typingTimeout);
+        }
+        
+        // Update typing status in database
+        const { error } = await supabaseClient
+            .from('chat_sessions')
+            .update({ typing_user: appState.userName })
+            .eq('session_id', appState.currentSessionId);
+        
+        if (error) {
+            console.error('Error updating typing status:', error);
+            return;
+        }
+        
+        // Set timeout to clear typing status after 2 seconds of no typing
+        appState.typingTimeout = setTimeout(async () => {
+            const { error } = await supabaseClient
+                .from('chat_sessions')
+                .update({ typing_user: null })
+                .eq('session_id', appState.currentSessionId);
+            
+            if (error) {
+                console.error('Error clearing typing status:', error);
+            }
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Typing indicator error:', error);
     }
 }
 
@@ -2111,45 +2156,45 @@ function setupRealtimeSubscriptions() {
     // Set the subscription
     appState.realtimeSubscription = messagesChannel;
     
-    // Typing subscription
-    const typingChannel = supabaseClient
-        .channel('typing_' + appState.currentSessionId)
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'chat_sessions',
-                filter: `session_id=eq.${appState.currentSessionId}`
-            },
-            (payload) => {
-                console.log('📨 Typing update received:', payload.new?.typing_user);
-                
-                if (payload.new && payload.new.typing_user) {
-                    if (payload.new.typing_user !== appState.userName) {
-                        typingUser.textContent = payload.new.typing_user;
-                        typingIndicator.classList.add('show');
-                        
-                        if (window.typingHideTimeout) {
-                            clearTimeout(window.typingHideTimeout);
-                        }
-                        
-                        window.typingHideTimeout = setTimeout(() => {
-                            if (typingUser.textContent === payload.new.typing_user) {
-                                typingIndicator.classList.remove('show');
-                            }
-                        }, 3000);
+// Typing subscription
+const typingChannel = supabaseClient
+    .channel('typing_' + appState.currentSessionId)
+    .on(
+        'postgres_changes',
+        {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'chat_sessions',  // Make sure this is correct
+            filter: `session_id=eq.${appState.currentSessionId}`
+        },
+        (payload) => {
+            console.log('📨 Typing update received:', payload.new?.typing_user);
+            
+            if (payload.new && payload.new.typing_user) {
+                if (payload.new.typing_user !== appState.userName) {
+                    typingUser.textContent = payload.new.typing_user;
+                    typingIndicator.classList.add('show');
+                    
+                    if (window.typingHideTimeout) {
+                        clearTimeout(window.typingHideTimeout);
                     }
-                } else {
-                    typingIndicator.classList.remove('show');
+                    
+                    window.typingHideTimeout = setTimeout(() => {
+                        if (typingUser.textContent === payload.new.typing_user) {
+                            typingIndicator.classList.remove('show');
+                        }
+                    }, 3000);
                 }
+            } else {
+                typingIndicator.classList.remove('show');
             }
-        )
-        .subscribe((status) => {
-            console.log('📡 Typing subscription status:', status);
-        });
-    
-    appState.typingSubscription = typingChannel;
+        }
+    )
+    .subscribe((status) => {
+        console.log('📡 Typing subscription status:', status);
+    });
+
+appState.typingSubscription = typingChannel;
     
     // Reactions subscription
 // Reactions subscription - FIXED VERSION
