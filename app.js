@@ -2157,41 +2157,61 @@ function setupRealtimeSubscriptions() {
     appState.realtimeSubscription = messagesChannel;
     
 // Typing subscription
+// Typing subscription - ENHANCED VERSION
 const typingChannel = supabaseClient
-    .channel('typing_' + appState.currentSessionId)
+    .channel('typing_' + appState.currentSessionId + '_' + Date.now())
     .on(
         'postgres_changes',
         {
             event: 'UPDATE',
             schema: 'public',
-            table: 'chat_sessions',  // Make sure this is correct
+            table: 'chat_sessions',
             filter: `session_id=eq.${appState.currentSessionId}`
         },
         (payload) => {
             console.log('📨 Typing update received:', payload.new?.typing_user);
             
+            const typingUserElement = document.getElementById('typingUser');
+            const typingIndicatorElement = document.getElementById('typingIndicator');
+            
+            if (!typingUserElement || !typingIndicatorElement) {
+                console.log('Typing indicator elements not found');
+                return;
+            }
+            
             if (payload.new && payload.new.typing_user) {
-                if (payload.new.typing_user !== appState.userName) {
-                    typingUser.textContent = payload.new.typing_user;
-                    typingIndicator.classList.add('show');
+                const typingUserName = payload.new.typing_user;
+                
+                // Don't show "is typing" for the current user
+                if (typingUserName !== appState.userName) {
+                    typingUserElement.textContent = typingUserName;
+                    typingIndicatorElement.classList.add('show');
+                    console.log('✅ Showing typing indicator for:', typingUserName);
                     
+                    // Clear previous timeout
                     if (window.typingHideTimeout) {
                         clearTimeout(window.typingHideTimeout);
                     }
                     
+                    // Hide after 3 seconds of no typing updates
                     window.typingHideTimeout = setTimeout(() => {
-                        if (typingUser.textContent === payload.new.typing_user) {
-                            typingIndicator.classList.remove('show');
+                        if (typingUserElement.textContent === typingUserName) {
+                            typingIndicatorElement.classList.remove('show');
+                            console.log('⏱️ Hiding typing indicator (timeout)');
                         }
                     }, 3000);
                 }
             } else {
-                typingIndicator.classList.remove('show');
+                typingIndicatorElement.classList.remove('show');
+                console.log('🔇 Hiding typing indicator (cleared)');
             }
         }
     )
     .subscribe((status) => {
         console.log('📡 Typing subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+            console.log('✅ Typing subscription active!');
+        }
     });
 
 appState.typingSubscription = typingChannel;
