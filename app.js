@@ -2912,46 +2912,40 @@ function displayMessage(message) {
 function setupMobileHeaderScroll() {
     if (window.innerWidth <= 768) {
         let lastScrollTop = 0;
-        let ticking = false;
         const header = document.querySelector('header');
-        
-        if (!header) return;
-        
         const chatMessages = document.getElementById('chatMessages');
-        if (!chatMessages) return;
+        
+        if (!header || !chatMessages) return;
         
         chatMessages.addEventListener('scroll', function() {
-            if (!ticking) {
-                requestAnimationFrame(() => {
-                    const scrollTop = chatMessages.scrollTop;
-                    
-                    if (scrollTop > lastScrollTop && scrollTop > 50) {
-                        header.classList.add('header-hidden');
-                    } else if (scrollTop < lastScrollTop || scrollTop <= 10) {
-                        header.classList.remove('header-hidden');
-                    }
-                    
-                    lastScrollTop = scrollTop;
-                    ticking = false;
-                });
-                ticking = true;
+            const scrollTop = chatMessages.scrollTop;
+            
+            if (scrollTop > 50 && scrollTop > lastScrollTop) {
+                // Scrolling down - hide header
+                header.style.transform = 'translateY(-100%)';
+                header.style.transition = 'transform 0.3s ease';
+            } else if (scrollTop < lastScrollTop || scrollTop < 20) {
+                // Scrolling up or at top - show header
+                header.style.transform = 'translateY(0)';
             }
+            
+            lastScrollTop = scrollTop;
         });
         
-        chatMessages.addEventListener('scroll', function() {
-            if (chatMessages.scrollTop <= 10) {
-                header.classList.remove('header-hidden');
-            }
-        });
-        
+        // Show header on tap near top
         chatMessages.addEventListener('touchstart', function(e) {
-            if (header.classList.contains('header-hidden') && e.touches[0].clientY < 100) {
-                header.classList.remove('header-hidden');
+            if (e.touches[0].clientY < 60) {
+                header.style.transform = 'translateY(0)';
                 setTimeout(() => {
                     if (chatMessages.scrollTop > 50) {
-                        header.classList.add('header-hidden');
+                        // Re-hide after 2 seconds if still scrolling
+                        setTimeout(() => {
+                            if (chatMessages.scrollTop > 50) {
+                                header.style.transform = 'translateY(-100%)';
+                            }
+                        }, 2000);
                     }
-                }, 2000);
+                }, 100);
             }
         });
     }
