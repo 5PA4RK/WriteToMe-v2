@@ -2157,7 +2157,9 @@ function setupRealtimeSubscriptions() {
     appState.realtimeSubscription = messagesChannel;
     
 // Typing subscription
-// Typing subscription - ENHANCED VERSION
+// Typing subscription - FIXED VERSION
+console.log('📡 Setting up typing subscription for session:', appState.currentSessionId);
+
 const typingChannel = supabaseClient
     .channel('typing_' + appState.currentSessionId + '_' + Date.now())
     .on(
@@ -2169,46 +2171,49 @@ const typingChannel = supabaseClient
             filter: `session_id=eq.${appState.currentSessionId}`
         },
         (payload) => {
-            console.log('📨 Typing update received:', payload.new?.typing_user);
+            console.log('📨 [TYPING] Update received:', payload.new?.typing_user);
             
-            const typingUserElement = document.getElementById('typingUser');
-            const typingIndicatorElement = document.getElementById('typingIndicator');
+            const typingIndicatorEl = document.getElementById('typingIndicator');
+            const typingUserEl = document.getElementById('typingUser');
             
-            if (!typingUserElement || !typingIndicatorElement) {
-                console.log('Typing indicator elements not found');
+            if (!typingIndicatorEl || !typingUserEl) {
+                console.error('❌ Typing indicator DOM elements not found');
                 return;
             }
             
-            if (payload.new && payload.new.typing_user) {
-                const typingUserName = payload.new.typing_user;
+            const typingUserName = payload.new?.typing_user;
+            
+            if (typingUserName && typingUserName !== appState.userName) {
+                // Show typing indicator for other user
+                typingUserEl.textContent = typingUserName;
+                typingIndicatorEl.classList.add('show');
+                console.log('✅ Showing typing indicator for:', typingUserName);
                 
-                // Don't show "is typing" for the current user
-                if (typingUserName !== appState.userName) {
-                    typingUserElement.textContent = typingUserName;
-                    typingIndicatorElement.classList.add('show');
-                    console.log('✅ Showing typing indicator for:', typingUserName);
-                    
-                    // Clear previous timeout
-                    if (window.typingHideTimeout) {
-                        clearTimeout(window.typingHideTimeout);
-                    }
-                    
-                    // Hide after 3 seconds of no typing updates
-                    window.typingHideTimeout = setTimeout(() => {
-                        if (typingUserElement.textContent === typingUserName) {
-                            typingIndicatorElement.classList.remove('show');
-                            console.log('⏱️ Hiding typing indicator (timeout)');
-                        }
-                    }, 3000);
+                // Clear previous timeout
+                if (window.typingHideTimeout) {
+                    clearTimeout(window.typingHideTimeout);
                 }
-            } else {
-                typingIndicatorElement.classList.remove('show');
+                
+                // Hide after 3 seconds
+                window.typingHideTimeout = setTimeout(() => {
+                    typingIndicatorEl.classList.remove('show');
+                    console.log('⏱️ Hiding typing indicator (timeout)');
+                }, 3000);
+            } else if (!typingUserName) {
+                // Hide indicator when no one is typing
+                typingIndicatorEl.classList.remove('show');
                 console.log('🔇 Hiding typing indicator (cleared)');
+            } else if (typingUserName === appState.userName) {
+                // Don't show indicator for self
+                console.log('👤 Self typing, not showing indicator');
             }
         }
     )
-    .subscribe((status) => {
+    .subscribe((status, err) => {
         console.log('📡 Typing subscription status:', status);
+        if (err) {
+            console.error('❌ Typing subscription error:', err);
+        }
         if (status === 'SUBSCRIBED') {
             console.log('✅ Typing subscription active!');
         }
