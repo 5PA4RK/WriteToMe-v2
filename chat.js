@@ -965,45 +965,66 @@ async function deleteMessage(messageId) {
     }
 }
 
-    // Handle typing indicator
-    async function handleTyping() {
-        if (!appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) {
-            console.log('Typing ignored - not in active session');
+
+// Handle typing indicator
+async function handleTyping() {
+    if (!appState || !appState.currentSessionId || appState.isViewingHistory || !appState.isConnected) {
+        console.log('Typing ignored - not in active session');
+        return;
+    }
+    
+    if (!appState.userName) return;
+    
+    console.log('👆 User typing detected:', appState.userName);
+    
+    try {
+        // Clear previous timeout
+        if (appState.typingTimeout) {
+            clearTimeout(appState.typingTimeout);
+        }
+        
+        // Use the supabaseClient from the module scope (should be available)
+        if (!supabaseClient) {
+            console.error('Supabase client not available');
             return;
         }
         
-        console.log('👆 User typing detected:', appState.userName);
+        // Update typing status
+        const { error } = await supabaseClient
+            .from('chat_sessions')
+            .update({ typing_user: appState.userName })
+            .eq('session_id', appState.currentSessionId);
         
-        try {
-            // Only update typing_user in chat_sessions table
-            const { error } = await supabaseClient
-                .from('chat_sessions')
-                .update({ typing_user: appState.userName })
-                .eq('session_id', appState.currentSessionId);
-            
-            if (error) {
-                console.error('Error updating typing status:', error);
-                return;
-            }
-            
-            console.log('✅ Typing status updated');
-            
-            if (appState.typingTimeout) {
-                clearTimeout(appState.typingTimeout);
-            }
-            
-            appState.typingTimeout = setTimeout(() => {
-                console.log('⏱️ Clearing typing status');
-                supabaseClient
-                    .from('chat_sessions')
-                    .update({ typing_user: null })
-                    .eq('session_id', appState.currentSessionId)
-                    .catch(e => console.log("Error clearing typing:", e));
-            }, 2000);
-        } catch (error) {
-            console.log("Typing indicator error:", error);
+        if (error) {
+            console.error('Error updating typing status:', error);
+            return;
         }
+        
+        console.log('✅ Typing status updated');
+        
+        // Set timeout to clear typing status after 2 seconds
+        appState.typingTimeout = setTimeout(async () => {
+            console.log('⏱️ Clearing typing status');
+            try {
+                if (supabaseClient && appState.currentSessionId) {
+                    const { error: clearError } = await supabaseClient
+                        .from('chat_sessions')
+                        .update({ typing_user: null })
+                        .eq('session_id', appState.currentSessionId);
+                    
+                    if (clearError) {
+                        console.error('Error clearing typing status:', clearError);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to clear typing status:', err);
+            }
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Typing indicator error:', error);
     }
+}
 
     // Show full image
     function showFullImage(src) {
