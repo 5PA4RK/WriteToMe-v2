@@ -983,14 +983,16 @@ async function handleTyping() {
             clearTimeout(appState.typingTimeout);
         }
         
-        // Use the supabaseClient from the module scope (should be available)
-        if (!supabaseClient) {
+        // Use the global supabase client
+        const supabase = window.supabaseClient || supabaseClient;
+        
+        if (!supabase) {
             console.error('Supabase client not available');
             return;
         }
         
-        // Update typing status
-        const { error } = await supabaseClient
+        // Update typing status in the database
+        const { error } = await supabase
             .from('chat_sessions')
             .update({ typing_user: appState.userName })
             .eq('session_id', appState.currentSessionId);
@@ -1000,24 +1002,26 @@ async function handleTyping() {
             return;
         }
         
-        console.log('✅ Typing status updated');
+        console.log('✅ Typing status updated to:', appState.userName);
         
-        // Set timeout to clear typing status after 2 seconds
+        // Set timeout to clear typing status after 2 seconds of no typing
         appState.typingTimeout = setTimeout(async () => {
             console.log('⏱️ Clearing typing status');
             try {
-                if (supabaseClient && appState.currentSessionId) {
-                    const { error: clearError } = await supabaseClient
+                if (supabase && appState.currentSessionId) {
+                    const { error: clearError } = await supabase
                         .from('chat_sessions')
                         .update({ typing_user: null })
                         .eq('session_id', appState.currentSessionId);
                     
                     if (clearError) {
-                        console.error('Error clearing typing status:', clearError);
+                        console.error('Error clearing typing:', clearError);
+                    } else {
+                        console.log('✅ Typing status cleared');
                     }
                 }
             } catch (err) {
-                console.error('Failed to clear typing status:', err);
+                console.error('Failed to clear typing:', err);
             }
         }, 2000);
         
