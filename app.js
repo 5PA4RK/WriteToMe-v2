@@ -172,7 +172,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================
 // INITIALIZATION
 // ============================================
-
 async function initApp() {
     console.log("🚀 Initializing Enhanced WriteToMira App...");
     
@@ -219,6 +218,16 @@ async function initApp() {
                 hideConnectionModal();
                 updateUIAfterConnection();
                 console.log("✅ Successfully reconnected!");
+                
+                // CRITICAL: Wait for connection to fully establish before loading admin content
+                setTimeout(async () => {
+                    if (appState.isHost) {
+                        await loadAllSessions();
+                        await loadChatSessions();
+                        await loadPendingGuests();
+                        await loadVisitorNotes();
+                    }
+                }, 500);
             } else {
                 console.log("❌ Failed to reconnect, clearing session");
                 localStorage.removeItem('writeToMe_session');
@@ -238,10 +247,11 @@ async function initApp() {
     setupUserManagementListeners();
     populateEmojis();
     
-    if (appState.isHost || savedSession) {
-        await loadAllSessions();
-        loadChatSessions();
-    }
+    // Don't load admin content here - wait for connection
+    // if (appState.isHost || savedSession) {
+    //     await loadAllSessions();
+    //     loadChatSessions();
+    // }
     
     setInterval(checkAndReconnectSubscriptions, 15000);
 }
@@ -344,7 +354,7 @@ async function reconnectToSession() {
                 appState.currentSessionId = session.session_id;
                 setupRealtimeSubscriptions();
                 setupPendingGuestsSubscription();
-                loadPendingGuests();
+                safeLoadAdminContent(); 
                 return true;
             }
             return false;
@@ -847,6 +857,28 @@ function addSystemMessage(text, isLocal = false) {
     forceScrollToBottom('smooth', 100);
 }
 
+// Add this after your existing helper functions
+async function safeLoadAdminContent() {
+    if (!appState.isHost || !appState.isConnected) {
+        console.log('Not host or not connected, skipping admin content');
+        return;
+    }
+    
+    // Check if critical DOM elements exist
+    if (!historyCards || !usersList) {
+        console.log('Admin DOM elements not ready, retrying in 100ms');
+        setTimeout(safeLoadAdminContent, 100);
+        return;
+    }
+    
+    console.log('DOM ready, loading admin content...');
+    await loadAllSessions();
+    await loadChatSessions();
+    await loadUsers();
+    await loadPendingGuests();
+    await loadVisitorNotes();
+}
+
 // ============================================
 // HANDLE CONNECTION
 // ============================================
@@ -984,7 +1016,7 @@ async function connectAsHost(userIP) {
         const sessionId = 'room_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
         
         const { data, error } = await supabaseClient
-            .from('chat_sessions')  // Changed from 'sessions'
+            .from('chat_sessions')
             .insert([
                 {
                     session_id: sessionId,
@@ -1024,13 +1056,17 @@ async function connectAsHost(userIP) {
         setupRealtimeSubscriptions();
         setupPendingGuestsSubscription();
         
-        await loadPendingGuests();
-        await loadChatHistory();
-        await loadChatSessions();
+// Load chat history first
+await loadChatHistory();
+
+// Then load admin content safely
+safeLoadAdminContent();
+
+await saveMessageToDB('System', `${appState.userName} has created a new chat room.`);
+
+console.log("✅ Host connection completed successfully!");
+
         
-        await saveMessageToDB('System', `${appState.userName} has created a new chat room.`);
-        
-        console.log("✅ Host connection completed successfully!");
     } catch (error) {
         console.error("Error in host connection:", error);
         alert("An error occurred: " + error.message);
@@ -2912,40 +2948,46 @@ function displayMessage(message) {
 function setupMobileHeaderScroll() {
     if (window.innerWidth <= 768) {
         let lastScrollTop = 0;
+        let ticking = false;
         const header = document.querySelector('header');
-        const chatMessages = document.getElementById('chatMessages');
         
-        if (!header || !chatMessages) return;
+        if (!header) return;
+        
+        const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
         
         chatMessages.addEventListener('scroll', function() {
-            const scrollTop = chatMessages.scrollTop;
-            
-            if (scrollTop > 50 && scrollTop > lastScrollTop) {
-                // Scrolling down - hide header
-                header.style.transform = 'translateY(-100%)';
-                header.style.transition = 'transform 0.3s ease';
-            } else if (scrollTop < lastScrollTop || scrollTop < 20) {
-                // Scrolling up or at top - show header
-                header.style.transform = 'translateY(0)';
+            if (!ticking) {
+                requestAnimationFrame(() => {
+                    const scrollTop = chatMessages.scrollTop;
+                    
+                    if (scrollTop > lastScrollTop && scrollTop > 50) {
+                        header.classList.add('header-hidden');
+                    } else if (scrollTop < lastScrollTop || scrollTop <= 10) {
+                        header.classList.remove('header-hidden');
+                    }
+                    
+                    lastScrollTop = scrollTop;
+                    ticking = false;
+                });
+                ticking = true;
             }
-            
-            lastScrollTop = scrollTop;
         });
         
-        // Show header on tap near top
+        chatMessages.addEventListener('scroll', function() {
+            if (chatMessages.scrollTop <= 10) {
+                header.classList.remove('header-hidden');
+            }
+        });
+        
         chatMessages.addEventListener('touchstart', function(e) {
-            if (e.touches[0].clientY < 60) {
-                header.style.transform = 'translateY(0)';
+            if (header.classList.contains('header-hidden') && e.touches[0].clientY < 100) {
+                header.classList.remove('header-hidden');
                 setTimeout(() => {
                     if (chatMessages.scrollTop > 50) {
-                        // Re-hide after 2 seconds if still scrolling
-                        setTimeout(() => {
-                            if (chatMessages.scrollTop > 50) {
-                                header.style.transform = 'translateY(-100%)';
-                            }
-                        }, 2000);
+                        header.classList.add('header-hidden');
                     }
-                }, 100);
+                }, 2000);
             }
         });
     }
@@ -2975,6 +3017,19 @@ async function loadChatHistory(sessionId = null, limit = 50) {
     
     console.log('Loading chat history for session:', targetSessionId);
     
+    // Show loading indicator
+    if (chatMessages && !sessionId) {
+        chatMessages.innerHTML = `
+            <div class="message received">
+                <div class="message-sender">System</div>
+                <div class="message-content">
+                    <div class="message-text">
+                        <i class="fas fa-spinner fa-spin"></i> Loading messages...
+                    </div>
+                </div>
+            </div>
+        `;
+    }    
     try {
         // First, check if we already have messages in memory
         if (!sessionId && appState.messages.length > 0) {
@@ -3259,9 +3314,10 @@ function updateUIAfterConnection() {
         });
         console.log('ChatModule re-initialized after connection');
         
+        // DELAY loading chat history to ensure DOM is ready
         setTimeout(() => {
             loadChatHistory();
-        }, 500);
+        }, 300);
     }
     
     if (adminSection) {
@@ -3280,12 +3336,10 @@ function updateUIAfterConnection() {
                 usersTabContent.classList.remove('active');
             }
             
-            loadChatSessions();
-            
-            setTimeout(() => {
-                loadPendingGuests();
-                loadVisitorNotes();
-            }, 1000);
+// Use safeLoadAdminContent instead of setTimeout
+safeLoadAdminContent();
+
+
         } else {
             adminSection.style.display = 'none';
             document.body.classList.remove('host-mode');
