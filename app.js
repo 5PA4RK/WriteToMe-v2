@@ -2262,7 +2262,7 @@ function checkAndReconnectSubscriptions() {
 // ENHANCED CHAT FUNCTIONS
 // ============================================
 async function sendMessage() {
-    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 7.0 - FIXED REPLY IMAGE 🔵🔵🔵🔵🔵');
+    console.log('🔵🔵🔵🔵🔵 SEND MESSAGE VERSION 8.0 - FIXED REPLY IMAGE 🔵🔵🔵🔵🔵');
     
     if (isSendingMessage) {
         console.log('Already sending, skipping');
