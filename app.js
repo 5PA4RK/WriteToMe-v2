@@ -170,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================
-// INITIALIZATION
+// INITIALIZATION - FIXED VERSION
 // ============================================
 async function initApp() {
     console.log("🚀 Initializing Enhanced WriteToMira App...");
@@ -219,15 +219,23 @@ async function initApp() {
                 updateUIAfterConnection();
                 console.log("✅ Successfully reconnected!");
                 
-                // CRITICAL: Wait for connection to fully establish before loading admin content
+                // CRITICAL FIX: Use longer delay and ensure DOM ready before loading admin content
+                await waitForDOMReady();
+                
                 setTimeout(async () => {
-                    if (appState.isHost) {
+                    if (appState.isHost && appState.isConnected) {
+                        console.log("Loading admin content after connection...");
                         await loadAllSessions();
                         await loadChatSessions();
                         await loadPendingGuests();
                         await loadVisitorNotes();
+                        // Force admin panel visibility
+                        if (adminSection) {
+                            adminSection.style.display = 'block';
+                        }
+                        console.log("✅ Admin content loaded successfully");
                     }
-                }, 500);
+                }, 800);
             } else {
                 console.log("❌ Failed to reconnect, clearing session");
                 localStorage.removeItem('writeToMe_session');
@@ -247,13 +255,237 @@ async function initApp() {
     setupUserManagementListeners();
     populateEmojis();
     
-    // Don't load admin content here - wait for connection
-    // if (appState.isHost || savedSession) {
-    //     await loadAllSessions();
-    //     loadChatSessions();
-    // }
+    // Periodic subscription check with longer interval
+    setInterval(checkAndReconnectSubscriptions, 20000);
+}
+
+// Add this helper function
+function waitForDOMReady() {
+    return new Promise((resolve) => {
+        if (document.readyState === 'complete') {
+            resolve();
+        } else {
+            window.addEventListener('load', resolve);
+        }
+    });
+}
+
+// ============================================
+// SAFE LOAD ADMIN CONTENT - FIXED
+// ============================================
+async function safeLoadAdminContent() {
+    if (!appState.isHost || !appState.isConnected) {
+        console.log('Not host or not connected, skipping admin content');
+        return;
+    }
     
-    setInterval(checkAndReconnectSubscriptions, 15000);
+    // Wait for DOM to be fully ready
+    if (document.readyState !== 'complete') {
+        console.log('Waiting for DOM to be ready...');
+        await new Promise(resolve => {
+            window.addEventListener('load', resolve, { once: true });
+        });
+    }
+    
+    // Check if critical DOM elements exist, retry if needed
+    let retries = 0;
+    while (retries < 10) {
+        if (historyCards && usersList && adminSection) {
+            console.log('✅ DOM ready, loading admin content...');
+            break;
+        }
+        console.log(`Waiting for DOM elements... retry ${retries + 1}`);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retries++;
+    }
+    
+    try {
+        console.log('Loading admin content...');
+        await loadAllSessions();
+        await loadChatSessions();
+        await loadUsers();
+        await loadPendingGuests();
+        await loadVisitorNotes();
+        
+        // Force admin panel to be visible
+        if (adminSection) {
+            adminSection.style.display = 'block';
+        }
+        
+        // Force active tab to be history
+        if (historyTabBtn && usersTabBtn && historyTabContent && usersTabContent) {
+            historyTabBtn.classList.add('active');
+            usersTabBtn.classList.remove('active');
+            historyTabContent.style.display = 'block';
+            historyTabContent.classList.add('active');
+            usersTabContent.style.display = 'none';
+            usersTabContent.classList.remove('active');
+        }
+        
+        console.log('✅ Admin content loaded successfully');
+    } catch (error) {
+        console.error('Error loading admin content:', error);
+        // Retry once if failed
+        setTimeout(() => {
+            if (appState.isHost && appState.isConnected) {
+                console.log('Retrying admin content load...');
+                loadAllSessions();
+                loadChatSessions();
+                loadUsers();
+                loadPendingGuests();
+                loadVisitorNotes();
+                if (adminSection) adminSection.style.display = 'block';
+            }
+        }, 1000);
+    }
+}
+
+// ============================================
+// UPDATE UI AFTER CONNECTION - FIXED
+// ============================================
+function updateUIAfterConnection() {
+    if (!statusIndicator || !userRoleDisplay || !logoutBtn) return;
+    
+    statusIndicator.className = 'status-indicator';
+    statusIndicator.classList.add('online');
+    userRoleDisplay.textContent = `${appState.userName} (Connected)`;
+    logoutBtn.style.display = 'flex';
+    
+    if (messageInput) {
+        messageInput.disabled = false;
+        messageInput.placeholder = "Type your message...";
+        messageInput.focus();
+    }
+    
+    if (sendMessageBtn) sendMessageBtn.disabled = false;
+    
+    if (window.ChatModule) {
+        window.ChatModule.init(appState, supabaseClient, {
+            chatMessages: document.getElementById('chatMessages'),
+            messageInput: document.getElementById('messageInput'),
+            sendMessageBtn: document.getElementById('sendMessageBtn'),
+            messageSound: document.getElementById('messageSound'),
+            typingIndicator: document.getElementById('typingIndicator'),
+            typingUser: document.getElementById('typingUser'),
+            replyModal: document.getElementById('replyModal'),
+            replyToName: document.getElementById('replyToName'),
+            replyToContent: document.getElementById('replyToContent'),
+            replyInput: document.getElementById('replyInput'),
+            sendReplyBtn: document.getElementById('sendReplyBtn'),
+            closeReplyModal: document.getElementById('closeReplyModal')
+        });
+        console.log('ChatModule re-initialized after connection');
+        
+        setTimeout(() => {
+            loadChatHistory();
+        }, 300);
+    }
+    
+    // Admin panel visibility
+    if (adminSection) {
+        if (appState.isHost) {
+            console.log('Showing admin panel for host...');
+            adminSection.style.display = 'block';
+            document.body.classList.add('host-mode');
+            
+            if (notesBtn) notesBtn.style.display = 'flex';
+            
+            if (historyTabBtn && usersTabBtn && historyTabContent && usersTabContent) {
+                historyTabBtn.classList.add('active');
+                usersTabBtn.classList.remove('active');
+                historyTabContent.style.display = 'block';
+                historyTabContent.classList.add('active');
+                usersTabContent.style.display = 'none';
+                usersTabContent.classList.remove('active');
+            }
+            
+            setTimeout(() => {
+                safeLoadAdminContent();
+            }, 500);
+        } else {
+            adminSection.style.display = 'none';
+            document.body.classList.remove('host-mode');
+            if (notesBtn) notesBtn.style.display = 'none';
+        }
+    }
+    
+    if (pendingGuestsBtn) {
+        pendingGuestsBtn.style.display = appState.isHost && appState.currentSessionId ? 'flex' : 'none';
+        if (appState.isHost) {
+            setupPendingGuestsSubscription();
+        }
+    }
+    
+    if (appState.isViewingHistory) returnToActiveChat();
+    
+    document.addEventListener('click', function enableAudio() {
+        const silentSound = new Audio();
+        silentSound.play().catch(() => {});
+        document.removeEventListener('click', enableAudio);
+    }, { once: true });
+}
+
+// ============================================
+// RECONNECT FUNCTION - FIXED
+// ============================================
+async function reconnectToSession() {
+    try {
+        if (!appState.sessionId) return false;
+        
+        const { data: session, error } = await supabaseClient
+            .from('chat_sessions')
+            .select('*')
+            .eq('session_id', appState.sessionId)
+            .single();
+        
+        if (error || !session) {
+            console.log("Session not found or error:", error);
+            return false;
+        }
+        
+        console.log("✅ Session found:", session.session_id);
+        
+        if (appState.isHost) {
+            if (session.host_id === appState.userId) {
+                appState.currentSessionId = session.session_id;
+                setupRealtimeSubscriptions();
+                setupPendingGuestsSubscription();
+                // Don't load admin content immediately - wait for UI to be ready
+                setTimeout(() => {
+                    if (appState.isHost && appState.isConnected) {
+                        safeLoadAdminContent();
+                    }
+                }, 500);
+                return true;
+            }
+            return false;
+        } else {
+            const { data: guestStatus } = await supabaseClient
+                .from('session_guests')
+                .select('status')
+                .eq('session_id', session.session_id)
+                .eq('guest_id', appState.userId)
+                .single();
+            
+            if (!guestStatus) return false;
+            
+            if (guestStatus.status === 'approved') {
+                appState.currentSessionId = session.session_id;
+                setupRealtimeSubscriptions();
+                return true;
+            } else if (guestStatus.status === 'pending') {
+                appState.currentSessionId = session.session_id;
+                updateUIForPendingGuest();
+                setupPendingApprovalSubscription(session.session_id);
+                return false;
+            } else {
+                return false;
+            }
+        }
+    } catch (error) {
+        console.error("Error reconnecting:", error);
+        return false;
+    }
 }
 
 // ============================================
@@ -328,64 +560,6 @@ function hideConnectionModal() {
     }
 }
 
-// ============================================
-// RECONNECT FUNCTION
-// ============================================
-
-async function reconnectToSession() {
-    try {
-        if (!appState.sessionId) return false;
-        
-        const { data: session, error } = await supabaseClient
-            .from('chat_sessions')  // Changed from 'sessions'
-            .select('*')
-            .eq('session_id', appState.sessionId)
-            .single();
-        
-        if (error || !session) {
-            console.log("Session not found or error:", error);
-            return false;
-        }
-        
-        console.log("✅ Session found:", session.session_id);
-        
-        if (appState.isHost) {
-            if (session.host_id === appState.userId) {
-                appState.currentSessionId = session.session_id;
-                setupRealtimeSubscriptions();
-                setupPendingGuestsSubscription();
-                safeLoadAdminContent(); 
-                return true;
-            }
-            return false;
-        } else {
-            const { data: guestStatus } = await supabaseClient
-                .from('session_guests')
-                .select('status')
-                .eq('session_id', session.session_id)
-                .eq('guest_id', appState.userId)
-                .single();
-            
-            if (!guestStatus) return false;
-            
-            if (guestStatus.status === 'approved') {
-                appState.currentSessionId = session.session_id;
-                setupRealtimeSubscriptions();
-                return true;
-            } else if (guestStatus.status === 'pending') {
-                appState.currentSessionId = session.session_id;
-                updateUIForPendingGuest();
-                setupPendingApprovalSubscription(session.session_id);
-                return false;
-            } else {
-                return false;
-            }
-        }
-    } catch (error) {
-        console.error("Error reconnecting:", error);
-        return false;
-    }
-}
 
 // ============================================
 // LOAD ALL SESSIONS FOR STABLE NUMBERING
@@ -902,27 +1076,6 @@ function addSystemMessage(text, isLocal = false) {
     forceScrollToBottom('smooth', 100);
 }
 
-// Add this after your existing helper functions
-async function safeLoadAdminContent() {
-    if (!appState.isHost || !appState.isConnected) {
-        console.log('Not host or not connected, skipping admin content');
-        return;
-    }
-    
-    // Check if critical DOM elements exist
-    if (!historyCards || !usersList) {
-        console.log('Admin DOM elements not ready, retrying in 100ms');
-        setTimeout(safeLoadAdminContent, 100);
-        return;
-    }
-    
-    console.log('DOM ready, loading admin content...');
-    await loadAllSessions();
-    await loadChatSessions();
-    await loadUsers();
-    await loadPendingGuests();
-    await loadVisitorNotes();
-}
 
 // ============================================
 // HANDLE CONNECTION
@@ -3345,87 +3498,6 @@ function updateUIForPendingGuest() {
     }
 }
 
-function updateUIAfterConnection() {
-    if (!statusIndicator || !userRoleDisplay || !logoutBtn) return;
-    
-    statusIndicator.className = 'status-indicator';
-    statusIndicator.classList.add('online');
-    userRoleDisplay.textContent = `${appState.userName} (Connected)`;
-    logoutBtn.style.display = 'flex';
-    
-    if (messageInput) {
-        messageInput.disabled = false;
-        messageInput.placeholder = "Type your message...";
-        messageInput.focus();
-    }
-    
-    if (sendMessageBtn) sendMessageBtn.disabled = false;
-    
-    if (window.ChatModule) {
-        window.ChatModule.init(appState, supabaseClient, {
-            chatMessages: document.getElementById('chatMessages'),
-            messageInput: document.getElementById('messageInput'),
-            sendMessageBtn: document.getElementById('sendMessageBtn'),
-            messageSound: document.getElementById('messageSound'),
-            typingIndicator: document.getElementById('typingIndicator'),
-            typingUser: document.getElementById('typingUser'),
-            replyModal: document.getElementById('replyModal'),
-            replyToName: document.getElementById('replyToName'),
-            replyToContent: document.getElementById('replyToContent'),
-            replyInput: document.getElementById('replyInput'),
-            sendReplyBtn: document.getElementById('sendReplyBtn'),
-            closeReplyModal: document.getElementById('closeReplyModal')
-        });
-        console.log('ChatModule re-initialized after connection');
-        
-        // DELAY loading chat history to ensure DOM is ready
-        setTimeout(() => {
-            loadChatHistory();
-        }, 300);
-    }
-    
-    if (adminSection) {
-        if (appState.isHost) {
-            adminSection.style.display = 'block';
-            document.body.classList.add('host-mode');
-            
-            if (notesBtn) notesBtn.style.display = 'flex';
-            
-            if (historyTabBtn && usersTabBtn && historyTabContent && usersTabContent) {
-                historyTabBtn.classList.add('active');
-                usersTabBtn.classList.remove('active');
-                historyTabContent.style.display = 'block';
-                historyTabContent.classList.add('active');
-                usersTabContent.style.display = 'none';
-                usersTabContent.classList.remove('active');
-            }
-            
-// Use safeLoadAdminContent instead of setTimeout
-safeLoadAdminContent();
-
-
-        } else {
-            adminSection.style.display = 'none';
-            document.body.classList.remove('host-mode');
-            if (notesBtn) notesBtn.style.display = 'none';
-        }
-    }
-    
-    if (pendingGuestsBtn) {
-        pendingGuestsBtn.style.display = appState.isHost && appState.currentSessionId ? 'flex' : 'none';
-        if (appState.isHost) {
-            setupPendingGuestsSubscription();
-        }
-    }
-    
-    if (appState.isViewingHistory) returnToActiveChat();
-    
-    document.addEventListener('click', function enableAudio() {
-        const silentSound = new Audio();
-        silentSound.play().catch(() => {});
-        document.removeEventListener('click', enableAudio);
-    }, { once: true });
-}
 
 // ============================================
 // LOGOUT
