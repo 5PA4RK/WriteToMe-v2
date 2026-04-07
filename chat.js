@@ -1,4 +1,4 @@
-// chat.js - Optimized version
+// chat.js - Fixed version with working actions menu and reply
 
 const ChatModule = (function() {
     let appState = null;
@@ -28,9 +28,17 @@ const ChatModule = (function() {
     const closeMessageActions = () => {
         if (appState?.activeMessageActions) {
             const menu = document.getElementById(`actions-${appState.activeMessageActions}`);
-            if (menu) { menu.classList.remove('show'); menu.style.display = 'none'; }
+            if (menu) { 
+                menu.classList.remove('show'); 
+                menu.style.display = 'none'; 
+            }
             appState.activeMessageActions = null;
         }
+        // Also remove any floating menus
+        document.querySelectorAll('.message-actions-menu.show').forEach(menu => {
+            menu.classList.remove('show');
+            menu.style.display = 'none';
+        });
     };
 
     const getReplyQuoteHtml = (replyToId, currentMessage) => {
@@ -71,7 +79,34 @@ const ChatModule = (function() {
     const getActionsMenuHtml = (message) => {
         const isOwn = message.sender === (appState?.userName);
         const isMobile = window.innerWidth <= 768;
-        return `<div class="message-actions-menu" id="actions-${message.id}" style="display:none;">${isMobile ? '<button class="close-actions-menu" onclick="window.ChatModule.closeMessageActions()" style="position:absolute;top:8px;right:8px;background:transparent;font-size:20px;"><i class="fas fa-times"></i></button>' : ''}${isOwn ? `<button onclick="window.editMessage('${message.id}')"><i class="fas fa-edit"></i> Edit</button><button onclick="window.deleteMessage('${message.id}')"><i class="fas fa-trash"></i> Delete</button><div class="menu-divider"></div>` : ''}<button class="reply-btn" data-message-id="${message.id}" data-sender="${escapeHtml(message.sender)}" data-message-text="${escapeHtml(message.text)}"><i class="fas fa-reply"></i> Reply</button><div class="menu-divider"></div><div class="reaction-section"><div class="reaction-section-title"><i class="fas fa-smile"></i> Add Reaction</div><div class="reaction-quick-picker">${reactionEmojis.map(emoji => `<button class="reaction-emoji-btn" onclick="window.addReaction('${message.id}', '${emoji}')">${emoji}</button>`).join('')}</div></div></div>`;
+        const messageId = message.id;
+        const escapedSender = escapeHtml(message.sender);
+        const escapedText = escapeHtml(message.text || '');
+        
+        return `<div class="message-actions-menu" id="actions-${messageId}" style="display:none; position:absolute; background:var(--bg-secondary); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); min-width:180px; z-index:10000;">
+            ${isMobile ? '<button class="close-actions-menu" style="position:absolute;top:5px;right:5px;background:transparent;border:none;font-size:18px;cursor:pointer;"><i class="fas fa-times"></i></button>' : ''}
+            ${isOwn ? `
+                <button onclick="window.editMessage('${messageId}')" style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 12px;border:none;background:transparent;cursor:pointer;">
+                    <i class="fas fa-edit"></i> Edit
+                </button>
+                <button onclick="window.deleteMessage('${messageId}')" style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 12px;border:none;background:transparent;cursor:pointer;">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+                <div style="height:1px;background:var(--border-light);margin:4px 0;"></div>
+            ` : ''}
+            <button class="reply-btn" data-message-id="${messageId}" data-sender="${escapedSender}" data-message-text="${escapedText}" style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 12px;border:none;background:transparent;cursor:pointer;">
+                <i class="fas fa-reply"></i> Reply
+            </button>
+            <div style="height:1px;background:var(--border-light);margin:4px 0;"></div>
+            <div class="reaction-section" style="padding:8px 12px;">
+                <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">
+                    <i class="fas fa-smile"></i> Add Reaction
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    ${reactionEmojis.map(emoji => `<button class="reaction-emoji-btn" onclick="window.addReaction('${messageId}', '${emoji}')" style="font-size:20px;padding:4px 8px;border:none;background:var(--bg-tertiary);border-radius:6px;cursor:pointer;">${emoji}</button>`).join('')}
+                </div>
+            </div>
+        </div>`;
     };
 
     const createMediaEmbed = (text) => {
@@ -131,7 +166,7 @@ const ChatModule = (function() {
         
         if (message.image?.trim()) content += `<img src="${message.image}" class="message-image" onclick="window.showFullImage('${message.image}')" loading="lazy">`;
         
-        const actionBtn = message.is_optimistic ? '' : `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)"><i class="fas fa-ellipsis-v"></i></button>`;
+        const actionBtn = message.is_optimistic ? '' : `<button class="message-action-dots" onclick="window.toggleMessageActions('${message.id}', this)" style="background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:4px;"><i class="fas fa-ellipsis-v"></i></button>`;
         const actionsMenu = message.is_optimistic ? '' : getActionsMenuHtml(message);
         
         messageDiv.innerHTML = `<div class="message-sender">${escapeHtml(message.sender)}</div><div class="message-content">${content}<div class="message-reactions"></div><div class="message-footer"><div class="message-time">${message.time || new Date().toLocaleTimeString()}</div>${actionBtn}</div></div>${actionsMenu}`;
@@ -154,53 +189,38 @@ const ChatModule = (function() {
         }
     };
 
-// Replace the toggleMessageActions function in chat.js with this:
-
-const toggleMessageActions = (messageId, button) => {
-    console.log('Toggle message actions called for:', messageId);
-    closeMessageActions();
-    
-    const menu = document.getElementById(`actions-${messageId}`);
-    if (!menu) {
-        console.error('Menu not found for:', messageId);
-        return;
-    }
-    
-    if (menu.classList.contains('show')) {
-        menu.classList.remove('show');
-        menu.style.display = 'none';
-        if (appState) appState.activeMessageActions = null;
-    } else {
-        menu.classList.add('show');
-        menu.style.display = 'block';
-        if (appState) appState.activeMessageActions = messageId;
+    const toggleMessageActions = (messageId, button) => {
+        console.log('Toggle actions for message:', messageId);
+        closeMessageActions();
+        
+        const menu = document.getElementById(`actions-${messageId}`);
+        if (!menu) {
+            console.error('Menu not found for message:', messageId);
+            return;
+        }
         
         // Get button position
         const rect = button.getBoundingClientRect();
-        const menuHeight = menu.offsetHeight;
-        const menuWidth = menu.offsetWidth;
         
-        // Position below the button
-        let top = rect.bottom + 5;
-        let left = rect.right - menuWidth;
+        // Position the menu near the button
+        menu.style.position = 'fixed';
+        menu.style.top = (rect.bottom + 5) + 'px';
+        menu.style.left = (rect.right - 180) + 'px';
+        menu.style.display = 'block';
+        menu.classList.add('show');
+        appState.activeMessageActions = messageId;
         
         // Adjust if off screen
-        if (top + menuHeight > window.innerHeight) {
-            top = rect.top - menuHeight - 5;
+        const menuRect = menu.getBoundingClientRect();
+        if (menuRect.right > window.innerWidth) {
+            menu.style.left = (window.innerWidth - menuRect.width - 10) + 'px';
         }
-        if (left < 10) {
-            left = rect.left - 10;
+        if (menuRect.bottom > window.innerHeight) {
+            menu.style.top = (rect.top - menuRect.height - 5) + 'px';
         }
-        if (left + menuWidth > window.innerWidth) {
-            left = window.innerWidth - menuWidth - 10;
+        if (menuRect.top < 0) {
+            menu.style.top = '10px';
         }
-        if (left < 10) left = 10;
-        
-        menu.style.position = 'fixed';
-        menu.style.top = top + 'px';
-        menu.style.left = left + 'px';
-        menu.style.zIndex = '999999';
-        menu.style.display = 'block';
         
         // Close when clicking outside
         const closeHandler = (e) => {
@@ -214,8 +234,7 @@ const toggleMessageActions = (messageId, button) => {
             document.addEventListener('click', closeHandler);
             document.addEventListener('touchstart', closeHandler);
         }, 10);
-    }
-};
+    };
 
     const addReaction = async (messageId, emoji) => {
         closeMessageActions();
@@ -238,6 +257,7 @@ const toggleMessageActions = (messageId, button) => {
     };
 
     const openReplyModal = (messageId, senderName, messageText) => {
+        console.log('Opening reply modal for:', messageId);
         if (!elements.replyModal) return;
         if (elements.replyModal.parentElement !== document.body) document.body.appendChild(elements.replyModal);
         closeMessageActions();
@@ -262,11 +282,17 @@ const toggleMessageActions = (messageId, button) => {
         window.__replyData = { messageId, senderName, messageText: actualText, imageUrl };
         if (appState) { appState.replyingTo = messageId; appState.replyingToImage = imageUrl; }
         
-        elements.replyToName.textContent = senderName || 'Unknown';
+        if (elements.replyToName) elements.replyToName.textContent = senderName || 'Unknown';
+        
         let displayText = actualText || '';
-        if (imageUrl) displayText = `<div style="margin-top:10px;display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.05);padding:8px;border-radius:8px;"><img src="${imageUrl}" style="max-width:60px;max-height:60px;border-radius:8px;"><span><i class="fas fa-image"></i> Image attached</span></div>${displayText ? displayText : ''}`;
+        if (imageUrl) {
+            displayText = `<div style="margin-top:10px;display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.05);padding:8px;border-radius:8px;">
+                <img src="${imageUrl}" style="max-width:60px;max-height:60px;border-radius:8px;">
+                <span><i class="fas fa-image"></i> Image attached</span>
+            </div>${displayText ? displayText : ''}`;
+        }
         if (displayText.length > 150) displayText = displayText.substring(0,150) + '...';
-        elements.replyToContent.innerHTML = displayText;
+        if (elements.replyToContent) elements.replyToContent.innerHTML = displayText;
         if (elements.replyInput) elements.replyInput.value = '';
         
         const scrollY = window.scrollY;
@@ -277,36 +303,65 @@ const toggleMessageActions = (messageId, button) => {
     };
 
     const sendReply = async () => {
+        console.log('sendReply called');
         const replyText = elements.replyInput?.value.trim();
         if (!replyText) return;
         
         const replyData = window.__replyData || (appState ? { messageId: appState.replyingTo, imageUrl: appState.replyingToImage } : null);
-        if (!replyData?.messageId) return;
+        if (!replyData?.messageId) {
+            console.error('No reply data found');
+            return;
+        }
         
+        console.log('Replying to message:', replyData.messageId);
+        
+        // Store reply info for sendMessage
         window.__tempReplyTo = replyData.messageId;
         window.__tempReplyToImage = replyData.imageUrl;
-        if (appState) { appState.replyingTo = null; appState.replyingToImage = null; }
+        
+        if (appState) { 
+            appState.replyingTo = null; 
+            appState.replyingToImage = null; 
+        }
         window.__replyData = null;
         
-        if (elements.messageInput) elements.messageInput.value = replyText;
+        if (elements.messageInput) {
+            elements.messageInput.value = replyText;
+        }
+        
         if (elements.replyModal) {
             elements.replyModal.style.display = 'none';
             document.body.classList.remove('modal-open');
             document.body.style.top = '';
         }
+        
         if (elements.sendReplyBtn) elements.sendReplyBtn.disabled = true;
+        
+        // Focus and send
         elements.messageInput?.focus();
         await new Promise(r => setTimeout(r, 100));
-        if (typeof window.sendMessage === 'function') await window.sendMessage();
         
+        if (typeof window.sendMessage === 'function') {
+            await window.sendMessage();
+        } else {
+            console.error('sendMessage not available');
+        }
+        
+        // Cleanup
         window.__tempReplyTo = null;
         window.__tempReplyToImage = null;
-        if (elements.sendReplyBtn) setTimeout(() => { if (elements.sendReplyBtn) elements.sendReplyBtn.disabled = false; }, 500);
+        
+        if (elements.sendReplyBtn) {
+            setTimeout(() => { 
+                if (elements.sendReplyBtn) elements.sendReplyBtn.disabled = false; 
+            }, 500);
+        }
         if (elements.messageInput) elements.messageInput.value = '';
         setTimeout(() => elements.chatMessages?.scrollTo({ top: elements.chatMessages.scrollHeight }), 200);
     };
 
     const editMessage = async (messageId) => {
+        console.log('Edit message:', messageId);
         closeMessageActions();
         if (!supabaseClient) return;
         const finalId = window._messageIdMap?.[messageId] || messageId;
@@ -316,8 +371,14 @@ const toggleMessageActions = (messageId, button) => {
         const newText = prompt("Edit your message:", currentText);
         if (newText?.trim()) {
             try {
-                await supabaseClient.from('messages').update({ message: newText.trim(), edited_at: new Date().toISOString(), is_edited: true }).eq('id', messageId).eq('sender_id', appState?.userId);
+                await supabaseClient.from('messages').update({ 
+                    message: newText.trim(), 
+                    edited_at: new Date().toISOString(), 
+                    is_edited: true 
+                }).eq('id', messageId).eq('sender_id', appState?.userId);
+                
                 if (textElement) textElement.innerHTML = `${escapeHtml(newText.trim())} <small class="edited-indicator">(edited)</small>`;
+                
                 if (appState?.messages) {
                     const msg = appState.messages.find(m => m.id === messageId);
                     if (msg) { msg.text = newText.trim(); msg.is_edited = true; }
@@ -327,17 +388,26 @@ const toggleMessageActions = (messageId, button) => {
     };
 
     const deleteMessage = async (messageId) => {
+        console.log('Delete message:', messageId);
         closeMessageActions();
         if (!supabaseClient) return;
         if (!confirm("Delete this message?")) return;
         try {
             await supabaseClient.from('message_reactions').delete().eq('message_id', messageId);
-            await supabaseClient.from('messages').update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: appState?.userId, message: null, image_url: null }).eq('id', messageId).eq('sender_id', appState?.userId);
+            await supabaseClient.from('messages').update({ 
+                is_deleted: true, 
+                deleted_at: new Date().toISOString(), 
+                deleted_by: appState?.userId, 
+                message: null, 
+                image_url: null 
+            }).eq('id', messageId).eq('sender_id', appState?.userId);
+            
             const msgElement = document.getElementById(`msg-${messageId}`);
             if (msgElement) {
                 msgElement.innerHTML = `<div class="message-sender">${escapeHtml(appState?.userName || 'User')}</div><div class="message-content"><div class="message-text"><i>Message deleted</i></div><div class="message-footer"><div class="message-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div></div></div>`;
                 document.getElementById(`actions-${messageId}`)?.remove();
             }
+            
             if (appState?.messages) {
                 const msg = appState.messages.find(m => m.id === messageId);
                 if (msg) { msg.is_deleted = true; msg.text = null; msg.image = null; }
@@ -354,33 +424,79 @@ const toggleMessageActions = (messageId, button) => {
     };
 
     const setupEventListeners = () => {
+        // Handle reply button clicks with event delegation
         const handleReplyClick = (e) => {
             const btn = e.target.closest('.reply-btn');
             if (btn) {
                 e.preventDefault();
-                openReplyModal(btn.dataset.messageId, btn.dataset.sender, btn.dataset.messageText);
+                e.stopPropagation();
+                const messageId = btn.dataset.messageId;
+                const sender = btn.dataset.sender;
+                const messageText = btn.dataset.messageText;
+                console.log('Reply button clicked:', { messageId, sender });
+                openReplyModal(messageId, sender, messageText);
             }
         };
         document.addEventListener('click', handleReplyClick);
         document.addEventListener('touchstart', handleReplyClick, { passive: false });
-        if (elements.chatMessages) elements.chatMessages.addEventListener('scroll', () => { if (scrollTimeout) clearTimeout(scrollTimeout); scrollTimeout = setTimeout(() => {}, 100); }, { passive: true });
         
+        if (elements.chatMessages) {
+            elements.chatMessages.addEventListener('scroll', () => { 
+                if (scrollTimeout) clearTimeout(scrollTimeout); 
+                scrollTimeout = setTimeout(() => {}, 100); 
+            }, { passive: true });
+        }
+        
+        // Send reply button handler
         if (elements.sendReplyBtn) {
             const newBtn = elements.sendReplyBtn.cloneNode(true);
             elements.sendReplyBtn.parentNode.replaceChild(newBtn, elements.sendReplyBtn);
             elements.sendReplyBtn = newBtn;
             let processing = false;
-            const handleSend = (e) => { e.preventDefault(); if (!processing) { processing = true; sendReply().finally(() => setTimeout(() => processing = false, 1000)); } };
+            
+            const handleSend = (e) => { 
+                e.preventDefault(); 
+                e.stopPropagation();
+                if (!processing) { 
+                    processing = true; 
+                    sendReply().finally(() => setTimeout(() => processing = false, 1000)); 
+                } 
+            };
             elements.sendReplyBtn.addEventListener('click', handleSend);
             elements.sendReplyBtn.addEventListener('touchstart', handleSend, { passive: false });
         }
         
+        // Close reply modal
         if (elements.closeReplyModal) {
-            const closeModal = () => { if (elements.replyModal) { elements.replyModal.style.display = 'none'; document.body.classList.remove('modal-open'); document.body.style.top = ''; if (appState) appState.replyingTo = null; } };
+            const closeModal = () => { 
+                if (elements.replyModal) { 
+                    elements.replyModal.style.display = 'none'; 
+                    document.body.classList.remove('modal-open'); 
+                    document.body.style.top = ''; 
+                    if (appState) appState.replyingTo = null; 
+                } 
+            };
             elements.closeReplyModal.addEventListener('click', closeModal);
             elements.closeReplyModal.addEventListener('touchstart', (e) => { e.preventDefault(); closeModal(); }, { passive: false });
         }
-        if (elements.replyModal) elements.replyModal.addEventListener('click', (e) => { if (e.target === elements.replyModal) { elements.replyModal.style.display = 'none'; document.body.classList.remove('modal-open'); if (appState) appState.replyingTo = null; } });
+        
+        // Click outside reply modal to close
+        if (elements.replyModal) {
+            elements.replyModal.addEventListener('click', (e) => { 
+                if (e.target === elements.replyModal) { 
+                    elements.replyModal.style.display = 'none'; 
+                    document.body.classList.remove('modal-open'); 
+                    if (appState) appState.replyingTo = null; 
+                } 
+            });
+        }
+        
+        // Close actions menu on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeMessageActions();
+            }
+        });
     };
 
     const init = (state, supabase, domElements) => {
@@ -388,12 +504,23 @@ const toggleMessageActions = (messageId, button) => {
         supabaseClient = supabase;
         elements = domElements;
         setupEventListeners();
+        console.log('ChatModule initialized');
     };
 
     return {
-        init, displayMessage, renderReactions, toggleMessageActions, closeMessageActions,
-        addReaction, toggleReaction: addReaction, getMessageReactions, openReplyModal,
-        sendReply, editMessage, deleteMessage, escapeHtml
+        init, 
+        displayMessage, 
+        renderReactions, 
+        toggleMessageActions, 
+        closeMessageActions,
+        addReaction, 
+        toggleReaction: addReaction, 
+        getMessageReactions, 
+        openReplyModal,
+        sendReply, 
+        editMessage, 
+        deleteMessage, 
+        escapeHtml
     };
 })();
 
@@ -406,5 +533,14 @@ window.toggleReaction = (id, emoji) => ChatModule.addReaction(id, emoji);
 window.openReplyModal = (id, sender, text) => ChatModule.openReplyModal(id, sender, text);
 window.editMessage = (id) => ChatModule.editMessage(id);
 window.deleteMessage = (id) => ChatModule.deleteMessage(id);
-window.showFullImage = (src) => { const modal = document.getElementById('imageModal'); const img = document.getElementById('fullSizeImage'); if (modal && img) { img.src = src; modal.style.display = 'flex'; } };
+window.showFullImage = (src) => { 
+    const modal = document.getElementById('imageModal'); 
+    const img = document.getElementById('fullSizeImage'); 
+    if (modal && img) { 
+        img.src = src; 
+        modal.style.display = 'flex'; 
+    } 
+};
 window.ChatModule.closeMessageActions = () => ChatModule.closeMessageActions();
+
+console.log('Chat.js loaded with fixed actions menu and reply');
