@@ -154,49 +154,68 @@ const ChatModule = (function() {
         }
     };
 
-    const toggleMessageActions = (messageId, button) => {
-        closeMessageActions();
-        const menu = document.getElementById(`actions-${messageId}`);
-        if (!menu) return;
+// Replace the toggleMessageActions function in chat.js with this:
+
+const toggleMessageActions = (messageId, button) => {
+    console.log('Toggle message actions called for:', messageId);
+    closeMessageActions();
+    
+    const menu = document.getElementById(`actions-${messageId}`);
+    if (!menu) {
+        console.error('Menu not found for:', messageId);
+        return;
+    }
+    
+    if (menu.classList.contains('show')) {
+        menu.classList.remove('show');
+        menu.style.display = 'none';
+        if (appState) appState.activeMessageActions = null;
+    } else {
+        menu.classList.add('show');
+        menu.style.display = 'block';
+        if (appState) appState.activeMessageActions = messageId;
         
-        if (menu.classList.contains('show')) {
-            menu.classList.remove('show');
-            menu.style.display = 'none';
-        } else {
-            if (menu.parentElement !== document.body) document.body.appendChild(menu);
-            menu.classList.add('show');
-            menu.style.display = 'block';
-            if (appState) appState.activeMessageActions = messageId;
-            
-            menu.style.visibility = 'hidden';
-            menu.style.display = 'block';
-            const menuRect = menu.getBoundingClientRect();
-            menu.style.display = 'none';
-            menu.style.visibility = 'visible';
-            
-            const rect = button.getBoundingClientRect();
-            let top = rect.bottom + 5;
-            let left = rect.left;
-            if (left + menuRect.width > window.innerWidth) left = window.innerWidth - menuRect.width - 10;
-            if (left < 10) left = 10;
-            if (top + menuRect.height > window.innerHeight) top = rect.top - menuRect.height - 5;
-            if (top < 10) top = 10;
-            
-            menu.style.cssText = `position:fixed;top:${top}px;left:${left}px;z-index:2147483647;max-width:280px;width:auto;display:block;`;
-            
-            setTimeout(() => {
-                const handler = (e) => {
-                    if (!menu.contains(e.target) && !button.contains(e.target)) {
-                        closeMessageActions();
-                        document.removeEventListener('click', handler);
-                        document.removeEventListener('touchstart', handler);
-                    }
-                };
-                document.addEventListener('click', handler);
-                document.addEventListener('touchstart', handler);
-            }, 10);
+        // Get button position
+        const rect = button.getBoundingClientRect();
+        const menuHeight = menu.offsetHeight;
+        const menuWidth = menu.offsetWidth;
+        
+        // Position below the button
+        let top = rect.bottom + 5;
+        let left = rect.right - menuWidth;
+        
+        // Adjust if off screen
+        if (top + menuHeight > window.innerHeight) {
+            top = rect.top - menuHeight - 5;
         }
-    };
+        if (left < 10) {
+            left = rect.left - 10;
+        }
+        if (left + menuWidth > window.innerWidth) {
+            left = window.innerWidth - menuWidth - 10;
+        }
+        if (left < 10) left = 10;
+        
+        menu.style.position = 'fixed';
+        menu.style.top = top + 'px';
+        menu.style.left = left + 'px';
+        menu.style.zIndex = '999999';
+        menu.style.display = 'block';
+        
+        // Close when clicking outside
+        const closeHandler = (e) => {
+            if (!menu.contains(e.target) && !button.contains(e.target)) {
+                closeMessageActions();
+                document.removeEventListener('click', closeHandler);
+                document.removeEventListener('touchstart', closeHandler);
+            }
+        };
+        setTimeout(() => {
+            document.addEventListener('click', closeHandler);
+            document.addEventListener('touchstart', closeHandler);
+        }, 10);
+    }
+};
 
     const addReaction = async (messageId, emoji) => {
         closeMessageActions();
