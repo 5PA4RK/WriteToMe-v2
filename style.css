@@ -2191,20 +2191,3 @@ body.modal-open {
         animation: slideUp 0.3s ease;
     }
 }
-/* Fix for initial page freeze - add to style.css */
-body {
-    opacity: 1;
-    transition: opacity 0.2s ease;
-}
-
-/* Ensure admin panel doesn't cause layout shift */
-.admin-panel {
-    will-change: transform;
-    transform: translateZ(0);
-    backface-visibility: hidden;
-}
-
-/* Prevent reflow issues */
-.chat-messages {
-    contain: layout style paint;
-}
